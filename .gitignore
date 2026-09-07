@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.venv/
+data/kaggle_historical/
+.env
+*.log
