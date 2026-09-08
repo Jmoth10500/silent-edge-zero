@@ -34,9 +34,13 @@ silent-edge-zero/
     providers/
       base.py                  — abstract interfaces (RacecardProvider etc.)
       weather_open_meteo.py    — LIVE: real Open-Meteo integration
-      racecard_theracingapi.py — STUB: written against their documented shape, untested,
-                                  waiting on an API key (see FREE_DATA_SOURCES.md #3)
-      odds_betfair.py          — STUB: same situation, waiting on Delayed App Key
+      racecard_theracingapi.py — LIVE since 2026-09-08 (Session 4): real HTTP Basic auth,
+                                  field mapping verified against a real response. Only
+                                  runnable on Jonathan's own machine (has the credentials
+                                  in a local .env) — the cloud routine environment does not
+                                  have THERACINGAPI_USERNAME/PASSWORD and never assumes it does.
+      (odds_betfair.py         — NOT YET WRITTEN, waiting on a Betfair Delayed App Key —
+                                  this line is aspirational, the file does not exist yet)
     market/
       probability.py           — overround removal: proportional, power, Shin methods
       movement.py               — price movement features: opening/current price,
@@ -55,7 +59,16 @@ silent-edge-zero/
       model0_market_baseline.py — Model 0: the de-vigged market probability treated AS the
                                   prediction, plus the walk-forward-split -> predict -> score
                                   pipeline wiring (Sections 18/19, 24, 29 end-to-end)
+      model1_logistic_baseline.py — Model 1: first FITTED model, a per-race softmax/
+                                  multinomial-logit over race-relative rating/draw/form/
+                                  weight features (Section 8/10 features -> Section 6-ish
+                                  first model), trained by pure-Python gradient ascent.
+                                  Synthetic-fixture-only — see RESEARCH_LAB.md RL-006.
   scripts/
+    collect_racecards.py       — LIVE since 2026-09-08 (Session 4): pulls real GB racecards
+                                  from The Racing API into the DB. Mac-only (needs
+                                  THERACINGAPI_USERNAME/PASSWORD, not present in the cloud
+                                  routine environment) — do not attempt this from the cloud.
     collect_weather.py         — runs the live weather provider, stores snapshots
     load_kaggle_historical.py  — bootstraps historical DB from the Kaggle dataset,
                                   written but untested — needs your Kaggle credentials
@@ -70,6 +83,15 @@ silent-edge-zero/
     test_walk_forward.py       — walk-forward split harness tests (synthetic chronological data)
     test_model0_market_baseline.py — Model 0 + end-to-end split/predict/score pipeline tests,
                                   with hand-verified Brier scores against known synthetic odds
+    test_model1_logistic_baseline.py — Model 1 tests: hand-verified single gradient-ascent
+                                  step, uniform-output check for the untrained (zero-weight)
+                                  model, and a signal-recovery convergence check — all
+                                  against synthetic fixtures shaped like the real racecard
+                                  schema (official_rating/draw as int, recent_form as
+                                  '1582F3'-style undelimited string)
+    test_racecard_theracingapi.py — LIVE provider tests against a real captured API response
+                                  fixture (Session 4) — includes the ambiguous off_time
+                                  regression case
 ```
 
 ## Data integrity rules enforced in code, not just policy

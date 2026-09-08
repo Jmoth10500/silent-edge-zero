@@ -138,3 +138,111 @@ re-doing finished work.
 1. Betfair Delayed App Key — for real market prices (Phase 4)
 2. Kaggle account — for historical bootstrap/backtest depth (helps Phase 6+ validation, not urgent yet)
 3. Racing API odds — needs a paid tier (£59.99/mo+) or Betfair instead; not pursuing a paid tier without evidence it's needed first, per `FUTURE_PAID_UPGRADES.md`'s own rule
+
+---
+
+## 2026-09-08 — Session 5 (autonomous overnight, cloud routine)
+
+**Confirmed the credential boundary before doing anything else, per the ground rules and this
+session's explicit instructions:** `env | grep THERACINGAPI` in this container returned
+nothing. This cloud routine environment does **not** have `THERACINGAPI_USERNAME` /
+`THERACINGAPI_PASSWORD` — those only exist in Jonathan's local, gitignored `.env` on his own
+Mac (Session 4). Did **not** attempt `scripts/collect_racecards.py` or
+`scripts/collect_weather.py` here — both would fail on missing credentials (racecards) or are
+simply the wrong environment to be running live collection from at all. **Racecard/weather
+collection stays Mac-only until a future session explicitly confirms otherwise in this file —
+that has not happened, so don't assume it next time either.**
+
+**Started Phase 6, as instructed:** a simple statistical/logistic baseline model — Model 1 —
+built and tested against realistic synthetic fixtures shaped exactly like the real, verified
+racecard schema (`src/providers/racecard_theracingapi.py` /
+`tests/test_racecard_theracingapi.py`: `official_rating` as int, `draw` as int, `recent_form`
+as an undelimited string like `'1582F3'`). **This is still not a real prediction** — labelled
+as such in the module docstring, every relevant test docstring, `docs/RESEARCH_LAB.md` RL-006,
+and here — because there is no real (racecard, result) pair anywhere in this repository yet.
+
+**What's genuinely done and verified this session (all real code, all with real passing
+tests — 80/80 tests pass via `python3 -m pytest tests/ -v`, up from 70):**
+- `src/models/model1_logistic_baseline.py` — **Model 1**, the first FITTED model in this repo
+  (Model 0 has no parameters by design; this one has four). Shape: a per-race multinomial
+  logit (softmax) over race-relative features already built and tested in
+  `src/features/runner_features.py` (Sections 8/10) — official rating vs. field mean, draw
+  percentile vs. 0.5, recency-weighted form score vs. field mean, weight vs. field mean. Every
+  feature is deliberately zero-centered/undirected (the fitted weight's sign decides whether
+  higher is better, nothing is asserted up front — same discipline as RL-004's neutral draw
+  percentile). Because the softmax normalises over that race's own runners, the output
+  probability distribution sums to ~1.0 per race by construction, no separate renormalisation
+  needed. `build_race_features()` gives every runner a full 4-key feature dict always (missing
+  underlying fields default to 0.0 = "no evidence either way", flagged honestly as a
+  modelling simplification rather than silently done); `predict_race_probabilities()` scores
+  and softmaxes a race; `fit_logistic_baseline()` is plain batch gradient ASCENT on the
+  observed-winner log-likelihood, L2-regularised, implemented in pure Python (no
+  numpy/scikit-learn — both still deliberately commented out in `requirements.txt`; this repo
+  has done its own small-scale numerical methods throughout, e.g. `src/market/probability.py`'s
+  bisection solvers, and four features doesn't yet justify the dependency).
+- `tests/test_model1_logistic_baseline.py` — 10 real tests: exact hand-verified feature
+  centering (rating/weight/draw edges checked against hand-calculated field means), missing-
+  field defaulting, an untrained (all-zero-weight) model proven exactly uniform (1/n per
+  runner, not just "close to"), sums-to-~1.0 with nonzero weights, empty-race and
+  empty-training-set/bad-winner error handling, a **hand-verified single gradient-ascent step**
+  (same style as `tests/test_calibration.py`/`tests/test_model0_market_baseline.py`'s
+  hand-checked values: one race, weights start at zero, gradient and resulting weight computed
+  by hand and asserted exactly), and a convergence check (20 synthetic races where the
+  highest-rated runner always wins → fitted `rating_edge` weight comes out positive, and the
+  fitted model then rates that runner-shape above uniform on a held-out race).
+- `docs/RESEARCH_LAB.md` — new entry RL-006 (Model 1, status IDEA, explicit about what's
+  proven — the maths works — vs. not proven — anything about real racing).
+- `docs/SILENT_EDGE_ZERO_ARCHITECTURE.md` — directory listing updated: `model1_logistic_baseline.py`
+  and its test file added; also corrected two lines that had gone stale since Session 4/earlier
+  and would have misled the next session — `racecard_theracingapi.py` was still listed as
+  "STUB... waiting on an API key" (it's been LIVE since Session 4) and `odds_betfair.py` was
+  listed as an existing stub file when it has never actually been written (confirmed via `ls`);
+  also added the now-existing `scripts/collect_racecards.py` (Mac-only, noted as such) which
+  Session 4 built but this doc never listed.
+- Full test suite re-run and green after every change: `./db/setup_local_postgres.sh &&
+  python3 db/init_db.py` (fresh container, as every prior autonomous session has needed) then
+  `python3 -m pytest tests/ -v` → **80/80 passed**, including the DB-backed `tests/test_leakage.py`
+  tests against a freshly bootstrapped local Postgres in this container. `pip install pytest
+  psycopg2-binary python-dotenv requests` was needed first (fresh container has none of
+  `requirements.txt` pre-installed, matching every prior session's experience — not a new
+  finding, just re-confirmed).
+
+**What's still blocked (unchanged):**
+1. Betfair Delayed App Key — for real market prices (Phase 4)
+2. Kaggle account — for historical bootstrap/backtest depth
+3. Racing API odds — needs a paid tier, not pursuing without evidence it's needed
+4. Real results data — needed before Model 1 (or Model 0) can be genuinely trained/evaluated,
+   not a Jonathan-signup blocker exactly, but a "hasn't been built yet" blocker (see next item)
+
+**What the next session should do, in priority order:**
+1. **Check for new credentials/results as always** — `env | grep -iE
+   "racing|kaggle|betfair"`, recent commits, this file. If still Mac-only, don't re-derive that,
+   move on.
+2. **Results collection is the single highest-leverage next step**, and it's a Mac-only task
+   (needs live credentials) for a future *interactive* session, not this cloud routine: verify
+   The Racing API's real results response shape with a live call (`/v1/results` or
+   `/v1/results/today` — Session 4 flagged this as "not yet verified live, don't assume the
+   field names") before writing a parser, same discipline Session 4 used for racecards. Once
+   real (racecard, result) pairs exist in the DB, both Model 0 and Model 1 can be genuinely
+   evaluated for the first time — everything before that point is plumbing, however solid.
+3. If still cloud-only and blocked: there is very little synthetic-only plumbing left that's
+   obviously worth building blind. Worth considering instead of manufacturing more scaffolding:
+   (a) an `odds_betfair.py` provider stub against Betfair's public Exchange API docs — the
+   directory listing has (correctly, now) flagged this as not written yet; (b) a second Model 1
+   variant or hyperparameter sweep (learning_rate/l2/iterations) compared on the SAME synthetic
+   rating-signal fixture, to at least confirm the fitting is stable across reasonable settings —
+   still not a real benchmark; (c) revisit RL-006's flagged missingness simplification (a
+   debutant with no official rating isn't "average", it's a distinct case) as a candidate
+   feature once real data exists to check whether it matters.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. Keep this file updated at the end of every session — add a new dated section above this
+   instruction, don't overwrite prior sessions' entries.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result data, or Model 1 training data, to "demo" anything
+- Do not create accounts on Jonathan's behalf (Betfair, Kaggle)
+- Do not attempt `scripts/collect_racecards.py` or `scripts/collect_weather.py` from this cloud
+  routine environment — no credentials here, confirmed again this session, will fail
+- Do not present Model 1's synthetic-fixture test results as evidence it predicts real racing
+- Do not skip re-running the full test suite before committing — all 80 tests must actually
+  pass, not just the new ones
