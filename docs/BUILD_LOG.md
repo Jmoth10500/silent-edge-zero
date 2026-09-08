@@ -666,3 +666,118 @@ already assembled, no schema change needed.
   distance draw bias exists — the hypothesis itself is still untested
 - Do not skip re-running the full test suite before committing — all 106 tests must actually
   pass, not just the new ones
+
+---
+
+## 2026-09-08 — Session 12 (autonomous overnight, cloud routine)
+
+**Confirmed the credential boundary first, per this session's explicit instructions:**
+`env | grep -iE "racing|kaggle|betfair"` returned nothing in this container — only
+`CCR_ENABLE_TRACING=true` is set. This cloud routine still does not have
+`THERACINGAPI_USERNAME`/`THERACINGAPI_PASSWORD` or Kaggle credentials, and cannot reach the real
+558K-row Kaggle-loaded dataset (Postgres on Jonathan's Mac only). Did **not** attempt
+`scripts/collect_racecards.py`, `scripts/collect_weather.py`, `scripts/load_kaggle_historical.py`,
+`scripts/derive_recent_form.py`, `scripts/train_model1.py`, or `scripts/train_model2.py` here.
+Racecard/weather collection and the real historical dataset stay **Mac-only** — unconfirmed
+otherwise in this file, so not assumed.
+
+**This session's scheduled prompt asked for Phase 6 (a synthetic-fixture statistical/logistic
+baseline model).** That work is not new: `src/models/model1_logistic_baseline.py` was built
+Session 5, extended Session 7, and real-data trained/validated Sessions 8–9 (it lost to the
+market baseline — RL-006). Phase 7 (Model 2, gradient boosting) is also already done (Session
+10, RL-008), and RL-004's real draw-bias computation was already built Session 11. `git log` at
+the start of this session was already at `b2cf41d` ("RL-004: real course/distance draw-bias
+computation"), matching Session 11's own entry exactly. Per this file's own standing instruction
+("read BUILD_LOG.md first... follow it"), did not duplicate any of this finished work. Instead
+picked up Session 11's own "what the next session should do" item 3(b): **RL-001 (weather
+interaction feature), flagged as "still completely untouched by any session" since Session 2.**
+
+**What's genuinely done and verified this session (all real code, all with real passing
+tests — 136/136 tests pass via `python3 -m pytest tests/ -v`, up from 106):**
+- `src/features/weather_features.py` — **new module**, RL-001's actual feature (as opposed to
+  just the hypothesis being logged). `is_all_weather_surface()` classifies a caller-supplied
+  surface/going string as AW (`True`), turf (`False`), or ambiguous/missing (`None`, never
+  guessed) — whole-word token matching for short markers (AW/Polytrack/Tapeta/Fibresand) so an
+  unrelated word merely containing "aw" doesn't false-positive, plus direct phrase matching for
+  "all weather"/"all-weather". `turf_rainfall_interaction()` is the RL-001 feature itself: 24h
+  rainfall passed through unchanged on turf, forced to exactly 0.0 on AW (a design choice flagged
+  for review in the module docstring and RL-004-style in `docs/RESEARCH_LAB.md`, not proven —
+  there's no real data yet to check whether a fitted per-surface weight would do better than
+  hard-zeroing it), `None` when either input can't be classified. `weather_race_features()`
+  combines a `WeatherSnapshot` (already LIVE since Session 1 via
+  `src/providers/weather_open_meteo.py`, no API key needed) with a surface string into a flat
+  feature dict, same "omit missing, never impute" discipline as `feature_vector.py`. Pure
+  computation throughout — no HTTP calls, no DB access, leakage safety and surface-string
+  sourcing are the caller's responsibility, same pattern as `draw_bias.py`.
+- **Real gap surfaced, not hidden:** `src/providers/racecard_theracingapi.py` has no verified
+  surface/going field mapping at all — this module's surface classifier is written against known
+  real GB/IRE going descriptions (`"Standard (AW)"`, `"Good to Soft (Turf)"`) but nothing in this
+  repo yet supplies that string from a live racecard response. Documented in RL-001 as a second,
+  separate blocker alongside the missing real (weather, result) history — confirming the real
+  field name/format needs the same "verify against a live response before writing a parser"
+  discipline Session 4 used for `off_time`/`off_dt`, and is genuinely Mac-only work (needs a live
+  API call).
+- `tests/test_weather_features.py` — 29 real tests: parametrised truth tables for
+  `is_all_weather_surface()` covering every recognised AW marker, every turf phrasing, and every
+  ambiguous/missing case (including a dedicated whole-word-vs-substring regression case),
+  `turf_rainfall_interaction()`'s four input combinations (turf+rain, AW+rain, ambiguous+rain,
+  clear-surface+missing-rain), and `weather_race_features()`'s merge behaviour (no snapshot →
+  `{}`, full snapshot on turf vs AW, ambiguous surface omits only the interaction key while still
+  reporting raw weather facts, and a missing individual field is omitted rather than imputed).
+- `docs/RESEARCH_LAB.md` RL-001 — status moved from IDEA to **TESTING (partial)**: the
+  computation is built and unit-tested, the actual hypothesis (does rainfall genuinely predict
+  turf outcomes more than AW) is still completely untested, and is now explicitly blocked on two
+  separate things rather than one vague "needs real data" — real (weather, surface, result)
+  history AND a verified racecard surface field.
+- `docs/SILENT_EDGE_ZERO_ARCHITECTURE.md` — directory listing updated: `weather_features.py` and
+  `test_weather_features.py` added.
+- Full test suite re-run and confirmed green after every change: `./db/setup_local_postgres.sh
+  && python3 db/init_db.py` (fresh container, as every prior autonomous session has needed) then
+  `python3 -m pytest tests/ -v` → **136/136 passed**, including the DB-backed `tests/test_leakage.py`
+  tests against a freshly bootstrapped local Postgres in this container. `pip install pytest
+  psycopg2-binary python-dotenv requests scikit-learn` succeeded cleanly this session, no retries
+  needed.
+
+**What's still blocked (unchanged):**
+1. Betfair Delayed App Key — for real market prices (Phase 4)
+2. Kaggle account credentials in THIS cloud environment — the real 558K-row dataset exists but
+   only on Jonathan's Mac; this routine cannot reach or reproduce it
+3. Racing API results — still needs their Basic tier; not pursuing, Kaggle covers this need
+4. A verified racecard surface/going field — new this session, genuinely Mac-only (needs a live
+   API call, same discipline Session 4 used for `off_time`)
+
+**What the next session should do, in priority order:**
+1. **Check for new credentials as always** — `env | grep -iE "racing|kaggle|betfair"`, recent
+   commits, this file. If still cloud-only, don't re-derive that, move on.
+2. **The single highest-leverage next steps are all Mac-only and unchanged from Session 11's own
+   list, plus one new item:** (a) run `scripts/train_model2.py` against the real Kaggle-loaded DB
+   (still not done since Session 10 built it); (b) wire `src/features/draw_bias.py` into a real
+   query over the Kaggle data to actually test RL-004's hypothesis; (c) **new:** verify
+   `/v1/racecards/free`'s real response for a surface/going field with a live call (the same
+   discipline Session 4 used for `off_time`) so `src/features/weather_features.py` can eventually
+   be wired to a real racecard instead of only a manually-supplied surface string.
+3. If still cloud-only and blocked on real data: there is very little synthetic-only plumbing
+   left worth building blind. Worth considering: (a) a hyperparameter sweep for Model 2 on a
+   synthetic fixture (Session 10's item 3a, still not done); (b) an `odds_betfair.py` provider
+   stub, still flagged as not written since Session 5; (c) re-read
+   `docs/SILENT_EDGE_ZERO_ARCHITECTURE.md`'s full section list for any other synthetic-only
+   section not yet touched — after RL-001/002/003/004/006/007/008 this list is getting short, be
+   honest in the next summary if genuinely nothing useful remains rather than inventing work.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. Keep this file updated at the end of every session — add a new dated section above this
+   instruction, don't overwrite prior sessions' entries.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result/weather data, or any model's training data, to "demo"
+  anything
+- Do not create accounts on Jonathan's behalf (Betfair)
+- Do not attempt `scripts/collect_racecards.py`, `scripts/collect_weather.py`,
+  `scripts/load_kaggle_historical.py`, `scripts/derive_recent_form.py`, `scripts/train_model1.py`,
+  or `scripts/train_model2.py` from this cloud routine environment — no credentials/real DB here,
+  confirmed again this session, will fail or run against an empty database
+- Do not present `weather_features.py`'s synthetic-fixture test results as evidence a real
+  turf/AW rainfall effect exists — RL-001's hypothesis itself is still completely untested
+- Do not invent or guess a racecard surface/going field mapping — verify it live on Jonathan's
+  Mac first, same discipline used for `off_time`/`off_dt`
+- Do not skip re-running the full test suite before committing — all 136 tests must actually
+  pass, not just the new ones

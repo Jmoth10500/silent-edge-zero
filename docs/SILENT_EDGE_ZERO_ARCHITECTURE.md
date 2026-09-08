@@ -57,6 +57,15 @@ silent-edge-zero/
                                   historical records — no DB access. Added 2026-09-08 (cloud
                                   routine), tested against synthetic fixtures only, NOT YET run
                                   against the real Kaggle history — Mac-only next step
+      weather_features.py        — RL-001's turf-vs-AW rainfall interaction feature. Combines
+                                  a WeatherSnapshot (LIVE, weather_open_meteo.py) with a
+                                  caller-supplied surface string into a flat feature dict; the
+                                  interaction term is forced to 0.0 on AW, passed through on
+                                  turf, None when ambiguous — never guessed. Pure computation,
+                                  no HTTP/DB access. Added 2026-09-08 (cloud routine), synthetic
+                                  fixtures only — also flags that no racecard field maps a real
+                                  surface/going string yet, a separate open gap from the missing
+                                  real-data test itself. See RESEARCH_LAB.md RL-001.
     evaluation/
       calibration.py            — Brier score, log loss, calibration curve (Section 24)
     validation/
@@ -105,6 +114,8 @@ silent-edge-zero/
     test_feature_vector.py     — combined feature-vector tests (synthetic fixtures)
     test_draw_bias.py          — course/distance draw-bias bucketing and win-rate-vs-baseline
                                   tests, hand-verified arithmetic against synthetic fixtures
+    test_weather_features.py   — RL-001 turf/AW surface classification and rainfall-interaction
+                                  feature tests, against synthetic surfaces/WeatherSnapshots
     test_calibration.py        — Brier/log-loss/calibration-curve tests (synthetic predictions)
     test_walk_forward.py       — walk-forward split harness tests (synthetic chronological data)
     test_model0_market_baseline.py — Model 0 + end-to-end split/predict/score pipeline tests,
