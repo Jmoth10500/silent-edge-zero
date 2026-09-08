@@ -39,8 +39,15 @@ silent-edge-zero/
       odds_betfair.py          — STUB: same situation, waiting on Delayed App Key
     market/
       probability.py           — overround removal: proportional, power, Shin methods
+      movement.py               — price movement features: opening/current price,
+                                  price change %, drift/shorten classification (Section 16)
     features/
-      (Phase 5, not yet built)
+      runner_features.py        — per-runner raw features (rating, age, weight, draw,
+                                  form) and race-relative/percentile features (Section 8/10)
+    evaluation/
+      calibration.py            — Brier score, log loss, calibration curve (Section 24)
+    validation/
+      walk_forward.py           — chronological walk-forward split harness (Section 29)
     models/
       (Phase 6+, not yet built)
   scripts/
@@ -49,14 +56,19 @@ silent-edge-zero/
                                   written but untested — needs your Kaggle credentials
   tests/
     test_leakage.py            — enforces observed_at/available_at ordering (Section 6/30)
+                                  and the DB-level prediction-immutability trigger (Section 32)
     test_market_probability.py — checks overround-removal methods sum to ~1.0
+    test_market_movement.py    — price movement feature tests
+    test_runner_features.py    — per-runner and race-relative feature tests (synthetic fixtures)
+    test_calibration.py        — Brier/log-loss/calibration-curve tests (synthetic predictions)
+    test_walk_forward.py       — walk-forward split harness tests (synthetic chronological data)
 ```
 
 ## Data integrity rules enforced in code, not just policy
 
 1. **Every row gets `observed_at`, `available_at`, `ingested_at`, `source`.** A model must never be able to see data whose `available_at` is after the prediction's timestamp — enforced by a query-time filter in `db/schema.sql`'s views, tested in `tests/test_leakage.py`.
 2. **PRE_RACE_SNAPSHOT and POST_RACE_RESULT are separate tables, never merged in place.** A snapshot is never overwritten.
-3. **Predictions are immutable once locked.** `predictions` table has no UPDATE path in the ORM layer for locked rows — only INSERT of a new prediction_id with a new model_version.
+3. **Predictions are immutable once locked.** Enforced by a Postgres trigger (`trg_prevent_locked_prediction_update` in `db/schema.sql`), not just ORM discipline — any UPDATE against a row with `locked_at` set is rejected by the database itself, tested in `tests/test_leakage.py`. The only legitimate way to change a locked prediction is to INSERT a new row under a new model_version.
 4. **No random train/test splits.** Anything under `tests/` or `scripts/` that evaluates a model must use chronological (walk-forward) splits — this is a code-review rule until an automated check exists.
 
 ## What's genuinely working right now (2026-09-08)

@@ -11,10 +11,10 @@ enough to warrant attention? Most races should end in PASS.
 ## Quick start
 
 ```bash
+./db/setup_local_postgres.sh       # fresh container only: starts Postgres, creates a local role
 python3 db/init_db.py              # creates + schemas the local Postgres DB (idempotent)
 python3 scripts/collect_weather.py # live, free, no signup — proves the pipeline works today
-python3 tests/test_market_probability.py
-python3 tests/test_leakage.py
+python3 -m pytest tests/ -v        # every test, all real, none skipped
 ```
 
 ## Docs

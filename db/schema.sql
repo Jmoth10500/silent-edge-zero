@@ -195,3 +195,28 @@ CREATE INDEX IF NOT EXISTS idx_runner_result_race ON runner_result(race_id);
 CREATE INDEX IF NOT EXISTS idx_market_snapshot_race_horse ON market_snapshot(race_id, horse_id);
 CREATE INDEX IF NOT EXISTS idx_prediction_race ON prediction(race_id);
 CREATE INDEX IF NOT EXISTS idx_race_date ON race(race_date);
+
+-- Prediction immutability, enforced by the database, not just application
+-- discipline (Section 32). Once locked_at is set on a row, ANY update to
+-- that row is rejected outright -- the only legitimate way to change a
+-- prediction after that point is to INSERT a new row under a new
+-- model_version. A row that hasn't been locked yet (locked_at IS NULL) can
+-- still be updated freely, e.g. to set locked_at itself at lock time.
+-- CREATE OR REPLACE + DROP TRIGGER IF EXISTS makes this block safe to
+-- re-run, same as every CREATE TABLE IF NOT EXISTS above.
+CREATE OR REPLACE FUNCTION prevent_locked_prediction_update() RETURNS trigger AS $$
+BEGIN
+    IF OLD.locked_at IS NOT NULL THEN
+        RAISE EXCEPTION
+            'prediction % is locked (locked_at=%) and is immutable -- insert a new prediction row under a new model_version instead of updating it',
+            OLD.id, OLD.locked_at;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_prevent_locked_prediction_update ON prediction;
+CREATE TRIGGER trg_prevent_locked_prediction_update
+    BEFORE UPDATE ON prediction
+    FOR EACH ROW
+    EXECUTE FUNCTION prevent_locked_prediction_update();
