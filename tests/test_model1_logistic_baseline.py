@@ -71,6 +71,11 @@ def test_build_race_features_centers_on_field_mean():
     assert feats[2]["draw_edge"] == 0.0
     assert feats[3]["draw_edge"] == 0.5
 
+    # all three have a known official_rating -> no_rating_flag is 0.0 for everyone
+    assert feats[1]["no_rating_flag"] == 0.0
+    assert feats[2]["no_rating_flag"] == 0.0
+    assert feats[3]["no_rating_flag"] == 0.0
+
 
 def test_build_race_features_missing_fields_default_to_zero():
     runners = [
@@ -82,15 +87,24 @@ def test_build_race_features_missing_fields_default_to_zero():
 
     # every runner gets a full dict, even the one with nothing known
     assert set(feats.keys()) == {1, 2, 3}
-    assert feats[2] == {name: 0.0 for name in FEATURE_NAMES}
+    # runner 2 has nothing known at all, INCLUDING no official_rating -> every
+    # feature is the neutral 0.0 EXCEPT no_rating_flag, which is 1.0 (missing
+    # rating is its own signal, not silently folded into "average" — RL-006)
+    expected_runner_2 = {name: 0.0 for name in FEATURE_NAMES}
+    expected_runner_2["no_rating_flag"] = 1.0
+    assert feats[2] == expected_runner_2
 
     # runner 3 has a draw but nothing else -> draw_edge computed (from the
-    # 2 runners with a known draw), everything else 0.0
+    # 2 runners with a known draw), everything else 0.0 except no_rating_flag
     assert feats[3]["rating_edge"] == 0.0
     assert feats[3]["weight_edge"] == 0.0
     assert feats[3]["form_edge"] == 0.0
     # draws are 2 and 4 -> lo=2,hi=4 -> runner3 (draw=4) percentile=1.0 -> edge=0.5
     assert feats[3]["draw_edge"] == 0.5
+    # runner 3 has no official_rating either -> flagged the same as runner 2
+    assert feats[3]["no_rating_flag"] == 1.0
+    # runner 1 has a rating -> not flagged
+    assert feats[1]["no_rating_flag"] == 0.0
 
 
 def test_build_race_features_empty_runners_returns_empty_dict():
@@ -127,7 +141,13 @@ def test_predict_sums_to_one_with_nonzero_weights():
         _runner(4, official_rating=65, draw=9, weight_lbs=118, recent_form="6564"),
         _runner(5),  # a runner the API returned with nothing filled in yet
     ]
-    weights = {"rating_edge": 0.08, "draw_edge": -0.3, "form_edge": -0.15, "weight_edge": 0.02}
+    weights = {
+        "rating_edge": 0.08,
+        "draw_edge": -0.3,
+        "form_edge": -0.15,
+        "weight_edge": 0.02,
+        "no_rating_flag": -0.4,
+    }
     probs = predict_race_probabilities(runners, weights=weights)
 
     assert set(probs.keys()) == {1, 2, 3, 4, 5}
@@ -186,8 +206,9 @@ def test_fit_single_race_single_step_hand_verified():
       = 5*0.5 + (-5)*(-0.5) = 2.5 + 2.5 = 5.0
     Divided by n_races=1, minus l2*0 (weight starts at 0) = 5.0.
     One step at learning_rate=0.05 -> weight["rating_edge"] = 0.05*5.0 = 0.25.
-    Every other feature's gradient is 0 (all runners have 0.0 there), and
-    l2*0=0, so every other weight stays exactly 0.0.
+    Every other feature's gradient is 0 (all runners have 0.0 there — both
+    runners have a known official_rating, so no_rating_flag is 0.0 for both
+    too), and l2*0=0, so every other weight stays exactly 0.0.
     """
     race = TrainingRace(
         runners=[
@@ -202,6 +223,7 @@ def test_fit_single_race_single_step_hand_verified():
     assert weights["draw_edge"] == 0.0
     assert weights["form_edge"] == 0.0
     assert weights["weight_edge"] == 0.0
+    assert weights["no_rating_flag"] == 0.0
 
 
 def test_fit_recovers_rating_signal_sign():
@@ -235,6 +257,58 @@ def test_fit_recovers_rating_signal_sign():
     assert probs[30] == max(probs.values())
 
 
+def test_fit_recovers_debutant_signal_sign():
+    """Convergence check for `no_rating_flag` (added this session, see
+    RL-006): two 'regular' runners with IDENTICAL rating/draw/weight/form
+    (so their other four features are exactly 0.0 and cancel out — neither
+    is systematically favoured by anything else) against one runner with no
+    fields known at all (a debutant-shaped runner: no_rating_flag=1.0,
+    every other feature 0.0). The winner alternates between the two regular
+    runners across the synthetic set; the debutant never wins. Gradient
+    ascent must recover a NEGATIVE weight on no_rating_flag, and the fitted
+    model must then rate that debutant-shaped runner below uniform on a
+    held-out race — while the two identically-featured regular runners stay
+    exactly tied with each other, since nothing else here distinguishes
+    them.
+
+    Not a benchmark (needs real outcomes for that — see RL-006), just proof
+    the maths recovers the injected signal, the same discipline as
+    test_fit_recovers_rating_signal_sign above.
+    """
+    races = []
+    for i in range(20):
+        runners = [
+            _runner(10, official_rating=75, draw=3, weight_lbs=120, recent_form="3322"),
+            _runner(20, official_rating=75, draw=3, weight_lbs=120, recent_form="3322"),
+            _runner(30),  # debutant: nothing known
+        ]
+        winner = 10 if i % 2 == 0 else 20  # alternates; the debutant never wins
+        races.append(TrainingRace(runners=runners, winner_horse_id=winner))
+
+    weights = fit_logistic_baseline(races, learning_rate=0.1, iterations=300, l2=0.001)
+    assert weights["no_rating_flag"] < 0.0, (
+        f"expected a negative no_rating_flag weight after fitting on a set where the "
+        f"debutant-shaped runner never wins, got {weights['no_rating_flag']}"
+    )
+    # nothing else differentiates runners 10 and 20 in any race, so their
+    # weights should never have moved off the zero-initialised default
+    assert weights["rating_edge"] == 0.0
+    assert weights["draw_edge"] == 0.0
+    assert weights["form_edge"] == 0.0
+    assert weights["weight_edge"] == 0.0
+
+    held_out = [
+        _runner(10, official_rating=75, draw=3, weight_lbs=120, recent_form="3322"),
+        _runner(20, official_rating=75, draw=3, weight_lbs=120, recent_form="3322"),
+        _runner(30),
+    ]
+    probs = predict_race_probabilities(held_out, weights=weights)
+    assert probs[30] < 1.0 / 3.0, "fitted model should rate the debutant-shaped runner below uniform"
+    assert math.isclose(probs[10], probs[20], rel_tol=1e-9), (
+        "runners 10 and 20 are featurally identical in every race and should stay exactly tied"
+    )
+
+
 if __name__ == "__main__":
     tests = [
         test_build_race_features_centers_on_field_mean,
@@ -247,6 +321,7 @@ if __name__ == "__main__":
         test_fit_raises_on_winner_not_in_runners,
         test_fit_single_race_single_step_hand_verified,
         test_fit_recovers_rating_signal_sign,
+        test_fit_recovers_debutant_signal_sign,
     ]
     passed = 0
     for t in tests:

@@ -50,37 +50,50 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
 
 ## RL-006: Model 1 — a fitted, per-race logistic/softmax baseline over race-relative features
 
-- **Hypothesis:** a simple multinomial logit (softmax) over just four race-relative runner
+- **Hypothesis:** a simple multinomial logit (softmax) over five race-relative runner
   features — official rating vs. field mean, draw percentile vs. 0.5, recency-weighted form
-  score vs. field mean, weight vs. field mean — fit by gradient ascent on observed winners,
-  should beat Model 0's market baseline once it can be trained on real (racecard, result)
-  pairs, by using the same information a market-derived probability implicitly prices in but
-  making it explicit and auditable per feature.
-- **Why it might work / why it's still just an idea:** the four features are exactly the ones
-  `src/features/runner_features.py` (Sections 8/10) already computes and tests; wiring them
-  into a per-race softmax is the standard "conditional logit" formulation for a discrete
+  score vs. field mean, weight vs. field mean, and a missing-rating indicator (added Session
+  7, see below) — fit by gradient ascent on observed winners, should beat Model 0's market
+  baseline once it can be trained on real (racecard, result) pairs, by using the same
+  information a market-derived probability implicitly prices in but making it explicit and
+  auditable per feature.
+- **Why it might work / why it's still just an idea:** the first four features are exactly the
+  ones `src/features/runner_features.py` (Sections 8/10) already computes and tests; wiring
+  them into a per-race softmax is the standard "conditional logit" formulation for a discrete
   choice among race entrants, so the probability-per-race-sums-to-1.0 property comes for free
   rather than needing a second normalisation pass. This is genuinely untested against real
-  outcomes, though — there is still no real (racecard, result) pair anywhere in this repo (The
-  Racing API only returns racecards so far — Session 4 — and results collection hasn't been
-  built), so nothing here is evidence the features or their sign actually predict winners.
-- **Design choice flagged for review:** every feature is deliberately UNDIRECTED (centered on
-  the race's own mean, sign decided by the fitted weight, not asserted up front) — same
-  discipline as RL-004's draw_percentile. A runner missing an underlying field (no rating, no
-  parseable form, ...) gets 0.0 for that one feature ("no evidence either way"), which is a
-  modelling simplification worth revisiting once there's enough real data to check whether
-  missingness itself carries signal (e.g. a horse with no official rating is very likely a
-  first-time-out debutant, which is not "average").
+  outcomes, though — The Racing API still only returns racecards (results need its paid Basic
+  tier, not pursued — Session 5 interactive) and this cloud routine cannot reach it at all (no
+  credentials here). Session 6 (interactive, Jonathan's Mac) *did* load 558,370 real historical
+  runner results via Kaggle into the local database on that machine — the first real (racecard-
+  shaped, result) pairs anywhere in this project — but that data and DB state live only on
+  Jonathan's Mac; this cloud routine has no Kaggle credentials either and cannot reach or
+  reproduce it (confirmed again Session 7, `env | grep -iE "racing|kaggle|betfair"` empty), so
+  nothing here is evidence the features or their sign actually predict winners. Training Model 1
+  against that real Kaggle data is Mac-only work for a future interactive session.
+- **Design choice flagged for review (Session 5) and partially addressed (Session 7):** every
+  feature is deliberately UNDIRECTED (centered on the race's own mean, sign decided by the
+  fitted weight, not asserted up front) — same discipline as RL-004's draw_percentile. A runner
+  missing an underlying field still gets 0.0 for that one feature ("no evidence either way") for
+  draw/form/weight. For official_rating specifically, Session 7 added a fifth feature,
+  `no_rating_flag` (1.0 when official_rating is missing, 0.0 otherwise, its own separately
+  fitted weight), so a debutant-shaped runner (no rating at all) is no longer indistinguishable
+  from a genuinely average-rated one — the model can now learn whether missingness itself
+  carries signal, rather than that possibility being silently foreclosed by defaulting to 0.0.
+  Still synthetic-only: a convergence test confirms gradient ascent recovers the sign of an
+  *injected* debutant-never-wins pattern, which proves the maths works, not that real debutants
+  actually underperform.
 - **Implementation:** `src/models/model1_logistic_baseline.py::build_race_features`,
   `predict_race_probabilities`, `fit_logistic_baseline` (pure-Python batch gradient ascent, no
-  numpy/scikit-learn — see the module docstring for why). Tested with a hand-verified
-  single-gradient-step calculation and a synthetic rating-determines-the-winner convergence
-  check (`tests/test_model1_logistic_baseline.py`, 2026-09-08) — fixtures shaped exactly like
-  the real, verified racecard schema (`tests/test_racecard_theracingapi.py`).
-- **Training/validation period:** TBD — needs real (racecard, result) pairs, which needs
-  results collection to be built (the natural next step per Session 4's notes) and run on
-  Jonathan's Mac, same as racecards. Cannot be trained meaningfully in the cloud routine
-  environment (no credentials there — see docs/BUILD_LOG.md Session 5).
+  numpy/scikit-learn — see the module docstring for why). Tested with hand-verified
+  single-gradient-step calculations and two convergence checks — rating-determines-the-winner
+  (Session 5) and debutant-never-wins (Session 7) — in `tests/test_model1_logistic_baseline.py`,
+  fixtures shaped exactly like the real, verified racecard schema
+  (`tests/test_racecard_theracingapi.py`).
+- **Training/validation period:** TBD — the real data to do this now exists (Session 6's Kaggle
+  load, Jonathan's Mac) but hasn't been pointed at Model 1 yet; that's Mac-only work (needs that
+  machine's local Postgres). Cannot be trained meaningfully in the cloud routine environment (no
+  credentials there — see docs/BUILD_LOG.md Sessions 5 and 7).
 - **Status: IDEA** — pipeline and maths implemented and unit-tested against synthetic data
   only; no real-data fit or evaluation yet, and everything above is explicitly NOT a real
   prediction until it is.
