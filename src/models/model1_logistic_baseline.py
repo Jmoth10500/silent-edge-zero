@@ -2,19 +2,29 @@
 Model 1 — statistical/logistic baseline (Phase 6, the first FITTED model in
 this repo).
 
-**This is still NOT a real prediction.** There is no real (racecard, result)
-pair anywhere in this repository yet: The Racing API only returns racecards
-so far (see docs/BUILD_LOG.md Session 4 / `scripts/collect_racecards.py`),
-results collection hasn't been built, and this cloud routine cannot reach
-The Racing API at all (no credentials here — see docs/BUILD_LOG.md Session 5
-and `docs/FREE_DATA_SOURCES.md` #3). Every weight this module's tests ever
-produce comes from synthetic fixtures shaped like the now-real, verified
-racecard schema (`src/providers/racecard_theracingapi.py` /
+**Update 2026-09-08 — this HAS now been fit and walk-forward validated
+against real outcomes** (`scripts/train_model1.py`, ~487k real runner
+predictions across 18 chronological folds, 2023-06 to 2026-06, sourced from
+the real Kaggle historical dataset — see `docs/FREE_DATA_SOURCES.md` #2).
+The honest result: Model 1 did NOT beat Model 0 (the de-vigged market
+baseline) on Brier score or log loss, on any of the 18 folds. Full detail
+in `docs/RESEARCH_LAB.md` RL-006, including a known confound (the Kaggle
+data has no form-history column, so `form_edge` has been running on zero
+real signal so far — effectively three working features, not four). This
+module's maths and unit tests were originally built and verified against
+synthetic fixtures only, exactly as described below; that description is
+kept for the historical record of what was and wasn't tested when.
+
+Every weight this module's *tests* produce still comes from synthetic
+fixtures shaped like the real, verified racecard schema
+(`src/providers/racecard_theracingapi.py` /
 `tests/test_racecard_theracingapi.py` — e.g. `official_rating` as an int,
-`draw` as an int, `recent_form` as an undelimited string like `"1582F3"`),
-never from a real outcome. Fitting on synthetic data proves the maths works
-(gradient ascent recovers the sign of an injected signal) — it proves
-nothing about real racing. See `docs/RESEARCH_LAB.md` RL-006.
+`draw` as an int, `recent_form` as an undelimited string like `"1582F3"`) —
+that part of the module (`tests/test_model1_logistic_baseline.py`) was never
+about proving real predictive power, only that gradient ascent recovers the
+sign of an injected signal. The real predictive claim now lives in the
+`scripts/train_model1.py` result above, not in this module's own test
+suite.
 
 Model shape: a per-race multinomial logit (softmax) over a small, fixed set
 of race-RELATIVE runner features built from `src/features/runner_features.py`

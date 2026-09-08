@@ -46,7 +46,8 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
 - **Implementation:** `src/models/model0_market_baseline.py::predict_race_probabilities` (wraps the existing overround-removal methods) + `evaluate_market_baseline_walk_forward` (wires it through the walk-forward split harness and calibration scoring end-to-end). Tested with hand-verified Brier scores against synthetic zero-overround odds (2026-09-08) — see `tests/test_model0_market_baseline.py`.
 - **Design choice flagged for review:** which of the three overround-removal methods (proportional/power/Shin, see RL-002) Model 0 should default to is still unresolved — same blocker as RL-002, needs real odds history to benchmark.
 - **Training/validation period:** TBD — Model 0 has no training step by design, but its *evaluation* needs real (race_date, odds, winner) rows, which needs The Racing API or Betfair access (both blocked, see FREE_DATA_SOURCES.md).
-- **Status: IDEA** — pipeline plumbing implemented and unit-tested against synthetic data only; no real-data run yet.
+- **Real result (2026-09-08, `scripts/train_model1.py`, real Kaggle-sourced starting prices as odds, power de-vig method):** confirmed as the bar to clear. Pooled Brier=0.0795, log loss=0.2738 across 18 walk-forward folds (2023-06 to 2026-06), ~484k real runner predictions. Beat Model 1 on every single fold, no exceptions.
+- **Status: VALIDATED as a real, working baseline.** Whether power is the *best* de-vig method (vs. proportional/Shin) is still open — see RL-002.
 
 ## RL-006: Model 1 — a fitted, per-race logistic/softmax baseline over race-relative features
 
@@ -81,9 +82,43 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
   results collection to be built (the natural next step per Session 4's notes) and run on
   Jonathan's Mac, same as racecards. Cannot be trained meaningfully in the cloud routine
   environment (no credentials there — see docs/BUILD_LOG.md Session 5).
-- **Status: IDEA** — pipeline and maths implemented and unit-tested against synthetic data
-  only; no real-data fit or evaluation yet, and everything above is explicitly NOT a real
-  prediction until it is.
+- **Real result (2026-09-08, `scripts/train_model1.py`, walk-forward, min_train_days=180,
+  test_window_days=60, iterations=150, real Kaggle-sourced results 2023-06 to 2026-06):**
+  Model 1 lost to Model 0 (market baseline, RL-005) on Brier score and log loss on every
+  single one of 18 out-of-sample folds — pooled Brier=0.0896 vs. Model 0's 0.0795, log
+  loss=0.3199 vs. 0.2738, across ~487k real runner predictions. This is genuinely the first
+  time this hypothesis has been tested against a real outcome, and the hypothesis (Model 1
+  beats the market) did NOT hold. Calibration is good, though (predicted probability tracks
+  actual win rate closely in every bin with meaningful volume, e.g. predicted 0.074 vs. actual
+  0.074 on 284,519 predictions) — the model is honest, just not (yet) as informative as the
+  market.
+- **Known real confound, not yet controlled for:** `form_edge` has had zero real signal this
+  whole run — the Kaggle CSV has no `recent_form`/`days_since_last_run` columns at all (checked
+  directly against the raw file's header, 2026-09-08), so every runner's form_edge defaulted to
+  0.0. A real form feature would need to be *derived* from each horse's own prior rows in this
+  same dataset (build a per-horse chronological result history, leakage-safe — only races
+  strictly before the current one), which hasn't been built yet. Re-running this evaluation
+  with a real form feature is the natural next step before drawing a final verdict on whether
+  Model 1's four-feature shape can ever beat the market — right now it's running on
+  effectively three features, not four.
+- **Status: TESTING — real result in, currently FAILED to beat the market baseline, but not
+  a clean test of the original hypothesis yet** (missing form signal). Next: derive real form
+  from the Kaggle history and re-run before concluding Model 1's feature set is insufficient.
+
+## RL-007: Kaggle CSV has no form/days-since-last-run field — must be derived, not loaded
+
+- **Finding, not a hypothesis:** `data/kaggle_historical/.../raceform.csv` has no
+  `recent_form` or `days_since_last_run` column (confirmed by reading the raw header,
+  2026-09-08) — `scripts/load_kaggle_historical.py` never populated
+  `runner_snapshot.recent_form` because there was never a source column to read it from, not
+  because of a loader bug. The CSV does have per-horse rows across many dates (`horse`,
+  `date`, `pos`, `or`, `rpr`, `ts`), so a real form feature is derivable — for each runner,
+  look up that same horse's own prior rows with `date` strictly before the current race's date
+  and build a form string / recency-weighted score from their finishing positions — but this
+  is a real data-engineering task, not a config flip. See RL-006 for why this matters now (it's
+  the likely reason Model 1 underperformed its first real test).
+- **Status: IDEA** — logged so the next session builds this rather than re-discovering the
+  gap.
 
 ---
 

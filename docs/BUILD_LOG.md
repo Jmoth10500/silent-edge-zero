@@ -286,3 +286,26 @@ tests — 80/80 tests pass via `python3 -m pytest tests/ -v`, up from 70):**
 2. Racing API's own results — still needs their Basic tier; not pursuing since Kaggle now covers this need for free
 
 **Suggested next step:** Phase 6 — build the first real statistical baseline model, trained/validated via `src/validation/walk_forward.py` against the 558K real Kaggle results now sitting in `runner_result`. This is the first point the project can honestly say a model has been tested against real outcomes.
+
+---
+
+## 2026-09-08 — Session 7 (interactive, Jonathan's own machine)
+
+**Phase 6 done: Model 1 has now genuinely been fit and walk-forward validated against real outcomes — the first real predictive-power test anywhere in this project.**
+
+**What's genuinely done and verified:**
+- New `scripts/train_model1.py`: loads real (race, runner_snapshot, runner_result) joined rows from the DB, builds `RunnerFeatureInput`/`TrainingRace` objects, splits chronologically via `walk_forward_splits()` (expanding window, min_train_days=180, test_window_days=60), fits `fit_logistic_baseline()` on each training fold, scores the held-out fold with `brier_score`/`log_loss`/`calibration_curve`. Also builds real `RaceRecord`/`RunnerOdds` objects from the Kaggle-sourced starting prices to run Model 0 (market baseline) through the identical harness for a real, apples-to-apples comparison — this is the first time Model 0 has been evaluated against real odds too, not just synthetic ones.
+- **Real result:** 18 walk-forward folds, 2023-06 to 2026-06, ~487K real runner predictions. Model 1 lost to Model 0 on Brier score and log loss on every single fold. Pooled: Model 1 Brier=0.0896/LogLoss=0.3199 vs. Model 0 Brier=0.0795/LogLoss=0.2738. Full detail in `docs/RESEARCH_LAB.md` RL-005/RL-006.
+- Model 1's calibration is genuinely good (predicted probability tracks real win rate closely across every bin with meaningful volume) — it isn't overconfident or broken, it's just not as informative as the market yet.
+- **Real gap found:** the Kaggle CSV has no `recent_form`/`days_since_last_run` columns at all (checked the raw header directly) — `form_edge` has been running on zero real signal, i.e. Model 1's real test so far used effectively three working features, not four. Logged as RL-007: building a real form feature means deriving it from each horse's own prior rows in the same dataset (leakage-safe — strictly earlier dates only), not loading a column that doesn't exist. This is the natural next thing to build before drawing a final verdict on Model 1's feature shape.
+- Updated `src/models/model1_logistic_baseline.py`'s docstring to reflect the real result (previously said "still NOT a real prediction" — now says plainly that it's been tested and didn't beat the market yet, without overclaiming past what was actually shown).
+- **Process note, not a data problem:** three earlier attempts at this run were killed partway through by something outside my control (not a script bug — the DB query and gradient-ascent fitting were both working correctly each time, confirmed by comparing partial output across runs, which matched to 3-4 decimal places). Fixed by cutting per-run cost (test_window_days 30→60, gradient-ascent iterations 500→150 — four parameters converge well before 500 iterations) so a full run finishes in about a minute instead of tens of minutes, rather than relying on being able to run long jobs uninterrupted. `scripts/train_model1.py` accepts iteration/window-size overrides as CLI args if a future run needs to trade cost for precision.
+- Full test suite re-run: 80/80 pass (unchanged by this session — `train_model1.py` is a one-shot analysis script, not library code; its output was verified via the real run, not assumed).
+
+**What this means for the project honestly:** the "complicated system does not automatically win" principle (Section 39) held on its very first real test — Model 1 lost to the dumb market baseline. That's a legitimate, useful result, not a failed session. The market is genuinely hard to beat with four simple features, one of which wasn't even working. The next real step is deriving a genuine form feature from the Kaggle history and re-running before concluding anything final about whether this feature shape can ever add value.
+
+**What's still blocked:**
+1. Betfair Delayed App Key — still the only remaining real market-data gap (Phase 4); not urgent since Kaggle's starting prices already gave a real Model 0 comparison this session
+2. Racing API's own results — still needs their Basic tier; not pursuing, Kaggle covers this need
+
+**Suggested next step:** Build a real, leakage-safe recent-form feature derived from each horse's own prior Kaggle rows (RL-007), then re-run `scripts/train_model1.py` and see whether a genuinely complete four-feature Model 1 changes the RL-006 result.
