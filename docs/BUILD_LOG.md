@@ -246,3 +246,18 @@ tests — 80/80 tests pass via `python3 -m pytest tests/ -v`, up from 70):**
 - Do not present Model 1's synthetic-fixture test results as evidence it predicts real racing
 - Do not skip re-running the full test suite before committing — all 80 tests must actually
   pass, not just the new ones
+
+---
+
+## 2026-09-08 — Session 5 (interactive, Jonathan's own machine)
+
+**Corrected a real inaccuracy from earlier this session:** live-tested `/v1/results/today` with the real free-tier credentials — returned `{"detail":"Basic Plan required"}`. The pricing page's claim that results are on the Free tier is wrong (or at least not enforced that way by the actual API). Confirmed via the real OpenAPI spec: `/v1/results`, `/v1/results/today` and `/v1/racecards/summaries` all require Basic (£27.99/mo)+. Only `/v1/racecards/free` and `/v1/courses` are genuinely free. `docs/FREE_DATA_SOURCES.md` #3 rewritten to reflect this — trust the live API behaviour over the marketing page from here on. **Practical consequence: Kaggle's historical dataset is the real path to outcome data for Phase 6 validation, not a Racing API upgrade.**
+
+**Set up real daily automation** — `scripts/run_collect_racecards.sh` + `~/Library/LaunchAgents/com.silentedgezero.collect-racecards.plist`, loaded and verified: triggered manually via `launchctl start`, confirmed it runs the exact same path as the scheduled 07:00 daily fire, real output, zero errors, logs to `logs/collect_racecards.log`. This is Mac-only (same constraint as the collector script itself — needs the local `.env` credentials the cloud routine doesn't have). Racecard snapshots will now accumulate automatically every morning without anyone needing to trigger it.
+
+**Confirmed the immutable-snapshot design works as intended, not a bug:** running the collector twice in one day correctly produced two full generations of `runner_snapshot` rows (248 → 496) rather than overwriting — exactly per Section 5's "never overwrite the pre-race snapshot" rule. Worth knowing for future sessions: don't "fix" this by adding an UPDATE path, it's deliberate.
+
+**What's still blocked:**
+1. Kaggle account — now the highest-priority unblock (real historical outcomes for Phase 6 validation)
+2. Betfair Delayed App Key — real market prices (Phase 4)
+3. Racing API results — would need Basic tier (£27.99/mo); not pursuing without evidence Kaggle's data proves insufficient first, per `FUTURE_PAID_UPGRADES.md`
