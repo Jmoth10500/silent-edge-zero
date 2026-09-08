@@ -102,19 +102,25 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
   0.074 on 284,519 predictions) — the model is honest, just not (yet) as informative as the
   market. This run used the 4-feature model from before Session 7's `no_rating_flag` addition
   landed on `origin/main`; re-running with all 5 features is a natural next step.
-- **Known real confound, not yet controlled for:** `form_edge` has had zero real signal this
-  whole run — the Kaggle CSV has no `recent_form`/`days_since_last_run` columns at all (checked
-  directly against the raw file's header, 2026-09-08), so every runner's form_edge defaulted to
-  0.0. A real form feature would need to be *derived* from each horse's own prior rows in this
-  same dataset (build a per-horse chronological result history, leakage-safe — only races
-  strictly before the current one), which hasn't been built yet. Re-running this evaluation
-  with a real form feature is the natural next step before drawing a final verdict on whether
-  Model 1's feature shape can ever beat the market — right now it's running short a working
-  feature (form) as well as still missing the newly-added `no_rating_flag`.
-- **Status: TESTING — real result in, currently FAILED to beat the market baseline, but not
-  a clean test of the full hypothesis yet** (missing form signal, and the 5th feature wasn't
-  in this run). Next: re-run with `no_rating_flag` included, derive real form from the Kaggle
-  history, and re-run again before concluding Model 1's feature set is insufficient.
+- **Confound resolved (2026-09-08, same session):** `scripts/derive_recent_form.py` built a
+  real, leakage-safe `recent_form`/`days_since_last_run` for 481,186 of 558,866 runner_snapshot
+  rows (the remainder are each horse's first appearance in the dataset — left NULL honestly,
+  not guessed), by walking each horse's own prior rows in date order and using only its
+  strictly-earlier races. Spot-checked against a real horse's full race history — form strings
+  (e.g. `431258U`) and non-completion codes (UR, PU) matched the real result sequence exactly.
+- **Real result, re-run with the full 5-feature model (`no_rating_flag` merged +
+  real form) — the clean, complete test of this hypothesis:** pooled Brier=0.0875,
+  log loss=0.3093 across the same 18 folds, ~487k predictions — a genuine improvement over the
+  3-working-feature run (0.0896), narrowing the gap to Model 0 from 0.0101 to 0.0080. Still did
+  NOT beat the market baseline (0.0795) on any fold. Calibration held up and gained resolution
+  (more predictions now land in the 0.2–0.7 bins where form/rating actually differentiate
+  runners), still tracking actual outcomes closely bin-by-bin.
+- **Status: TESTING — clean, complete result in (no more open feature confounds). Model 1
+  in its current 5-feature shape does NOT beat the market**, though it's closer than the
+  incomplete first attempt. This is now a fair conclusion, not one waiting on missing data.
+  Next real step for RL-006 is a genuinely different model (Model 2, gradient boosting per
+  the build brief's Phase 7) or richer features (course/distance-specific draw bias per
+  RL-004, weather per RL-001) rather than re-testing this same feature shape again.
 
 ## RL-007: Kaggle CSV has no form/days-since-last-run field — must be derived, not loaded
 
@@ -128,8 +134,12 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
   and build a form string / recency-weighted score from their finishing positions — but this
   is a real data-engineering task, not a config flip. See RL-006 for why this matters now (it's
   the likely reason Model 1 underperformed its first real test).
-- **Status: IDEA** — logged so the next session builds this rather than re-discovering the
-  gap.
+- **Resolved (2026-09-08, same session):** `scripts/derive_recent_form.py` — a one-shot
+  backfill, not part of the live daily collector — built exactly this, leakage-safe by
+  construction (only strictly-earlier races per horse), for 481,186 of 558,866 rows. Spot-check
+  against a real horse's full history confirmed correctness, including non-completion codes.
+  See RL-006 for the resulting real re-run.
+- **Status: DONE.**
 
 ---
 

@@ -407,3 +407,24 @@ tests — 81/81 tests pass via `python3 -m pytest tests/ -v`, up from 80):**
 **Suggested next step:** Build a real, leakage-safe recent-form feature derived from each horse's own prior Kaggle rows (RL-007), then re-run `scripts/train_model1.py` and see whether a genuinely complete feature set changes the RL-006 result.
 
 **Merge note:** while this session was running, the cloud routine (Session 7 above) independently pushed a 5th Model 1 feature, `no_rating_flag`. `train_model1.py` doesn't hardcode feature names (it iterates `FEATURE_NAMES`), so it will pick the new feature up automatically on its next run — but the real result above was produced against the 4-feature model, before that merge. It has NOT yet been re-run with `no_rating_flag` included. Genuinely re-running against the merged 5-feature model, alongside the RL-007 form fix, is the real next step — not treating this result as final.
+
+---
+
+## 2026-09-08 — Session 9 (interactive, Jonathan's own machine)
+
+**Closed out both open threads from Session 8: real form feature built, and the full merged 5-feature Model 1 re-run to completion.**
+
+**What's genuinely done and verified:**
+- New `scripts/derive_recent_form.py` — a one-shot backfill (not part of the live daily collector) that builds real, leakage-safe `recent_form`/`days_since_last_run` for every Kaggle-loaded `runner_snapshot` row, by walking each horse's own prior rows in chronological order and using only its strictly-earlier races. Non-completion codes (UR, PU, etc.) taken from `runner_result.result_note`. **481,186 of 558,866 rows updated** (the remainder are each horse's first appearance in the dataset — left NULL honestly, never guessed).
+- Spot-checked against a real horse's ("Pay The Piper (IRE)") full race history: derived form strings (e.g. `431258U`) and non-completion codes matched the actual result sequence exactly, and `days_since_last_run` matched real calendar gaps between races.
+- Re-ran `scripts/train_model1.py` against the merged 5-feature model (`no_rating_flag` from the cloud routine's Session 7 + the new real form) for the first genuinely complete, confound-free test of RL-006's hypothesis. **Result: Model 1 improved — pooled Brier 0.0896 → 0.0875, closing the gap to Model 0 from 0.0101 to 0.0080 — but still did not beat the market baseline (0.0795) on any of the 18 folds.** Calibration held up and gained resolution (more predictions in the 0.2-0.7 bins where form/rating actually differentiate runners).
+- Updated `docs/RESEARCH_LAB.md` RL-006 (real result superseding the earlier incomplete one) and RL-007 (marked DONE) with the real numbers.
+- Full test suite: 81/81 pass (unchanged — both new scripts are one-shot analysis/ETL, not library code).
+
+**What this means honestly:** the confound is gone, the test is now fair, and the market still wins. This isn't a failed session — RL-006 now has a clean, trustworthy answer instead of a caveated one. Chasing further tuning of this exact 4-original-plus-1 feature shape isn't likely to close an 0.008 Brier gap against a market that prices in far more information than five race-relative stats. The next real lever is a different model class (Model 2 / gradient boosting, per the build brief's Phase 7) or genuinely new information (course/distance-specific draw bias per RL-004, weather per RL-001), not another pass at Model 1's current features.
+
+**What's still blocked:**
+1. Betfair Delayed App Key — the only remaining real market-data gap (Phase 4)
+2. Racing API's own results — still needs their Basic tier; not pursuing, Kaggle covers this need
+
+**Suggested next step:** Phase 7 — build Model 2 (gradient boosting) against the same real walk-forward harness now proven out end-to-end, or add a genuinely new feature (course/distance draw bias, weather) to Model 1 before concluding this feature family is exhausted.
