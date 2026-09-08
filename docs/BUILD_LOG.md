@@ -109,3 +109,32 @@ re-doing finished work.
 - Do not create accounts on Jonathan's behalf (Racing API, Kaggle, Betfair)
 - Do not scrape britishhorseracing.com or any other site not yet permission-checked
 - Do not skip re-running the full test suite before committing — all 64 tests must actually pass, not just the new ones
+
+---
+
+## 2026-09-08 — Session 4 (interactive, Jonathan's own machine)
+
+**The blocker is cleared.** Jonathan signed up for The Racing API and sent real credentials. This is the milestone the last three sessions were waiting on.
+
+**What's genuinely done and verified this session:**
+- Credentials stored in `.env` (gitignored, never committed) — see `.env.example` for the template
+- Fixed `src/providers/racecard_theracingapi.py`: auth is HTTP Basic (username+password), NOT a bearer token as the old stub guessed — confirmed from the real published OpenAPI spec (`https://raw.githubusercontent.com/APIs-guru/openapi-directory/.../theracingapi.com/1.0.0/openapi.yaml`) and a live call
+- **First real API call succeeded**: `/v1/racecards/free?day=today` returned 54 real races (17 FR, 29 GB, 8 IRE) for 2026-09-08. Field mapping in the provider now matches the real `RacecardBasic`/`RunnerBasic` schema exactly (verified against the OpenAPI spec, not guessed)
+- **Real bug found and fixed live**: the API's own `off_time` field is ambiguous (e.g. `"1:12"`, no AM/PM) — Leicester's real 13:12 race was returned as `"1:12"`, and a naive TIME cast in Postgres silently read it as 01:12 AM. Fixed by deriving off_time from `off_dt` (a full ISO datetime with timezone) instead of trusting the provider's own ambiguous string. Regression test added: `tests/test_racecard_theracingapi.py::test_ambiguous_off_time_is_corrected_via_off_dt`, using the exact real Leicester race as its fixture.
+- Also fixed: distance conversion (`distance_f`, furlongs as a string) × 220 → yards, not left null as the old stub did
+- **`scripts/collect_racecards.py` — new, real, run successfully**: pulled today's 29 real GB races into the live database — 29 `race` rows, 248 `runner_snapshot` rows, all real horses/trainers/jockeys/form, all with correct `observed_at`/`available_at`/`ingested_at`/`source_id`
+- `tests/test_racecard_theracingapi.py` — 6 new tests, all against a fixture built from the real captured response (not guessed field names), including the off_time regression case
+- Full suite re-run: 70/70 tests pass
+- `docs/FREE_DATA_SOURCES.md` #3 updated: **The Racing API confirmed LIVE** for racecards+results on the free tier (£0/mo). Odds are NOT on the free tier — that still needs Betfair or a paid Racing API tier, unchanged blocker for Phase 4's real market data.
+- Updated the autonomous routine's own instructions (via RemoteTrigger) to reflect this honestly: **the cloud routine environment does NOT have these credentials** (an attempt to set them as routine env vars didn't take — the API silently ignored the field, worth someone checking why later, low priority) — so racecard/weather collection stays Mac-only for now. The cloud routine should keep building Phase 6+ scaffolding against realistic synthetic fixtures shaped like the now-real, verified schema, not attempt live calls it can't make.
+
+**What this changes for future sessions:**
+- Phase 3 (daily collector) is now **genuinely live**, not stubbed — but only when run on Jonathan's Mac (`python3 scripts/collect_racecards.py`), not from the cloud routine.
+- The synthetic fixtures used everywhere else in the codebase (features, calibration, walk-forward) should ideally be reshaped to match the real confirmed field formats (e.g. `official_rating` really does come through as a numeric string that needs casting, `recent_form` really is a raw string like `"1582F3"` with no delimiters) — worth an audit pass, not done this session.
+- Results collection (`/v1/results` or `/v1/results/today` — not yet verified live, don't assume the field names) is the natural next step once there are results to check predictions against. Verify the real response shape with a live call before writing a parser, same discipline as this session used for racecards.
+- Phase 6 (first real model) can start honestly now: real racecard structure exists, even though there's no real outcome data yet to train against. A model trained/scored only against synthetic outcomes must say so clearly, everywhere — comments, docs, and BUILD_LOG.
+
+**What's still blocked:**
+1. Betfair Delayed App Key — for real market prices (Phase 4)
+2. Kaggle account — for historical bootstrap/backtest depth (helps Phase 6+ validation, not urgent yet)
+3. Racing API odds — needs a paid tier (£59.99/mo+) or Betfair instead; not pursuing a paid tier without evidence it's needed first, per `FUTURE_PAID_UPGRADES.md`'s own rule

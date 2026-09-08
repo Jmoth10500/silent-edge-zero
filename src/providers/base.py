@@ -50,7 +50,8 @@ class RunnerCard:
 class RaceCard:
     course_name: str
     race_date: date
-    off_time: str
+    off_time: str  # 24-hour "HH:MM", unambiguous — derive from a full datetime if the
+                    # provider's own field is ambiguous (e.g. "1:12" with no AM/PM)
     race_name: str
     race_class: Optional[str]
     race_type: Optional[str]
