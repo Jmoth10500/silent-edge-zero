@@ -546,3 +546,123 @@ tests — 93/93 tests pass via `python3 -m pytest tests/ -v`, up from 81):**
 - Do not present Model 2's synthetic-fixture test results as evidence it predicts real racing
 - Do not skip re-running the full test suite before committing — all 93 tests must actually
   pass, not just the new ones
+
+---
+
+## 2026-09-08 — Session 11 (autonomous overnight, cloud routine)
+
+**Confirmed the credential boundary first, per this session's explicit instructions:**
+`env | grep THERACINGAPI` returned nothing in this container — empty, as flagged. Only
+`CCR_ENABLE_TRACING=true` is set. This cloud routine still does not have
+`THERACINGAPI_USERNAME`/`THERACINGAPI_PASSWORD`, does not have Kaggle credentials, and cannot
+reach the real 558K-row Kaggle-loaded historical dataset (that lives only in Postgres on
+Jonathan's Mac). Did **not** attempt `scripts/collect_racecards.py` or
+`scripts/collect_weather.py` here, per the explicit instruction. Racecard/weather collection
+stays **Mac-only** — unconfirmed otherwise in this file, so not assumed.
+
+**This session's scheduled prompt asked for Phase 6 (a synthetic-fixture statistical/logistic
+baseline).** Per this file's own standing instruction ("read BUILD_LOG.md first... follow it"),
+checked current state before starting: Phase 6 (Model 1,
+`src/models/model1_logistic_baseline.py`) was built Session 5, real-trained Sessions 8–9 (lost
+to the market baseline, see RL-006), and **Phase 7 (Model 2, gradient boosting) is also already
+done** (`src/models/model2_gradient_boosting.py`, Session 10, RL-008) — `git log` at the start
+of this session was already at `de23e44 "Phase 7: Model 2, gradient-boosted trees..."`, matching
+Session 10's own entry exactly. Rather than duplicate finished work, picked up Session 10's own
+"what the next session should do" list, item 3(d): **course/distance-specific draw bias
+(RL-004)**, flagged as "not yet touched by any session" and the most concrete real gap in the
+feature set that's genuinely buildable without real data access.
+
+**What's genuinely done and verified this session (all real code, all with real passing
+tests — 106/106 tests pass via `python3 -m pytest tests/ -v`, up from 93):**
+- `src/features/draw_bias.py` — **new module**, the real hypothesis RL-004 has flagged since
+  Session 2 as blocked ("requires historical results grouped by course+distance, which doesn't
+  exist yet"), as opposed to `runner_features.py::draw_bias_features()`'s deliberately neutral
+  this-race-only placeholder. `draw_percentile_bucket()` splits draws 1..field_size into
+  `num_buckets` groups using pure integer arithmetic (no float rounding at bucket boundaries —
+  deliberately, after confirming a float version would have hit exact `x.0` boundary ambiguity).
+  `compute_course_distance_draw_bias()` takes caller-supplied historical (course, distance,
+  surface, draw, finishing_position) records — already leakage-filtered by the caller, same
+  discipline as `scripts/derive_recent_form.py`, this module does no date filtering and no DB
+  access at all — buckets them, and returns the queried draw's own bucket win rate against the
+  group's overall baseline win rate (`win_rate_vs_baseline`, the actual bias signal, not just a
+  raw rate that could reflect the field being generally weak/strong). Returns `None` (never
+  guessed) when the draw/field can't be bucketed, when a course+distance+surface combination has
+  fewer than `min_sample_size` historical runners, or when the queried draw's own bucket happens
+  to have zero historical runners even though the group overall met the threshold.
+- `tests/test_draw_bias.py` — 13 real tests: exact bucket-boundary tables hand-worked for two
+  field sizes (including an uneven 10-runner/3-bucket case where bucket sizes come out 4/3/3, not
+  equal — checked and accepted honestly, not hidden), hand-verified win-rate-vs-baseline
+  arithmetic (2/9 for a favoured bucket, -1/9 for an unfavoured one, against a 10-race synthetic
+  fixture where draw 2 always wins), and every `None`-return path exercised individually
+  (unbucketable draw, sample size below threshold, course/surface mismatch, a bucket with zero
+  historical runners despite the group meeting the sample-size floor, and non-runner rows
+  correctly excluded from the sample rather than counted as losses). One test failure caught and
+  fixed during this session, not shipped: the first draft's hand-calculated expected buckets for
+  the uneven-field-size case were arithmetically wrong (worked out `(d-1)*3//10` incorrectly by
+  hand) — pytest caught it immediately, recomputed by hand carefully, fixed the test, not the
+  (correct) code.
+- `docs/RESEARCH_LAB.md` RL-004 — updated: now documents both the neutral placeholder
+  (`runner_features.py`) and the real computation (`draw_bias.py`) side by side, status moved
+  from IDEA to **TESTING (partial)** — the computation is built and unit-tested, but RL-004's
+  actual hypothesis (does a genuine course/distance draw bias exist and does it help a model) is
+  still untested against real data, only no longer blocked on missing plumbing.
+- `docs/SILENT_EDGE_ZERO_ARCHITECTURE.md` — directory listing updated: `draw_bias.py` and
+  `test_draw_bias.py` added.
+- Full test suite re-run and confirmed green after every change: `./db/setup_local_postgres.sh
+  && python3 db/init_db.py` (fresh container, as every prior autonomous session has needed) then
+  `python3 -m pytest tests/ -v` → **106/106 passed**, including the DB-backed
+  `tests/test_leakage.py` tests against a freshly bootstrapped local Postgres in this container.
+  `pip install pytest psycopg2-binary python-dotenv requests scikit-learn` needed a couple of
+  retries this session (one `ReadTimeoutError` fetching a wheel from `files.pythonhosted.org` on
+  the first attempt) — not a credentials or environment problem, just transient network flake;
+  succeeded on retry with a longer timeout.
+
+**Deliberately NOT done this session, and why:** did not write a DB-writing backfill script
+(the way `scripts/derive_recent_form.py` backfills `runner_snapshot` columns) for draw bias.
+Unlike recent-form, there's no natural single column to store a course/distance/draw-bucket win
+rate against on `runner_snapshot` — it's a derived, query-time aggregate over *other* rows, not
+a fact about the row itself — and inventing a new table/column for it without validating the
+computation against real data first felt like schema commitment ahead of evidence. The cleaner
+next step (below) is to call `compute_course_distance_draw_bias()` from within
+`scripts/train_model1.py`/`train_model2.py` at train time, the same place feature vectors are
+already assembled, no schema change needed.
+
+**What's still blocked (unchanged):**
+1. Betfair Delayed App Key — for real market prices (Phase 4)
+2. Kaggle account credentials in THIS cloud environment — the real 558K-row dataset exists but
+   only on Jonathan's Mac; this routine cannot reach or reproduce it
+3. Racing API results — still needs their Basic tier; not pursuing, Kaggle covers this need
+
+**What the next session should do, in priority order:**
+1. **Check for new credentials as always** — `env | grep -iE "racing|kaggle|betfair"`, recent
+   commits, this file. If still cloud-only, don't re-derive that, move on.
+2. **The single highest-leverage next step is genuinely testing RL-004 and RL-008 against real
+   data**, both Mac-only: (a) run `scripts/train_model2.py` against the real Kaggle-loaded DB
+   (Session 10's own item 2, still not done — Model 2 has never been compared to Model 0/1 on
+   real outcomes); (b) wire `src/features/draw_bias.py::compute_course_distance_draw_bias()` into
+   a real (course_id, distance_yards, surface, draw, finishing_position) query over the Kaggle
+   data, leakage-filtered per race the same way `train_model1.py`/`derive_recent_form.py` already
+   do it, and see whether `win_rate_vs_baseline` is (a) real signal or (b) noise once real sample
+   sizes and `min_sample_size` gating are applied — this is the first point RL-004's actual
+   hypothesis (not just its plumbing) could be tested.
+3. If still cloud-only and blocked on real data: there is very little synthetic-only plumbing
+   left worth building blind for either Model 2 or draw bias specifically. Worth considering
+   instead: (a) a hyperparameter sweep for Model 2 on a synthetic fixture (Session 10's item 3a,
+   still not done); (b) RL-001 (weather) as a genuinely new feature, still completely untouched
+   by any session; (c) an `odds_betfair.py` provider stub, still flagged as not written since
+   Session 5.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. Keep this file updated at the end of every session — add a new dated section above this
+   instruction, don't overwrite prior sessions' entries.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result data, or any model's training data, to "demo" anything
+- Do not create accounts on Jonathan's behalf (Betfair)
+- Do not attempt `scripts/collect_racecards.py`, `scripts/collect_weather.py`,
+  `scripts/load_kaggle_historical.py`, `scripts/derive_recent_form.py`, `scripts/train_model1.py`,
+  or `scripts/train_model2.py` from this cloud routine environment — no credentials/real DB here,
+  confirmed again this session, will fail or run against an empty database
+- Do not present `draw_bias.py`'s synthetic-fixture test results as evidence a real course/
+  distance draw bias exists — the hypothesis itself is still untested
+- Do not skip re-running the full test suite before committing — all 106 tests must actually
+  pass, not just the new ones

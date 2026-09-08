@@ -51,6 +51,12 @@ silent-edge-zero/
       feature_vector.py         — combines runner_features.py (Sections 8+10) and
                                   market/movement.py (Section 16) into a single flat
                                   per-runner feature dict — the actual model-input row shape
+      draw_bias.py               — course/distance-specific historical draw bias (RL-004's
+                                  real hypothesis, vs runner_features.py's neutral placeholder).
+                                  Pure aggregation over caller-supplied, already leakage-filtered
+                                  historical records — no DB access. Added 2026-09-08 (cloud
+                                  routine), tested against synthetic fixtures only, NOT YET run
+                                  against the real Kaggle history — Mac-only next step
     evaluation/
       calibration.py            — Brier score, log loss, calibration curve (Section 24)
     validation/
@@ -97,6 +103,8 @@ silent-edge-zero/
     test_market_movement.py    — price movement feature tests
     test_runner_features.py    — per-runner and race-relative feature tests (synthetic fixtures)
     test_feature_vector.py     — combined feature-vector tests (synthetic fixtures)
+    test_draw_bias.py          — course/distance draw-bias bucketing and win-rate-vs-baseline
+                                  tests, hand-verified arithmetic against synthetic fixtures
     test_calibration.py        — Brier/log-loss/calibration-curve tests (synthetic predictions)
     test_walk_forward.py       — walk-forward split harness tests (synthetic chronological data)
     test_model0_market_baseline.py — Model 0 + end-to-end split/predict/score pipeline tests,
