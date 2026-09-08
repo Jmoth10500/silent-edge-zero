@@ -28,16 +28,13 @@ Last verified: 2026-09-08 (live checks run this session, see notes per source)
 ## 2. Historical UK/Ireland racing results — Kaggle community dataset
 
 - **URL:** https://www.kaggle.com/datasets/deltaromeo/horse-racing-results-ukireland-2015-2025
-- **Data supplied:** UK/Ireland race results, described as covering 1988–2026 (per dataset title), community-compiled
-- **API availability:** Kaggle API (`kaggle datasets download`) or web UI download
-- **Auth required:** **yes — a free Kaggle account + API token (`kaggle.json`)**. This cannot be created on your behalf; account creation is something only you can do.
-- **Free limits:** dataset download is free once authenticated; Kaggle API has generous rate limits, not a practical constraint here
-- **Attribution:** check the dataset's own licence tab before any redistribution — community datasets vary (some CC0, some restricted); **not yet verified — do this before relying on it beyond personal backtesting**
-- **Commercial restrictions:** unverified per above — treat as personal-research-only until the specific licence is checked
-- **Redistribution restrictions:** unverified — same caveat
-- **Terms checked:** not yet — blocked on your Kaggle login
-- **Scraping permission:** N/A, official platform download
-- **Reliability:** unverified — community-maintained, "quality and completeness vary" per general Kaggle dataset caveats; treat as a bootstrap/backtest aid, not a source of truth
+- **Status: LIVE — real account created, real data loaded 2026-09-08.**
+- **Auth method (newer/simpler than expected):** a single API token, not the old username+key `kaggle.json`. Set via `KAGGLE_API_TOKEN` env var or saved to `~/.kaggle/access_token`. Confirmed working.
+- **Data supplied, confirmed by actually opening the download:** far more than just results — `form_2015-present/raceform.csv` (the main file, 1,851,285 rows, 2015-01-01 to 2026-05-27, 37 columns: date, course, race_id, off, race_name, type, class, pattern, dist, going, ran, pos, draw, sp, jockey, trainer, or/rpr/ts ratings, sire/dam/damsire, owner, race comment), plus `archive_1988-2004/`, `archive_2005-2014/`, `betfair/`, `BHA_ratings/`, `daily_racecards/`, `recent_form_html/` — only `raceform.csv` has been loaded so far, the rest are there if needed later.
+- **Licence CONFIRMED: Community Data License Agreement – Sharing – Version 1.0** (shown directly in the Kaggle CLI download output, not a guess). CDLA-Sharing is share-alike: any *redistributed derivative dataset* must carry the same licence. Internal research/backtesting use — which is all this project does with it — is unrestricted.
+- **Loaded into the database:** `scripts/load_kaggle_historical.py` — real script, run successfully. Loaded from 2023-01-01 onward (configurable start date; full file goes back to 2015-01-01, re-run with an earlier date to backfill more): **558,370 runner results, 57,267 races, across 1,241 distinct racing days**, stored as `runner_result` + `runner_snapshot` rows with `observed_at`/`available_at` set to each race's real off-time (not "today" — this is genuine backdated historical data, correctly timestamped so the leakage tests still mean something).
+- **Real data-quality issue found and fixed:** the CSV's "missing value" marker isn't consistent — sometimes an en-dash (`–`), sometimes a plain hyphen (`-`), sometimes empty. A naive `float()` call crashed on row ~1.2M. Fixed with a `safe_float`/`safe_int` helper that treats any unparseable value as `None`, never a guess.
+- **Reliability:** good in practice — real winners, real starting prices (fractional odds like `11/4F` correctly converted to decimal), spot-checked against several real races.
 - **Replacement if unavailable:** other Kaggle horse-racing datasets exist (jpmiller/race-data "Big Data Derby", hwaitt/horse-racing) as fallbacks
 - **Status: BLOCKED — needs you to create a free Kaggle account, generate an API token at kaggle.com/settings, and drop `kaggle.json` into `~/.kaggle/`. Once done, tell me and the loader script (`scripts/load_kaggle_historical.py`, already written, untested) can run.**
 
@@ -106,7 +103,7 @@ Last verified: 2026-09-08 (live checks run this session, see notes per source)
 | Source | Status | Blocker |
 |---|---|---|
 | Open-Meteo (weather) | **LIVE** | none — working now |
-| Kaggle historical results | BLOCKED | needs your free Kaggle account + API token |
+| Kaggle historical results | **LIVE** — 558,370 real results loaded (2023–2026) | none — done |
 | The Racing API — racecards + results (free tier confirmed) | BLOCKED | needs your account signup (£0, "Get Started Free") + API key |
 | The Racing API — odds | Needs paid tier (£59.99/mo+) or Betfair instead | not on the free tier at all |
 | Betfair Exchange (market prices) | BLOCKED | needs your free developer account + Delayed App Key |

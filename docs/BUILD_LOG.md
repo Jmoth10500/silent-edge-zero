@@ -261,3 +261,28 @@ tests — 80/80 tests pass via `python3 -m pytest tests/ -v`, up from 70):**
 1. Kaggle account — now the highest-priority unblock (real historical outcomes for Phase 6 validation)
 2. Betfair Delayed App Key — real market prices (Phase 4)
 3. Racing API results — would need Basic tier (£27.99/mo); not pursuing without evidence Kaggle's data proves insufficient first, per `FUTURE_PAID_UPGRADES.md`
+
+---
+
+## 2026-09-08 — Session 6 (interactive, Jonathan's own machine)
+
+**Second real blocker cleared this session.** Jonathan created a Kaggle account and sent a real API token.
+
+**What's genuinely done and verified:**
+- Real auth confirmed: Kaggle's current auth method is a single API token (`~/.kaggle/access_token` or `KAGGLE_API_TOKEN`), not the old username+key `kaggle.json` the original stub assumed — the docs and loader are now correct.
+- **Real download, real licence discovered:** Community Data License Agreement – Sharing – v1.0, shown directly in the CLI output. This was "unverified" before — now confirmed, and it's permissive enough for our research/backtesting use (share-alike only bites if we redistribute a derivative dataset, which we don't).
+- The dataset is much richer than the earlier stub assumed: `raceform.csv` (1,851,285 rows, 2015–2026, 37 columns) is the main file, but there's also Betfair data, BHA ratings, and daily racecards folders — only `raceform.csv` loaded so far, noted for later.
+- **Rewrote `scripts/load_kaggle_historical.py` from scratch** — the old version was a stub against a guessed schema; this one is real, tested against the real CSV headers, and actually run to completion.
+- **Real bug found and fixed live:** the CSV's missing-value marker isn't consistent (en-dash, hyphen, or empty, inconsistently) — crashed a naive `float()` at row ~1.2M. Fixed with `safe_float`/`safe_int` helpers that return `None` for anything unparseable rather than guess or crash. This is now the pattern to reuse for any future messy-CSV parsing in this project.
+- **558,370 real runner results loaded** (2023-01-01 onward — full file goes back to 2015, re-run with an earlier start date to backfill more), **57,267 real races**, across 1,241 distinct racing days. Spot-checked: real winners, real starting prices, fractional odds correctly converted to decimal (e.g. `11/4F` → 3.75).
+- Every loaded row's `observed_at`/`available_at` is set to the race's real off-time, not "today" — this is genuine backdated historical data, correctly timestamped, not data pretending to be more recent than it is.
+- `docs/FREE_DATA_SOURCES.md` #2 fully rewritten with the confirmed real details (was previously full of "unverified"/"not yet checked" caveats — now all resolved).
+- Full test suite re-run: 80/80 pass (the loader itself has no unit tests yet — it's a one-shot ETL script, not library code other things import — but its output was verified via real DB queries, not assumed).
+
+**What this unblocks for the next session:** Phase 6 (first real model) can now be built and **genuinely walk-forward validated against 558K real historical results** — this is the actual milestone the whole "own historical database" section of the build brief (Section 5/6) was aiming for. There's finally enough real data to do this properly, not against synthetic fixtures.
+
+**What's still blocked:**
+1. Betfair Delayed App Key — the only remaining real gap, for Phase 4's market baseline (real odds)
+2. Racing API's own results — still needs their Basic tier; not pursuing since Kaggle now covers this need for free
+
+**Suggested next step:** Phase 6 — build the first real statistical baseline model, trained/validated via `src/validation/walk_forward.py` against the 558K real Kaggle results now sitting in `runner_result`. This is the first point the project can honestly say a model has been tested against real outcomes.
