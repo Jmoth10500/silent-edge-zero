@@ -3,8 +3,12 @@ requests>=2.31.0
 psycopg2-binary>=2.9.9
 python-dotenv>=1.0.0
 
-# Phase 6+ (not yet used, listed for when modelling starts)
-# scikit-learn>=1.4.0
+# Phase 7 (Model 2, gradient boosting) — in use since 2026-09-08, see
+# src/models/model2_gradient_boosting.py's module docstring for why
+# scikit-learn specifically (vs. this repo's usual from-scratch approach)
+scikit-learn>=1.4.0
+
+# Not yet used, listed for if/when a different boosting library is needed
 # catboost>=1.2.0
 # xgboost>=2.0.0
 # lightgbm>=4.3.0

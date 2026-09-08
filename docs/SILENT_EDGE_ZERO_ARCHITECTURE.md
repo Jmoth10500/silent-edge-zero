@@ -12,7 +12,7 @@ Model probability vs market-implied probability. Edge only means something when 
 
 - **Database:** PostgreSQL 16 (already running locally via Homebrew, zero setup cost)
 - **Language:** Python 3.11 (already on this machine)
-- **ML:** scikit-learn, CatBoost/XGBoost/LightGBM (added when Phase 6–7 starts, not yet needed)
+- **ML:** scikit-learn (in use since 2026-09-08, Phase 7 — `src/models/model2_gradient_boosting.py`); CatBoost/XGBoost/LightGBM still not needed
 - **API layer:** FastAPI (added when Phase 11 dashboard starts)
 - **Provider abstraction:** every external data source sits behind an interface (`RacecardProvider`, `OddsProvider`, `ResultsProvider`, `RatingsProvider`, `WeatherProvider`) so a provider can be swapped without touching the rest of the system — see `src/providers/`
 
@@ -63,15 +63,33 @@ silent-edge-zero/
                                   multinomial-logit over race-relative rating/draw/form/
                                   weight features (Section 8/10 features -> Section 6-ish
                                   first model), trained by pure-Python gradient ascent.
-                                  Synthetic-fixture-only — see RESEARCH_LAB.md RL-006.
+                                  Real-data trained & walk-forward validated (Sessions 8/9,
+                                  Jonathan's Mac) — lost to Model 0 on Brier/log loss on
+                                  every fold. See RESEARCH_LAB.md RL-006.
+      model2_gradient_boosting.py — Model 2 (Phase 7): a per-runner binary classifier
+                                  (sklearn HistGradientBoostingClassifier) over the SAME
+                                  5 features as Model 1, renormalised to sum to 1.0 per
+                                  race. Built 2026-09-08 (cloud routine) — synthetic-fixture
+                                  -only so far, same status Model 1 had before Sessions 8/9.
+                                  See RESEARCH_LAB.md RL-008.
   scripts/
     collect_racecards.py       — LIVE since 2026-09-08 (Session 4): pulls real GB racecards
                                   from The Racing API into the DB. Mac-only (needs
                                   THERACINGAPI_USERNAME/PASSWORD, not present in the cloud
                                   routine environment) — do not attempt this from the cloud.
-    collect_weather.py         — runs the live weather provider, stores snapshots
-    load_kaggle_historical.py  — bootstraps historical DB from the Kaggle dataset,
-                                  written but untested — needs your Kaggle credentials
+    collect_weather.py         — runs the live weather provider, stores snapshots.
+                                  Mac-only, same credential reason as above.
+    load_kaggle_historical.py  — real, run to completion (Session 6, Jonathan's Mac):
+                                  558,370 real runner results loaded. Mac-only — the loaded
+                                  DB state lives only there, the cloud routine cannot reach it.
+    derive_recent_form.py      — one-shot backfill (Session 9, Mac-only): real, leakage-safe
+                                  recent_form/days_since_last_run derived from each horse's
+                                  own prior Kaggle rows.
+    train_model1.py            — real Model 1 vs Model 0 walk-forward comparison script
+                                  (Sessions 8/9, Mac-only — needs the real Kaggle-loaded DB).
+    train_model2.py            — Model 0 vs Model 1 vs Model 2 walk-forward comparison,
+                                  mirrors train_model1.py's shape. Added 2026-09-08 (cloud
+                                  routine), NOT YET RUN — Mac-only, needs the real DB.
   tests/
     test_leakage.py            — enforces observed_at/available_at ordering (Section 6/30)
                                   and the DB-level prediction-immutability trigger (Section 32)
@@ -92,6 +110,9 @@ silent-edge-zero/
     test_racecard_theracingapi.py — LIVE provider tests against a real captured API response
                                   fixture (Session 4) — includes the ambiguous off_time
                                   regression case
+    test_model2_gradient_boosting.py — Model 2 tests: renormalisation edge cases (all-zero,
+                                  empty, negative), fit/predict error handling, and a
+                                  signal-recovery convergence check — synthetic fixtures only.
 ```
 
 ## Data integrity rules enforced in code, not just policy

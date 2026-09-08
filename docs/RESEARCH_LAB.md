@@ -141,6 +141,51 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
   See RL-006 for the resulting real re-run.
 - **Status: DONE.**
 
+## RL-008: Model 2 — gradient-boosted trees over the same features, a different model class
+
+- **Hypothesis:** RL-006 concluded that Model 1's linear conditional-logit could not beat the
+  market baseline even with a clean, confound-free 5-feature set, and that further tuning of
+  that same feature shape was unlikely to close the gap. A model class capable of
+  nonlinearities and feature interactions — gradient-boosted decision trees — over the SAME
+  5 features might capture structure a linear score cannot (e.g. "rating only matters when
+  draw is also favourable"), and should be tested before concluding this feature family is
+  exhausted.
+- **Why it might work / why it's still just an idea:** this is genuinely untested against real
+  outcomes — the same status Model 1 had before Sessions 8/9 trained it on real Kaggle data.
+  This cloud routine has no THERACINGAPI_* or Kaggle credentials (confirmed again this
+  session, `env | grep THERACINGAPI` empty) and cannot reach or reproduce the real 558K-row
+  historical dataset that lives only in Postgres on Jonathan's Mac.
+- **Design choice flagged for review:** Model 2 is a per-runner INDEPENDENT binary classifier
+  (P(win) per runner, sklearn's HistGradientBoostingClassifier), not a true joint per-race
+  model the way Model 1's softmax is — raw outputs are renormalised to sum to 1.0 per race
+  after the fact (`_renormalize` in `src/models/model2_gradient_boosting.py`). This is a
+  simpler normalisation than a genuinely joint tree model would need (it can't represent "if
+  runner A is strong, runner B's chances fall by more than proportionally" the way a joint
+  softmax can) — worth revisiting (e.g. a learning-to-rank formulation) if Model 2 shows
+  promise but its ceiling looks capped by this simplification.
+- **Also flagged:** unlike this repo's other numerical work (the market de-vig bisection
+  solvers, Model 1's own gradient ascent), Model 2 uses scikit-learn rather than a from-scratch
+  implementation — see the module docstring for why (a correct, efficient boosted-tree
+  implementation is a different scale of surface area than either of those). `requirements.txt`
+  has scikit-learn uncommented for the first time this session; no other Phase 6+ dependency is
+  needed yet.
+- **Implementation:** `src/models/model2_gradient_boosting.py::fit_gradient_boosting_baseline`,
+  `predict_race_probabilities`, `_renormalize`. Reuses Model 1's own
+  `build_race_features`/`FEATURE_NAMES` unchanged, deliberately — isolating "different model
+  class" as the one variable under test, not also changing what the model can see. Tested with
+  renormalisation edge cases (all-zero, empty, negative-total fallback to uniform — hand
+  verified) and a signal-recovery convergence check (highest-rated runner always wins in
+  training -> fitted model rates that runner-shape highest on a held-out race), same discipline
+  as Model 1's own convergence tests, in `tests/test_model2_gradient_boosting.py`, fixtures
+  shaped exactly like the real, verified racecard schema (`tests/test_racecard_theracingapi.py`).
+- **Not yet run:** `scripts/train_model2.py` (added this session, mirrors
+  `scripts/train_model1.py`'s shape exactly — real Kaggle-sourced load query, walk-forward
+  splits, Model 0/1/2 scored side by side on the same folds) is ready to run but has not been —
+  that needs Jonathan's Mac (the real DB). Until that real run happens, nothing here is evidence
+  Model 2 predicts real racing any better (or worse) than Model 1 did.
+- **Status: IDEA — implementation and pipeline plumbing done and unit-tested against synthetic
+  fixtures only (2026-09-08, cloud routine). No real-data run yet.**
+
 ---
 
 *New entries go at the bottom, oldest first, so the log itself is chronological.*

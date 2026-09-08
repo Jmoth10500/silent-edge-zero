@@ -428,3 +428,121 @@ tests — 81/81 tests pass via `python3 -m pytest tests/ -v`, up from 80):**
 2. Racing API's own results — still needs their Basic tier; not pursuing, Kaggle covers this need
 
 **Suggested next step:** Phase 7 — build Model 2 (gradient boosting) against the same real walk-forward harness now proven out end-to-end, or add a genuinely new feature (course/distance draw bias, weather) to Model 1 before concluding this feature family is exhausted.
+
+---
+
+## 2026-09-08 — Session 10 (autonomous overnight, cloud routine)
+
+**Confirmed the credential boundary first, as instructed:** `env | grep THERACINGAPI` returned
+nothing in this container. This cloud routine still does not have
+`THERACINGAPI_USERNAME`/`THERACINGAPI_PASSWORD` — checked again per the ground rules, did not
+assume otherwise, did not attempt `scripts/collect_racecards.py` or
+`scripts/collect_weather.py`. The real 558K-row Kaggle-loaded dataset from Sessions 6/8/9 is
+also still Mac-only (this container's Postgres was freshly bootstrapped empty via
+`db/setup_local_postgres.sh && python3 db/init_db.py`, as every prior autonomous session has
+needed — no real data lives here).
+
+**This session's scheduled prompt asked for Phase 6 (a synthetic-fixture logistic baseline) —
+that work is already done, real-data-tested, and superseded** (Model 1,
+`src/models/model1_logistic_baseline.py`, built Session 5, extended Session 7, real-trained
+Sessions 8–9: it lost to the market baseline on Brier/log loss, see RL-006). Per this file's own
+instruction to "read BUILD_LOG.md first, it has the exact current state... follow it," picked up
+the actual next item Session 9 left open instead of duplicating finished work: **Phase 7 — Model
+2, a genuinely different model class (gradient-boosted trees) over the same features**, exactly
+as RL-006 and Session 9's "suggested next step" named.
+
+**What's genuinely done and verified this session (all real code, all with real passing
+tests — 93/93 tests pass via `python3 -m pytest tests/ -v`, up from 81):**
+- `src/models/model2_gradient_boosting.py` — **Model 2**, a per-runner binary classifier
+  (`sklearn.ensemble.HistGradientBoostingClassifier`, P(this runner wins) fit on one row per
+  (race, runner)) over the exact same 5 race-relative features Model 1 uses
+  (`build_race_features`/`FEATURE_NAMES`, reused unchanged from
+  `src/models/model1_logistic_baseline.py`) — deliberately the same features, so the one
+  variable under test is the model class, not the information available to it. Since each
+  runner's raw probability comes from an independent binary classification rather than a joint
+  per-race softmax, `predict_race_probabilities` renormalises the raw outputs to sum to 1.0 per
+  race (`_renormalize`, with an all-zero/negative-total fallback to uniform rather than dividing
+  by zero). Unlike Model 0/1, `model=None` raises `ValueError` rather than falling back to a
+  meaningful "untrained" prediction — an unfitted classifier can't produce one. **This is still
+  NOT a real prediction** — labelled as such in the module docstring, every relevant test
+  docstring, `docs/RESEARCH_LAB.md` RL-008, and here — no real (racecard, result) pair is
+  reachable from this cloud routine.
+- **`requirements.txt`: scikit-learn uncommented for the first time** (Phase 7 dependency,
+  anticipated since Phase 1's comment block). Unlike this repo's other numerical work (the
+  market de-vig bisection solvers, Model 1's own pure-Python gradient ascent), a correct
+  gradient-boosted tree implementation is a different scale of surface area — using the same
+  free, open-source, well-tested library the industry uses is the responsible choice here, not
+  a shortcut; explained in the module docstring. No other Phase 6+ dependency
+  (catboost/xgboost/lightgbm/pandas/polars) was needed or added.
+- `tests/test_model2_gradient_boosting.py` — 12 real tests: `_renormalize` edge cases (normal
+  case sums to 1.0 and preserves relative order, all-zero and negative-total both fall back to
+  exact uniform, empty input returns empty — pulled out as its own pure function specifically so
+  these degenerate cases could be tested directly without forcing a real classifier into them),
+  fit/predict error handling (empty race list, winner not among runners, empty race, `model=None`
+  all raise `ValueError`), and a signal-recovery convergence check (same style as Model 1's
+  `test_fit_recovers_rating_signal_sign`: 25 synthetic races where the highest-rated runner
+  always wins -> the fitted boosted-tree classifier rates that same runner-shape highest on a
+  held-out race of the identical shape). Fixtures use the same real, verified schema shapes as
+  every other test in this repo (`tests/test_racecard_theracingapi.py`).
+- `scripts/train_model2.py` — **new, NOT YET RUN** (Mac-only, needs the real Kaggle-loaded DB
+  that lives only on Jonathan's Mac). Mirrors `scripts/train_model1.py`'s exact shape (same
+  `load_races` query, same walk-forward loop) but scores Model 0, Model 1, and Model 2 side by
+  side on the same chronological folds for a real three-way comparison the moment someone runs
+  it there — same "build the plumbing ready to fire the moment real data is reachable" pattern
+  this repo has used since Model 0 was scaffolded against synthetic odds. Verified only that it
+  parses and imports cleanly in this environment (no DB here to actually run it against).
+- `docs/RESEARCH_LAB.md` — new entry RL-008 (Model 2, status IDEA, explicit about the
+  independent-binary-classifier-plus-renormalisation simplification vs. a true joint model, and
+  that nothing here is evidence about real racing yet).
+- `docs/SILENT_EDGE_ZERO_ARCHITECTURE.md` — directory listing updated: `model2_gradient_boosting.py`
+  and its test file added; `scripts/` section corrected to reflect every script's real
+  Mac-only/cloud-buildable status accurately (several entries had gone stale — `collect_weather.py`
+  wasn't marked Mac-only, `load_kaggle_historical.py` still said "written but untested" when
+  Session 6 actually ran it to completion, `train_model1.py` was missing entirely); ML stack line
+  updated now that scikit-learn is genuinely in use, not just anticipated.
+- Full test suite re-run and confirmed green after every change: `./db/setup_local_postgres.sh
+  && python3 db/init_db.py` (fresh container, as every prior autonomous session has needed) then
+  `python3 -m pytest tests/ -v` → **93/93 passed**, including the DB-backed `tests/test_leakage.py`
+  tests against a freshly bootstrapped local Postgres in this container. `pip install pytest
+  psycopg2-binary python-dotenv requests scikit-learn` was needed first (fresh container has none
+  of `requirements.txt` pre-installed, matching every prior session's experience).
+
+**What's still blocked (unchanged):**
+1. Betfair Delayed App Key — for real market prices (Phase 4)
+2. Kaggle account credentials in THIS cloud environment — the real 558K-row dataset exists but
+   only on Jonathan's Mac; this routine cannot reach or reproduce it
+3. Racing API results — still needs their Basic tier; not pursuing, Kaggle covers this need
+
+**What the next session should do, in priority order:**
+1. **Check for new credentials/results as always** — `env | grep -iE "racing|kaggle|betfair"`,
+   recent commits, this file. If still cloud-only, don't re-derive that, move on.
+2. **Running `scripts/train_model2.py` against the real Kaggle-loaded DB is the single
+   highest-leverage next step**, and it's Mac-only (same reason `train_model1.py` needed to be):
+   this is the first point Model 2 could honestly be compared to Model 0/Model 1 on real
+   outcomes rather than a synthetic convergence check. Update `docs/RESEARCH_LAB.md` RL-008 and
+   this file with the real result, whichever way it goes — a loss is real information (see
+   RL-006's own honest write-up), not a failed session.
+3. If still cloud-only and blocked on real data: there is very little synthetic-only plumbing
+   left worth building blind for Model 2 specifically. Worth considering instead: (a) a
+   hyperparameter sweep (`max_depth`/`learning_rate`/`max_iter`) on the SAME synthetic
+   rating-signal fixture, to confirm the fitting is reasonably stable across settings before a
+   real run burns Mac time on a bad default — still not a real benchmark; (b) revisit RL-008's
+   flagged independent-binary-classifier simplification (a genuinely joint/ranking formulation)
+   as a Model 2b variant; (c) an `odds_betfair.py` provider stub against Betfair's public
+   Exchange API docs, still flagged as not written since Session 5; (d) course/distance-specific
+   draw bias (RL-004) or weather (RL-001) as a genuinely new Model 1/2 feature, not yet touched
+   by any session.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. Keep this file updated at the end of every session — add a new dated section above this
+   instruction, don't overwrite prior sessions' entries.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result data, or any model's training data, to "demo" anything
+- Do not create accounts on Jonathan's behalf (Betfair)
+- Do not attempt `scripts/collect_racecards.py`, `scripts/collect_weather.py`,
+  `scripts/load_kaggle_historical.py`, `scripts/derive_recent_form.py`, `scripts/train_model1.py`,
+  or `scripts/train_model2.py` from this cloud routine environment — no credentials/real DB here,
+  confirmed again this session, will fail or run against an empty database
+- Do not present Model 2's synthetic-fixture test results as evidence it predicts real racing
+- Do not skip re-running the full test suite before committing — all 93 tests must actually
+  pass, not just the new ones
