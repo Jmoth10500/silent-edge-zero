@@ -289,7 +289,103 @@ tests — 80/80 tests pass via `python3 -m pytest tests/ -v`, up from 70):**
 
 ---
 
-## 2026-09-08 — Session 7 (interactive, Jonathan's own machine)
+## 2026-09-08 — Session 7 (autonomous overnight, cloud routine)
+
+**Confirmed the credential boundary first, as instructed:** `env | grep THERACINGAPI` (and
+`env | grep -iE "racing|kaggle|betfair"` more broadly) returned nothing in this container —
+only `CCR_ENABLE_TRACING=true`. This cloud routine still does **not** have
+`THERACINGAPI_USERNAME`/`THERACINGAPI_PASSWORD`, and — new check this session — does not have
+Kaggle credentials either. Did **not** attempt `scripts/collect_racecards.py` or
+`scripts/collect_weather.py`. Also confirmed the real 558,370-row Kaggle dataset Session 6
+loaded lives only in Postgres on Jonathan's own Mac — it is not a file in this repo (checked:
+no `data/` directory, nothing under `db/` but the schema/init script) and there is no dump of it
+committed anywhere, so this cloud environment cannot see or reproduce it. **Racecard/weather
+collection, and now also the real Kaggle historical dataset, all stay Mac-only** until a future
+session confirms otherwise in this file.
+
+**Found Phase 6's starting task already done:** this session's instructions asked for "a simple
+statistical/logistic baseline model... built and tested against realistic synthetic fixtures
+shaped exactly like the real racecard schema." That's `src/models/model1_logistic_baseline.py`
++ `tests/test_model1_logistic_baseline.py`, built in Session 5 (autonomous overnight) — already
+using exactly the real field shapes from `tests/test_racecard_theracingapi.py`
+(`official_rating` as int, `draw` as int, `recent_form` as `'1582F3'`-style), already labelled
+clearly as not-a-real-prediction, already softmax-normalised to sum to ~1.0 per race. Rather than
+duplicate it, verified it's still solid (it is — all 80 pre-existing tests passed unchanged)
+and picked up the concrete, still-open gap Session 5's own RL-006 entry flagged for review:
+missing `official_rating` was silently scored identically to a genuinely average rating (both
+got `rating_edge=0.0`), so a debutant-shaped runner was indistinguishable from an average one.
+
+**What's genuinely done and verified this session (all real code, all with real passing
+tests — 81/81 tests pass via `python3 -m pytest tests/ -v`, up from 80):**
+- `src/models/model1_logistic_baseline.py` — added a fifth feature, `no_rating_flag` (1.0 when
+  `official_rating` is missing, 0.0 otherwise), with its own separately-fitted weight, alongside
+  the existing four (`rating_edge`, `draw_edge`, `form_edge`, `weight_edge`). This directly
+  addresses the exact gap Session 5's RL-006 entry named: "a horse with no official rating is
+  very likely a first-time-out debutant, which is not 'average'." Still fully synthetic — no
+  claim is made about real debutants, only that the model *can now represent* the distinction
+  and let a fitted weight decide its sign, same discipline every other feature in this module
+  already follows.
+- `tests/test_model1_logistic_baseline.py` — updated the existing feature-shape and
+  hand-verified gradient-step tests for the new 5th key, and added
+  `test_fit_recovers_debutant_signal_sign`: a convergence check (same style as Session 5's
+  `test_fit_recovers_rating_signal_sign`) using two featurally-identical "regular" runners
+  (so their four other features cancel out via an alternating winner) against one runner with
+  nothing known at all. Confirms gradient ascent recovers a NEGATIVE `no_rating_flag` weight
+  when the debutant-shaped runner never wins across 20 synthetic races, that the two identical
+  regular runners' weights never move off zero (nothing else distinguishes them), and that the
+  fitted model then rates the debutant-shaped runner below uniform on a held-out race while the
+  two regular runners stay exactly tied.
+- `docs/RESEARCH_LAB.md` RL-006 — updated: five features now, not four; the design-choice
+  paragraph marked partially addressed (Session 7) rather than still fully open; noted Session
+  6's real Kaggle data explicitly, and that it changes nothing for this cloud environment (still
+  no access to it) but does mean Model 1's actual real-data training/validation is now genuinely
+  ready to attempt — as Mac-only work.
+- Full test suite re-run and confirmed green: `./db/setup_local_postgres.sh && python3
+  db/init_db.py` (fresh container, as every prior autonomous session has needed) then
+  `python3 -m pytest tests/ -v` → **81/81 passed**, including the DB-backed `tests/test_leakage.py`
+  tests against a freshly bootstrapped local Postgres in this container.
+
+**What's still blocked (unchanged from Session 6):**
+1. Betfair Delayed App Key — the only remaining real gap, for Phase 4's market baseline (real
+   odds)
+2. Racing API's own results — still needs their Basic tier; not pursuing since Kaggle covers
+   this need for free
+
+**What the next session should do, in priority order:**
+1. **Check for new credentials as always** — `env | grep -iE "racing|kaggle|betfair"`, recent
+   commits, this file. Racecard/weather collection AND the real Kaggle historical dataset are
+   both Mac-only right now; don't re-derive that, move straight to item 2 if still true.
+2. **The single highest-leverage next step is genuinely training Model 1 against the real 558K
+   Kaggle results**, per Session 6's own suggestion — but this needs Jonathan's Mac (the local
+   Postgres holding that data, plus a walk-forward split over real chronological race dates via
+   `src/validation/walk_forward.py`, scored via `src/evaluation/calibration.py`). This is the
+   first point the project could honestly report a real Brier/log-loss score for either Model 0
+   or Model 1. Not achievable from this cloud routine — flag it plainly rather than manufacture
+   more synthetic-only scaffolding to avoid saying so.
+3. If still cloud-only and blocked on real data (as expected): there is very little synthetic
+   plumbing left worth building blind. Worth considering: (a) an `odds_betfair.py` provider stub
+   against Betfair's public Exchange API docs (flagged as not written yet since Session 5); (b) a
+   second Model 1 variant/hyperparameter comparison on the SAME synthetic fixture, to confirm
+   fitting stability — still not a real benchmark; (c) revisit whether any other Section in
+   `docs/SILENT_EDGE_ZERO_ARCHITECTURE.md` has a synthetic-only-buildable piece not yet touched.
+   Be honest in the next summary if nothing genuinely useful remains rather than inventing work.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. Keep this file updated at the end of every session — add a new dated section above this
+   instruction, don't overwrite prior sessions' entries.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result data, or any model's training data, to "demo" anything
+- Do not create accounts on Jonathan's behalf (Betfair)
+- Do not attempt `scripts/collect_racecards.py`, `scripts/collect_weather.py`, or
+  `scripts/load_kaggle_historical.py` from this cloud routine environment — no credentials here,
+  confirmed again this session, will fail
+- Do not present Model 1's synthetic-fixture test results as evidence it predicts real racing
+- Do not skip re-running the full test suite before committing — all 81 tests must actually
+  pass, not just the new ones
+
+---
+
+## 2026-09-08 — Session 8 (interactive, Jonathan's own machine)
 
 **Phase 6 done: Model 1 has now genuinely been fit and walk-forward validated against real outcomes — the first real predictive-power test anywhere in this project.**
 
@@ -300,7 +396,7 @@ tests — 80/80 tests pass via `python3 -m pytest tests/ -v`, up from 70):**
 - **Real gap found:** the Kaggle CSV has no `recent_form`/`days_since_last_run` columns at all (checked the raw header directly) — `form_edge` has been running on zero real signal, i.e. Model 1's real test so far used effectively three working features, not four. Logged as RL-007: building a real form feature means deriving it from each horse's own prior rows in the same dataset (leakage-safe — strictly earlier dates only), not loading a column that doesn't exist. This is the natural next thing to build before drawing a final verdict on Model 1's feature shape.
 - Updated `src/models/model1_logistic_baseline.py`'s docstring to reflect the real result (previously said "still NOT a real prediction" — now says plainly that it's been tested and didn't beat the market yet, without overclaiming past what was actually shown).
 - **Process note, not a data problem:** three earlier attempts at this run were killed partway through by something outside my control (not a script bug — the DB query and gradient-ascent fitting were both working correctly each time, confirmed by comparing partial output across runs, which matched to 3-4 decimal places). Fixed by cutting per-run cost (test_window_days 30→60, gradient-ascent iterations 500→150 — four parameters converge well before 500 iterations) so a full run finishes in about a minute instead of tens of minutes, rather than relying on being able to run long jobs uninterrupted. `scripts/train_model1.py` accepts iteration/window-size overrides as CLI args if a future run needs to trade cost for precision.
-- Full test suite re-run: 80/80 pass (unchanged by this session — `train_model1.py` is a one-shot analysis script, not library code; its output was verified via the real run, not assumed).
+- Full test suite re-run: 80/80 pass at the time this session's real run happened (before merging Session 7's cloud commit); 81/81 pass after merging — `train_model1.py` is a one-shot analysis script, not library code, so this session added no new tests; its output was verified via the real run, not assumed.
 
 **What this means for the project honestly:** the "complicated system does not automatically win" principle (Section 39) held on its very first real test — Model 1 lost to the dumb market baseline. That's a legitimate, useful result, not a failed session. The market is genuinely hard to beat with four simple features, one of which wasn't even working. The next real step is deriving a genuine form feature from the Kaggle history and re-running before concluding anything final about whether this feature shape can ever add value.
 
@@ -308,4 +404,6 @@ tests — 80/80 tests pass via `python3 -m pytest tests/ -v`, up from 70):**
 1. Betfair Delayed App Key — still the only remaining real market-data gap (Phase 4); not urgent since Kaggle's starting prices already gave a real Model 0 comparison this session
 2. Racing API's own results — still needs their Basic tier; not pursuing, Kaggle covers this need
 
-**Suggested next step:** Build a real, leakage-safe recent-form feature derived from each horse's own prior Kaggle rows (RL-007), then re-run `scripts/train_model1.py` and see whether a genuinely complete four-feature Model 1 changes the RL-006 result.
+**Suggested next step:** Build a real, leakage-safe recent-form feature derived from each horse's own prior Kaggle rows (RL-007), then re-run `scripts/train_model1.py` and see whether a genuinely complete feature set changes the RL-006 result.
+
+**Merge note:** while this session was running, the cloud routine (Session 7 above) independently pushed a 5th Model 1 feature, `no_rating_flag`. `train_model1.py` doesn't hardcode feature names (it iterates `FEATURE_NAMES`), so it will pick the new feature up automatically on its next run — but the real result above was produced against the 4-feature model, before that merge. It has NOT yet been re-run with `no_rating_flag` included. Genuinely re-running against the merged 5-feature model, alongside the RL-007 form fix, is the real next step — not treating this result as final.

@@ -45,6 +45,18 @@ positional fact, not a bias claim) one level up: the feature is neutral AND
 the weight that would turn it into a claim only gets set by `fit`, which
 this repo has never run on real outcomes.
 
+Session 5's RL-006 entry flagged one simplification explicitly for review:
+a runner missing `official_rating` got `rating_edge=0.0`, the same value as
+a genuinely average-rated runner — "no evidence" and "average" were
+indistinguishable to the model. `no_rating_flag` (added this session, still
+synthetic-only) fixes that: it's a plain 1.0/0.0 indicator, 1.0 for a
+runner with no official_rating at all (the common shape of a first-time-out
+debutant), 0.0 otherwise, with its own separately-fitted weight — so
+`fit_logistic_baseline` can learn that missing-rating itself carries signal
+distinct from "average rating", instead of the two being silently
+conflated. Like every other feature here, this is a hypothesis the fitted
+weight's sign will decide, never asserted up front.
+
 Trained by plain batch gradient ascent on the observed winner's
 log-likelihood, in pure Python — no numpy/scikit-learn. Both are still
 commented out in requirements.txt; this repo has done its own small-scale
@@ -64,7 +76,7 @@ from src.features.runner_features import (
     relative_weight,
 )
 
-FEATURE_NAMES = ("rating_edge", "draw_edge", "form_edge", "weight_edge")
+FEATURE_NAMES = ("rating_edge", "draw_edge", "form_edge", "weight_edge", "no_rating_flag")
 
 # Untrained default: every weight at 0.0 means every runner's score is 0.0
 # regardless of its features, so predict_race_probabilities falls back to a
@@ -92,6 +104,11 @@ def build_race_features(runners: Sequence[RunnerFeatureInput]) -> dict[int, dict
     entirely; a softmax score needs a real number for every runner or the
     race can't be scored at all.
 
+    `no_rating_flag` is the one exception to "0.0 = no evidence either
+    way": it is 1.0 whenever `official_rating` is missing (and 0.0 when
+    it's known), so a debutant-shaped runner is distinguishable from a
+    genuinely average-rated one — see the module docstring and RL-006.
+
     Returns {} for an empty `runners` sequence.
     """
     if not runners:
@@ -112,11 +129,13 @@ def build_race_features(runners: Sequence[RunnerFeatureInput]) -> dict[int, dict
         weight_edge = weight[r.horse_id]["weight_vs_mean_lbs"] if r.horse_id in weight else 0.0
         fs = form_scores.get(r.horse_id)
         form_edge = (fs - mean_form) if (fs is not None and mean_form is not None) else 0.0
+        no_rating_flag = 0.0 if r.horse_id in rating else 1.0
         out[r.horse_id] = {
             "rating_edge": rating_edge,
             "draw_edge": draw_edge,
             "form_edge": form_edge,
             "weight_edge": weight_edge,
+            "no_rating_flag": no_rating_flag,
         }
     return out
 

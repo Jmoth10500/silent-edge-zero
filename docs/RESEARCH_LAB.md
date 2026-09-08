@@ -51,47 +51,57 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
 
 ## RL-006: Model 1 — a fitted, per-race logistic/softmax baseline over race-relative features
 
-- **Hypothesis:** a simple multinomial logit (softmax) over just four race-relative runner
+- **Hypothesis:** a simple multinomial logit (softmax) over five race-relative runner
   features — official rating vs. field mean, draw percentile vs. 0.5, recency-weighted form
-  score vs. field mean, weight vs. field mean — fit by gradient ascent on observed winners,
-  should beat Model 0's market baseline once it can be trained on real (racecard, result)
-  pairs, by using the same information a market-derived probability implicitly prices in but
-  making it explicit and auditable per feature.
-- **Why it might work / why it's still just an idea:** the four features are exactly the ones
-  `src/features/runner_features.py` (Sections 8/10) already computes and tests; wiring them
-  into a per-race softmax is the standard "conditional logit" formulation for a discrete
+  score vs. field mean, weight vs. field mean, and a missing-rating indicator (added Session
+  7, see below) — fit by gradient ascent on observed winners, should beat Model 0's market
+  baseline once it can be trained on real (racecard, result) pairs, by using the same
+  information a market-derived probability implicitly prices in but making it explicit and
+  auditable per feature.
+- **Why it might work / why it's still just an idea:** the first four features are exactly the
+  ones `src/features/runner_features.py` (Sections 8/10) already computes and tests; wiring
+  them into a per-race softmax is the standard "conditional logit" formulation for a discrete
   choice among race entrants, so the probability-per-race-sums-to-1.0 property comes for free
   rather than needing a second normalisation pass. This is genuinely untested against real
-  outcomes, though — there is still no real (racecard, result) pair anywhere in this repo (The
-  Racing API only returns racecards so far — Session 4 — and results collection hasn't been
-  built), so nothing here is evidence the features or their sign actually predict winners.
-- **Design choice flagged for review:** every feature is deliberately UNDIRECTED (centered on
-  the race's own mean, sign decided by the fitted weight, not asserted up front) — same
-  discipline as RL-004's draw_percentile. A runner missing an underlying field (no rating, no
-  parseable form, ...) gets 0.0 for that one feature ("no evidence either way"), which is a
-  modelling simplification worth revisiting once there's enough real data to check whether
-  missingness itself carries signal (e.g. a horse with no official rating is very likely a
-  first-time-out debutant, which is not "average").
+  outcomes, though — The Racing API still only returns racecards (results need its paid Basic
+  tier, not pursued — Session 5 interactive) and this cloud routine cannot reach it at all (no
+  credentials here). Session 6 (interactive, Jonathan's Mac) *did* load 558,370 real historical
+  runner results via Kaggle into the local database on that machine — the first real (racecard-
+  shaped, result) pairs anywhere in this project — but that data and DB state live only on
+  Jonathan's Mac; this cloud routine has no Kaggle credentials either and cannot reach or
+  reproduce it (confirmed again Session 7, `env | grep -iE "racing|kaggle|betfair"` empty), so
+  nothing here is evidence the features or their sign actually predict winners. Training Model 1
+  against that real Kaggle data is Mac-only work for a future interactive session.
+- **Design choice flagged for review (Session 5) and partially addressed (Session 7):** every
+  feature is deliberately UNDIRECTED (centered on the race's own mean, sign decided by the
+  fitted weight, not asserted up front) — same discipline as RL-004's draw_percentile. A runner
+  missing an underlying field still gets 0.0 for that one feature ("no evidence either way") for
+  draw/form/weight. For official_rating specifically, Session 7 added a fifth feature,
+  `no_rating_flag` (1.0 when official_rating is missing, 0.0 otherwise, its own separately
+  fitted weight), so a debutant-shaped runner (no rating at all) is no longer indistinguishable
+  from a genuinely average-rated one — the model can now learn whether missingness itself
+  carries signal, rather than that possibility being silently foreclosed by defaulting to 0.0.
+  Still synthetic-only: a convergence test confirms gradient ascent recovers the sign of an
+  *injected* debutant-never-wins pattern, which proves the maths works, not that real debutants
+  actually underperform.
 - **Implementation:** `src/models/model1_logistic_baseline.py::build_race_features`,
   `predict_race_probabilities`, `fit_logistic_baseline` (pure-Python batch gradient ascent, no
-  numpy/scikit-learn — see the module docstring for why). Tested with a hand-verified
-  single-gradient-step calculation and a synthetic rating-determines-the-winner convergence
-  check (`tests/test_model1_logistic_baseline.py`, 2026-09-08) — fixtures shaped exactly like
-  the real, verified racecard schema (`tests/test_racecard_theracingapi.py`).
-- **Training/validation period:** TBD — needs real (racecard, result) pairs, which needs
-  results collection to be built (the natural next step per Session 4's notes) and run on
-  Jonathan's Mac, same as racecards. Cannot be trained meaningfully in the cloud routine
-  environment (no credentials there — see docs/BUILD_LOG.md Session 5).
-- **Real result (2026-09-08, `scripts/train_model1.py`, walk-forward, min_train_days=180,
-  test_window_days=60, iterations=150, real Kaggle-sourced results 2023-06 to 2026-06):**
-  Model 1 lost to Model 0 (market baseline, RL-005) on Brier score and log loss on every
-  single one of 18 out-of-sample folds — pooled Brier=0.0896 vs. Model 0's 0.0795, log
+  numpy/scikit-learn — see the module docstring for why). Tested with hand-verified
+  single-gradient-step calculations and two convergence checks — rating-determines-the-winner
+  (Session 5) and debutant-never-wins (Session 7, cloud) — in
+  `tests/test_model1_logistic_baseline.py`, fixtures shaped exactly like the real, verified
+  racecard schema (`tests/test_racecard_theracingapi.py`).
+- **Real result (2026-09-08, Session 8 interactive, `scripts/train_model1.py`, walk-forward,
+  min_train_days=180, test_window_days=60, iterations=150, real Kaggle-sourced results 2023-06
+  to 2026-06):** Model 1 lost to Model 0 (market baseline, RL-005) on Brier score and log loss
+  on every single one of 18 out-of-sample folds — pooled Brier=0.0896 vs. Model 0's 0.0795, log
   loss=0.3199 vs. 0.2738, across ~487k real runner predictions. This is genuinely the first
   time this hypothesis has been tested against a real outcome, and the hypothesis (Model 1
   beats the market) did NOT hold. Calibration is good, though (predicted probability tracks
   actual win rate closely in every bin with meaningful volume, e.g. predicted 0.074 vs. actual
   0.074 on 284,519 predictions) — the model is honest, just not (yet) as informative as the
-  market.
+  market. This run used the 4-feature model from before Session 7's `no_rating_flag` addition
+  landed on `origin/main`; re-running with all 5 features is a natural next step.
 - **Known real confound, not yet controlled for:** `form_edge` has had zero real signal this
   whole run — the Kaggle CSV has no `recent_form`/`days_since_last_run` columns at all (checked
   directly against the raw file's header, 2026-09-08), so every runner's form_edge defaulted to
@@ -99,11 +109,12 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
   same dataset (build a per-horse chronological result history, leakage-safe — only races
   strictly before the current one), which hasn't been built yet. Re-running this evaluation
   with a real form feature is the natural next step before drawing a final verdict on whether
-  Model 1's four-feature shape can ever beat the market — right now it's running on
-  effectively three features, not four.
+  Model 1's feature shape can ever beat the market — right now it's running short a working
+  feature (form) as well as still missing the newly-added `no_rating_flag`.
 - **Status: TESTING — real result in, currently FAILED to beat the market baseline, but not
-  a clean test of the original hypothesis yet** (missing form signal). Next: derive real form
-  from the Kaggle history and re-run before concluding Model 1's feature set is insufficient.
+  a clean test of the full hypothesis yet** (missing form signal, and the 5th feature wasn't
+  in this run). Next: re-run with `no_rating_flag` included, derive real form from the Kaggle
+  history, and re-run again before concluding Model 1's feature set is insufficient.
 
 ## RL-007: Kaggle CSV has no form/days-since-last-run field — must be derived, not loaded
 
