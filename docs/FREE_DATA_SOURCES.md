@@ -46,21 +46,22 @@ Last verified: 2026-09-08 (live checks run this session, see notes per source)
 ## 3. Live daily racecards, results, odds — The Racing API
 
 - **URL:** https://www.theracingapi.com/
-- **Free tier CONFIRMED 2026-09-08** (via pricing page screenshot): **£0/month, "Get Started Free"**. Covers UK/Ireland/France ("GB/IRE/FR" per the flag icons shown).
-- **Free tier includes:**
-  - Daily racecards (basic data)
-  - Results for all races on daily racecards (basic data)
-- **Free tier does NOT include:** odds (bookmaker odds only appear from the Standard tier, £59.99/mo, "20+ bookmaker odds"), historical results-per-horse, horse/jockey/trainer search, or analysis endpoints (win %, A/E, profit/loss) — those start at Basic (£27.99/mo) or above.
-- **Paid tiers found:** Basic £27.99/mo, Standard £59.99/mo, Pro £99.99/mo (see `FUTURE_PAID_UPGRADES.md` — none justified yet, free tier hasn't even been tested)
+- **Free tier CONFIRMED LIVE 2026-09-08** — real account created, real credentials tested against the real API.
+- **What the pricing page claims vs what the API actually enforces (these disagree — trust the API, not the marketing copy):**
+  - Pricing page lists "Results for all races on daily racecards (basic data)" under Free.
+  - The real OpenAPI spec (and a live call) shows `/v1/results`, `/v1/results/today`, and `/v1/racecards/summaries` **all require Basic Plan (£27.99/mo)** — confirmed live: `/v1/results/today` with real free-tier credentials returned `{"detail":"Basic Plan required"}`.
+  - **Conclusion: results are NOT actually free, despite the pricing page.** Only `/v1/racecards/free` (pre-race data, today/tomorrow) and `/v1/courses` are genuinely free.
+- **Free tier confirmed working:** `/v1/racecards/free?day=today` — HTTP Basic Auth (username+password, not a bearer token). Returns real UK/Ireland/France racecards. Live-tested 2026-09-08: 29 real GB races, 248 runners, fields verified against the real `RacecardBasic`/`RunnerBasic` schema (not guessed).
+- **Free tier does NOT include:** results (see above — this contradicts the pricing page), odds (Standard tier, £59.99/mo+), historical results-per-horse, horse/jockey/trainer search, analysis endpoints.
+- **Paid tiers:** Basic £27.99/mo (adds results + historical), Standard £59.99/mo (adds odds), Pro £99.99/mo. See `FUTURE_PAID_UPGRADES.md` — none justified yet; results specifically might be worth revisiting once Phase 6 needs real outcomes to validate against and Kaggle's historical dataset proves insufficient.
 - **API availability:** REST, documented, rate-limited to 5 req/sec by default
-- **Auth required:** yes, API key from account signup (Jonathan's to create — see status below)
-- **Attribution / commercial / redistribution:** "By subscribing, you agree to The Racing API terms of service" — link present on signup page, not yet read in full; **read it before any commercial/redistribution use**, personal/research use for Silent Edge Zero is the only use case in scope right now
-- **Terms checked:** 2026-09-08 (pricing page only; full ToS not yet reviewed)
-- **Scraping permission:** N/A, this is the intended API
-- **Reliability:** unknown, no account/key to test with yet
-- **Replacement if unavailable:** `scraper.tech` (unverified, treat with caution); OurHub Racing API (~£5/mo) as a paid fallback
-- **Practical implication for the build:** the free tier gets Phase 3 (daily collector) genuinely live for racecards + results. It does **not** get Phase 4 (market baseline) live — that still needs Betfair's Delayed App Key (source #4 below) or a Basic-tier-and-above odds feed, since raw odds aren't in the free tier at all.
-- **Status: BLOCKED only on account creation — Jonathan needs to click "Get Started Free" himself (I cannot create accounts). Once he has an API key, this unblocks immediately, free, permanently.**
+- **Auth:** HTTP Basic (username + password pair, from account dashboard → API Keys) — confirmed from the real OpenAPI spec at `raw.githubusercontent.com/APIs-guru/openapi-directory/.../theracingapi.com/1.0.0/openapi.yaml`
+- **Attribution / commercial / redistribution:** ToS link present on signup, full text not yet reviewed — personal/research use only in scope right now
+- **Terms checked:** 2026-09-08, pricing page + live API behaviour; full ToS text still not read
+- **Reliability:** good — worked first call, real data, no errors
+- **Real bug found and fixed:** the API's own `off_time` field is ambiguous (e.g. `"1:12"`, no AM/PM) — use `off_dt` (full ISO datetime) instead. See `src/providers/racecard_theracingapi.py` and its regression test.
+- **Practical implication for the build:** Phase 3 (daily collector, pre-race snapshots) is genuinely live. Phase 4 (market baseline) is still blocked — no odds on any tier below Standard. **Phase 6 validation (comparing predictions to real outcomes) is also still blocked** — results aren't free either, despite what the pricing page says. Kaggle's historical dataset is the real path to real outcomes for now, not this API.
+- **Status: LIVE for racecards. BLOCKED for results/odds — same as before, just via a different (paid) tier than the pricing page implied.**
 
 ---
 
