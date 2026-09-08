@@ -44,12 +44,17 @@ silent-edge-zero/
     features/
       runner_features.py        — per-runner raw features (rating, age, weight, draw,
                                   form) and race-relative/percentile features (Section 8/10)
+      feature_vector.py         — combines runner_features.py (Sections 8+10) and
+                                  market/movement.py (Section 16) into a single flat
+                                  per-runner feature dict — the actual model-input row shape
     evaluation/
       calibration.py            — Brier score, log loss, calibration curve (Section 24)
     validation/
       walk_forward.py           — chronological walk-forward split harness (Section 29)
     models/
-      (Phase 6+, not yet built)
+      model0_market_baseline.py — Model 0: the de-vigged market probability treated AS the
+                                  prediction, plus the walk-forward-split -> predict -> score
+                                  pipeline wiring (Sections 18/19, 24, 29 end-to-end)
   scripts/
     collect_weather.py         — runs the live weather provider, stores snapshots
     load_kaggle_historical.py  — bootstraps historical DB from the Kaggle dataset,
@@ -60,8 +65,11 @@ silent-edge-zero/
     test_market_probability.py — checks overround-removal methods sum to ~1.0
     test_market_movement.py    — price movement feature tests
     test_runner_features.py    — per-runner and race-relative feature tests (synthetic fixtures)
+    test_feature_vector.py     — combined feature-vector tests (synthetic fixtures)
     test_calibration.py        — Brier/log-loss/calibration-curve tests (synthetic predictions)
     test_walk_forward.py       — walk-forward split harness tests (synthetic chronological data)
+    test_model0_market_baseline.py — Model 0 + end-to-end split/predict/score pipeline tests,
+                                  with hand-verified Brier scores against known synthetic odds
 ```
 
 ## Data integrity rules enforced in code, not just policy
