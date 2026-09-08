@@ -46,16 +46,21 @@ Last verified: 2026-09-08 (live checks run this session, see notes per source)
 ## 3. Live daily racecards, results, odds — The Racing API
 
 - **URL:** https://www.theracingapi.com/
-- **Data supplied:** UK/Ireland/Hong Kong racecards, results, jockey/trainer stats, odds — racecards/results/odds updating every 3–10 minutes per their own docs (two pages gave slightly different numbers; verify on signup)
+- **Free tier CONFIRMED 2026-09-08** (via pricing page screenshot): **£0/month, "Get Started Free"**. Covers UK/Ireland/France ("GB/IRE/FR" per the flag icons shown).
+- **Free tier includes:**
+  - Daily racecards (basic data)
+  - Results for all races on daily racecards (basic data)
+- **Free tier does NOT include:** odds (bookmaker odds only appear from the Standard tier, £59.99/mo, "20+ bookmaker odds"), historical results-per-horse, horse/jockey/trainer search, or analysis endpoints (win %, A/E, profit/loss) — those start at Basic (£27.99/mo) or above.
+- **Paid tiers found:** Basic £27.99/mo, Standard £59.99/mo, Pro £99.99/mo (see `FUTURE_PAID_UPGRADES.md` — none justified yet, free tier hasn't even been tested)
 - **API availability:** REST, documented, rate-limited to 5 req/sec by default
-- **Auth required:** yes, API key from account signup
-- **Free limits:** **not confirmed.** Their pricing page did not render a visible free tier in this session's check (a "Loading plans..." placeholder and one mention of "any specified free trial period" in billing FAQ text — implies a trial exists but terms weren't visible without logging in)
-- **Attribution / commercial / redistribution:** unknown until account created — check on signup
-- **Terms checked:** 2026-09-08, could not fully verify without an account
-- **Scraping permission:** N/A, this is the intended API — do not scrape their site directly instead
-- **Reliability:** unknown, no account to test with yet
-- **Replacement if unavailable:** `scraper.tech` advertises a free horse-racing API for UK/Ireland — found via search, **not independently verified, no terms reviewed, treat with real caution** until you or I can inspect its actual ToS and reliability; OurHub Racing API (GitHub: TamB10/ourhub-racing-api) is a paid alternative (~£5/mo) if a genuinely free tier doesn't pan out
-- **Status: BLOCKED — needs you to sign up for an account (free or paid) to get an API key and confirm the actual free-tier terms. This is the single most valuable unblock for the whole project — it's what lets daily racecard ingestion (Phase 3) go live.**
+- **Auth required:** yes, API key from account signup (Jonathan's to create — see status below)
+- **Attribution / commercial / redistribution:** "By subscribing, you agree to The Racing API terms of service" — link present on signup page, not yet read in full; **read it before any commercial/redistribution use**, personal/research use for Silent Edge Zero is the only use case in scope right now
+- **Terms checked:** 2026-09-08 (pricing page only; full ToS not yet reviewed)
+- **Scraping permission:** N/A, this is the intended API
+- **Reliability:** unknown, no account/key to test with yet
+- **Replacement if unavailable:** `scraper.tech` (unverified, treat with caution); OurHub Racing API (~£5/mo) as a paid fallback
+- **Practical implication for the build:** the free tier gets Phase 3 (daily collector) genuinely live for racecards + results. It does **not** get Phase 4 (market baseline) live — that still needs Betfair's Delayed App Key (source #4 below) or a Basic-tier-and-above odds feed, since raw odds aren't in the free tier at all.
+- **Status: BLOCKED only on account creation — Jonathan needs to click "Get Started Free" himself (I cannot create accounts). Once he has an API key, this unblocks immediately, free, permanently.**
 
 ---
 
@@ -101,7 +106,8 @@ Last verified: 2026-09-08 (live checks run this session, see notes per source)
 |---|---|---|
 | Open-Meteo (weather) | **LIVE** | none — working now |
 | Kaggle historical results | BLOCKED | needs your free Kaggle account + API token |
-| The Racing API (racecards/results/odds) | BLOCKED | needs your account signup + API key |
+| The Racing API — racecards + results (free tier confirmed) | BLOCKED | needs your account signup (£0, "Get Started Free") + API key |
+| The Racing API — odds | Needs paid tier (£59.99/mo+) or Betfair instead | not on the free tier at all |
 | Betfair Exchange (market prices) | BLOCKED | needs your free developer account + Delayed App Key |
 | BHA official ratings | Reference only | scraping permission not checked, deliberately deferred |
 
