@@ -8,7 +8,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.generate_dashboard import _bar_html, _pct, _stat_row, render_html, render_summary
+from scripts.generate_dashboard import (
+    _bar_html,
+    _going_hint,
+    _pct,
+    _stat_row,
+    fetch_course_weather,
+    render_html,
+    render_overview_chart,
+    render_summary,
+    render_weather,
+)
 
 
 def test_pct_formats_probability_as_percentage():
@@ -73,6 +83,81 @@ def test_render_summary_empty_races_returns_empty_string():
     assert render_summary([]) == ""
 
 
+def test_going_hint_real_thresholds():
+    assert "soft" in _going_hint({"precip_mm": 12}).lower()
+    assert "fast" in _going_hint({"precip_mm": 0.0}).lower()
+    assert "easing" in _going_hint({"precip_mm": 5}).lower()
+    assert "little change" in _going_hint({"precip_mm": 1}).lower()
+
+
+def test_fetch_course_weather_real_gb_course_parses_real_response_shape():
+    from datetime import date
+
+    class FakeResp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"daily": {
+                "time": ["2026-09-10"],
+                "precipitation_sum": [4.2],
+                "precipitation_probability_max": [60],
+                "temperature_2m_max": [18.0],
+                "temperature_2m_min": [11.0],
+                "wind_speed_10m_max": [22.0],
+            }}
+
+    def fake_get(url, params=None, timeout=None):
+        return FakeResp()
+
+    result = fetch_course_weather({"Epsom Downs"}, date(2026, 9, 10), http_get=fake_get)
+    assert result["Epsom Downs"]["precip_mm"] == 4.2
+    assert result["Epsom Downs"]["temp_max"] == 18.0
+
+
+def test_fetch_course_weather_skips_unknown_course():
+    from datetime import date
+    result = fetch_course_weather({"Not A Real Course"}, date(2026, 9, 10), http_get=lambda *a, **k: None)
+    assert result == {}
+
+
+def test_fetch_course_weather_best_effort_on_http_failure():
+    from datetime import date
+
+    def failing_get(url, params=None, timeout=None):
+        raise ConnectionError("simulated failure")
+
+    result = fetch_course_weather({"Epsom Downs"}, date(2026, 9, 10), http_get=failing_get)
+    assert result == {}  # never raises, never crashes the dashboard
+
+
+def test_render_weather_empty_returns_empty_string():
+    assert render_weather({}) == ""
+
+
+def test_render_weather_renders_real_figures():
+    html = render_weather({"Epsom Downs": {
+        "precip_mm": 4.2, "precip_prob": 60, "temp_max": 18.0, "temp_min": 11.0, "wind_kmh": 22.0,
+    }})
+    assert "Epsom Downs" in html
+    assert "4.2mm" in html
+
+
+def test_render_overview_chart_empty_races_returns_empty_string():
+    assert render_overview_chart([]) == ""
+
+
+def test_render_overview_chart_shows_top_pick_per_race():
+    from datetime import time
+    races = [{
+        "off_time": time(13, 21), "course_name": "Redcar",
+        "model1": {}, "model2": {"Deputy Vice": 0.197, "Blue Pete": 0.178},
+    }]
+    html = render_overview_chart(races)
+    assert "Deputy Vice" in html
+    assert "19.7%" in html
+
+
 def test_render_html_includes_backtest_context():
     from datetime import date
     html = render_html(date(2026, 9, 9), [])
@@ -90,6 +175,14 @@ if __name__ == "__main__":
         test_stat_row_empty_state_when_nothing_known,
         test_render_summary_computes_real_agreement_and_top_pick,
         test_render_summary_empty_races_returns_empty_string,
+        test_going_hint_real_thresholds,
+        test_fetch_course_weather_real_gb_course_parses_real_response_shape,
+        test_fetch_course_weather_skips_unknown_course,
+        test_fetch_course_weather_best_effort_on_http_failure,
+        test_render_weather_empty_returns_empty_string,
+        test_render_weather_renders_real_figures,
+        test_render_overview_chart_empty_races_returns_empty_string,
+        test_render_overview_chart_shows_top_pick_per_race,
         test_render_html_includes_backtest_context,
     ]
     passed = 0

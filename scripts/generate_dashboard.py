@@ -36,6 +36,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import psycopg2
+import requests
+
+from data.gb_racecourse_coordinates import GB_RACECOURSE_COORDINATES, normalise_course_name
 
 OUTPUT_PATH = Path(__file__).parent.parent / "dashboard.html"
 
@@ -93,6 +96,112 @@ def load_predictions(conn, race_date: date):
         }
 
     return [races[rid] for rid in order]
+
+
+def fetch_course_weather(course_names: set[str], race_date: date, http_get=requests.get) -> dict[str, dict]:
+    """Real, live daily forecast per real GB course — Open-Meteo's free
+    forecast endpoint (no key, same provider as src/providers/weather_open_meteo.py,
+    but the daily-aggregate fields rather than an hourly snapshot, since
+    this is for "what's the going likely to be today" context, not a
+    leakage-safe model feature). A course with no known coordinates (not
+    yet in our real 59-course list, or a non-GB course) is skipped
+    entirely — never guessed. `http_get` is injectable for testing.
+    """
+    out: dict[str, dict] = {}
+    for name in sorted(course_names):
+        key = normalise_course_name(name)
+        coords = GB_RACECOURSE_COORDINATES.get(key)
+        if coords is None:
+            continue
+        lat, lon = coords
+        try:
+            resp = http_get(
+                "https://api.open-meteo.com/v1/forecast",
+                params={
+                    "latitude": lat, "longitude": lon,
+                    "daily": "precipitation_sum,precipitation_probability_max,"
+                             "temperature_2m_max,temperature_2m_min,wind_speed_10m_max",
+                    "timezone": "Europe/London",
+                    "start_date": race_date.isoformat(), "end_date": race_date.isoformat(),
+                },
+                timeout=10,
+            )
+            resp.raise_for_status()
+            daily = resp.json().get("daily", {})
+            if not daily.get("time"):
+                continue
+            out[name] = {
+                "precip_mm": daily["precipitation_sum"][0],
+                "precip_prob": daily["precipitation_probability_max"][0],
+                "temp_max": daily["temperature_2m_max"][0],
+                "temp_min": daily["temperature_2m_min"][0],
+                "wind_kmh": daily["wind_speed_10m_max"][0],
+            }
+        except Exception:
+            continue  # best-effort — a weather-fetch failure never breaks the dashboard
+    return out
+
+
+def _going_hint(w: dict) -> str:
+    """Plain-language going hint from real real forecast numbers — never a
+    precise going prediction (that needs course drainage/soil knowledge
+    this project doesn't have), just an honest, coarse steer."""
+    precip = w.get("precip_mm") or 0
+    if precip >= 10:
+        return "Likely soft/heavy"
+    if precip >= 3:
+        return "Possible easing"
+    if precip <= 0.2:
+        return "Likely fast-side"
+    return "Little change expected"
+
+
+def render_weather(course_weather: dict[str, dict]) -> str:
+    if not course_weather:
+        return ""
+    cards = []
+    for course, w in course_weather.items():
+        cards.append(f"""
+        <div class="weather-card">
+          <div class="weather-course">{course}</div>
+          <div class="weather-figures">
+            <span>{w['precip_mm']:.1f}mm rain ({w['precip_prob']:.0f}%)</span>
+            <span>{w['temp_min']:.0f}-{w['temp_max']:.0f}°C</span>
+            <span>{w['wind_kmh']:.0f} km/h wind</span>
+          </div>
+          <div class="weather-going">{_going_hint(w)}</div>
+        </div>""")
+    return f"""
+    <div class="section-label">Today's course conditions (live forecast)</div>
+    <div class="weather-row">{''.join(cards)}</div>"""
+
+
+def render_overview_chart(races: list[dict]) -> str:
+    """Real horizontal bar chart: every race today, sorted by off_time,
+    bar length = Model 2's top-pick confidence — lets you see at a glance
+    where the model is most/least sure today, before scrolling every card."""
+    if not races:
+        return ""
+    rows = []
+    for race in races:
+        m2 = race["model2"]
+        if not m2:
+            continue
+        top_horse = max(m2, key=m2.get)
+        p = m2[top_horse]
+        t = race["off_time"].strftime("%H:%M") if hasattr(race["off_time"], "strftime") else race["off_time"]
+        width = max(2, round(p * 100))
+        rows.append(f"""
+        <div class="overview-row">
+          <span class="overview-time">{t}</span>
+          <span class="overview-course">{race['course_name']}</span>
+          <div class="overview-bar-track"><div class="overview-bar-fill" style="width:{width}%"></div></div>
+          <span class="overview-horse">{top_horse}</span>
+          <span class="overview-pct">{_pct(p)}</span>
+        </div>""")
+    return f"""
+    <div class="section-label">Today's confidence, at a glance</div>
+    <div class="overview-chart">{''.join(rows)}</div>"""
 
 
 def _pct(p: float) -> str:
@@ -237,8 +346,9 @@ def render_summary(races: list[dict]) -> str:
     </div>"""
 
 
-def render_html(race_date: date, races: list[dict]) -> str:
+def render_html(race_date: date, races: list[dict], course_weather: dict[str, dict] | None = None) -> str:
     race_cards = "".join(render_race(r) for r in races) if races else '<p class="empty">No predictions locked for this date yet.</p>'
+    course_weather = course_weather or {}
 
     return f"""<!doctype html>
 <html lang="en">
@@ -348,19 +458,61 @@ def render_html(race_date: date, races: list[dict]) -> str:
   .stat-empty {{ font-size: 11px; color: var(--text-muted); padding: 4px 6px 12px; }}
   .empty {{ color: var(--text-muted); }}
   footer {{ margin-top: 32px; font-size: 11px; color: var(--text-muted); }}
+
+  .top-bar {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }}
+  .theme-toggle {{
+    background: var(--surface-1); border: 1px solid var(--border); color: var(--text-secondary);
+    border-radius: 20px; padding: 6px 14px; font-size: 12px; cursor: pointer;
+    display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  }}
+  .theme-toggle:hover {{ border-color: var(--series-1); color: var(--text-primary); }}
+
+  .section-label {{
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--text-muted); margin: 28px 0 10px;
+  }}
+  .weather-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 8px; }}
+  .weather-card {{
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+  }}
+  .weather-course {{ font-weight: 600; font-size: 13px; margin-bottom: 6px; }}
+  .weather-figures {{ display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--text-secondary); }}
+  .weather-going {{ font-size: 11px; color: var(--series-1); font-weight: 600; margin-top: 6px; }}
+
+  .overview-chart {{
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+    padding: 6px 14px; margin-bottom: 8px;
+  }}
+  .overview-row {{
+    display: grid; grid-template-columns: 46px 90px 1fr 120px 46px; align-items: center;
+    gap: 10px; padding: 7px 0; border-top: 1px solid var(--border); font-size: 12px;
+  }}
+  .overview-row:first-child {{ border-top: none; }}
+  .overview-time {{ color: var(--series-1); font-weight: 600; }}
+  .overview-course {{ color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+  .overview-bar-track {{ height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }}
+  .overview-bar-fill {{ height: 100%; border-radius: 4px; background: var(--series-1); }}
+  .overview-horse {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+  .overview-pct {{ text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Silent Edge Zero</h1>
-  <div class="subtitle">Live predictions — {race_date.strftime('%A %-d %B %Y')}</div>
+  <div class="top-bar">
+    <div>
+      <h1>Silent Edge Zero</h1>
+      <div class="subtitle">Live predictions — {race_date.strftime('%A %-d %B %Y')}</div>
+    </div>
+    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">🌓 Toggle theme</button>
+  </div>
 
   <div class="disclaimer">
     Not a tipster service. These are research predictions from a walk-forward-validated
     model that has NOT beaten the market baseline in real backtesting (see stats below) —
     shown as research output, not betting advice. The probability shown is Model 2
     (gradient boosting, the better-backtested of the two models built) — Model 1's pick is
-    only flagged when it disagrees. Click any horse for its real racecard stats.
+    only flagged when it disagrees. Real hit rate (RL-009): picks the actual winner ~21-22%
+    of races, vs 11.8% for a random guess, vs 33.4% for the market favourite alone.
   </div>
 
   {render_summary(races)}
@@ -369,10 +521,33 @@ def render_html(race_date: date, races: list[dict]) -> str:
     {render_backtest_context()}
   </div>
 
+  {render_weather(course_weather)}
+
+  {render_overview_chart(races)}
+
+  <div class="section-label">Every race</div>
   {race_cards}
 
   <footer>Generated by scripts/generate_dashboard.py — real, locked predictions only, never fabricated.</footer>
 </div>
+<script>
+  function applyTheme(theme) {{
+    if (theme) {{ document.documentElement.setAttribute('data-theme', theme); }}
+    else {{ document.documentElement.removeAttribute('data-theme'); }}
+  }}
+  function toggleTheme() {{
+    var current = document.documentElement.getAttribute('data-theme');
+    var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var effectiveIsDark = current ? current === 'dark' : systemDark;
+    var next = effectiveIsDark ? 'light' : 'dark';
+    applyTheme(next);
+    try {{ localStorage.setItem('sez-theme', next); }} catch (e) {{}}
+  }}
+  try {{
+    var saved = localStorage.getItem('sez-theme');
+    if (saved) applyTheme(saved);
+  }} catch (e) {{}}
+</script>
 </body>
 </html>"""
 
@@ -385,7 +560,10 @@ def main():
     races = load_predictions(conn, race_date)
     conn.close()
 
-    html = render_html(race_date, races)
+    course_names = {r["course_name"] for r in races}
+    course_weather = fetch_course_weather(course_names, race_date)
+
+    html = render_html(race_date, races, course_weather)
     OUTPUT_PATH.write_text(html, encoding="utf-8")
     print(f"Dashboard written to {OUTPUT_PATH} ({len(races)} races).")
 
