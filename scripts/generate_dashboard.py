@@ -39,6 +39,13 @@ import psycopg2
 import requests
 
 from data.gb_racecourse_coordinates import GB_RACECOURSE_COORDINATES, normalise_course_name
+from src.features.runner_features import (
+    RunnerFeatureInput,
+    draw_bias_features,
+    form_score,
+    relative_official_rating,
+    relative_weight,
+)
 
 OUTPUT_PATH = Path(__file__).parent.parent / "dashboard.html"
 
@@ -54,12 +61,32 @@ BACKTEST_CONTEXT = {
     "model2": {"label": "Model 2 (gradient boosting) — shown below", "brier": 0.0874, "logloss": 0.3089},
 }
 
+# Real, committed calibration curve (docs/RESEARCH_LAB.md / BUILD_LOG,
+# scripts/train_model2.py real output after the going_affinity revert —
+# the CURRENT active 6-feature model, 9 real walk-forward folds, ~487k
+# real predictions). Each bin's "actual" is the REAL observed win rate for
+# predictions that fell in that range — this is what "confidence" below
+# is grounded in: not a new invented score, the real historical accuracy
+# of a prediction this strong. A bin with n<150 is flagged as too small a
+# real sample to trust on its own.
+REAL_CALIBRATION_BINS = [
+    # (low, high, predicted, actual, n)
+    (0.0, 0.1, 0.065, 0.060, 284209),
+    (0.1, 0.2, 0.135, 0.140, 173055),
+    (0.2, 0.3, 0.235, 0.251, 25029),
+    (0.3, 0.4, 0.337, 0.362, 4168),
+    (0.4, 0.5, 0.438, 0.459, 784),
+    (0.5, 0.6, 0.536, 0.587, 150),
+    (0.6, 0.7, 0.636, 0.786, 28),
+    (0.7, 0.8, 0.726, 1.000, 4),
+]
+
 
 def load_predictions(conn, race_date: date):
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT r.id, r.off_time, c.name, r.race_name, h.name, mv.name, p.model_probability,
+        SELECT r.id, r.off_time, c.name, r.race_name, h.id, h.name, mv.name, p.model_probability,
                rs.age, rs.draw, rs.weight_lbs, rs.official_rating, rs.recent_form,
                t.name, j.name, ms.exchange_back, ms.exchange_lay, ms.midprice
         FROM prediction p
@@ -86,7 +113,7 @@ def load_predictions(conn, race_date: date):
 
     races: dict[int, dict] = {}
     order: list[int] = []
-    for (race_id, off_time, course_name, race_name, horse_name, model_name, prob,
+    for (race_id, off_time, course_name, race_name, horse_id, horse_name, model_name, prob,
          age, draw, weight_lbs, official_rating, recent_form, trainer_name, jockey_name,
          exchange_back, exchange_lay, midprice) in rows:
         if race_id not in races:
@@ -98,8 +125,9 @@ def load_predictions(conn, race_date: date):
         key = "model1" if model_name == "statistical_v1" else "model2"
         races[race_id][key][horse_name] = float(prob)
         races[race_id]["stats"][horse_name] = {
-            "age": age, "draw": draw, "weight_lbs": weight_lbs, "official_rating": official_rating,
-            "recent_form": recent_form, "trainer": trainer_name, "jockey": jockey_name,
+            "horse_id": horse_id, "age": age, "draw": draw, "weight_lbs": weight_lbs,
+            "official_rating": official_rating, "recent_form": recent_form,
+            "trainer": trainer_name, "jockey": jockey_name,
             "exchange_back": float(exchange_back) if exchange_back is not None else None,
             "exchange_lay": float(exchange_lay) if exchange_lay is not None else None,
             "midprice": float(midprice) if midprice is not None else None,
@@ -263,6 +291,123 @@ def _odds_chip(stats: dict) -> str:
     return '<span class="stat-chip odds-chip odds-pending">Odds: not yet available</span>'
 
 
+def find_market_favourite(stats: dict[str, dict]) -> tuple[str, float] | None:
+    """The real horse with the shortest real back price (highest implied
+    probability) among runners with an actual Smarkets snapshot. Returns
+    None if no runner in this race has real odds yet — never guessed."""
+    priced = [(h, s["exchange_back"]) for h, s in stats.items() if s.get("exchange_back")]
+    if not priced:
+        return None
+    return min(priced, key=lambda hp: hp[1])  # shortest odds = favourite
+
+
+def real_calibration_confidence(p: float) -> str:
+    """Grounds a model probability in the REAL observed win rate for
+    predictions that strong, from the current model's actual walk-forward
+    backtest (REAL_CALIBRATION_BINS) — not an invented confidence score.
+    A bin with under 150 real samples is flagged as too small to trust on
+    its own, honestly, rather than presented as equally solid."""
+    for low, high, predicted, actual, n in REAL_CALIBRATION_BINS:
+        if low <= p < high or (high == REAL_CALIBRATION_BINS[-1][1] and p >= high):
+            caveat = " (small real sample — treat cautiously)" if n < 150 else ""
+            return (f"Predictions in this {_pct(low)}–{_pct(high)} range have historically won "
+                    f"{_pct(actual)} of the time in real backtesting (n={n:,}){caveat}.")
+    return "No real calibration data for this probability range."
+
+
+def build_race_analysis(race: dict) -> str:
+    """A deterministic, template-built explanation of the model's top
+    pick — grounded ENTIRELY in real computed feature values (rating,
+    form, draw, weight vs. the real field), never freeform LLM prose.
+
+    **Why deterministic, not a live LLM call, given Jonathan explicitly
+    asked for this to be 'good and reliable':** a template over real
+    numbers is 100% reproducible and carries zero hallucination risk — it
+    can only ever say what the real data actually shows. A live LLM call
+    synthesizing prose could occasionally add a claim not actually
+    grounded in the inputs, which is the opposite of reliable for a tool
+    whose whole point is "never guessed, never fabricated" (the same
+    discipline every real feature/backtest in this repo already follows).
+    If this ever needs literal free-text narration, that's a real,
+    separate decision — not the default here.
+
+    Deliberately does NOT include draw_bias_edge (the 6th active feature)
+    — that needs the full 57k-race historical table rebuilt, real but
+    expensive to redo on every dashboard refresh, and it's a minor
+    contributor at that. rating/form/draw/weight cover the intuitive,
+    high-signal features.
+    """
+    m2, stats = race["model2"], race["stats"]
+    if not m2:
+        return ""
+    top_horse = max(m2, key=m2.get)
+    top_prob = m2[top_horse]
+
+    runners = []
+    for h, s in stats.items():
+        hid = s.get("horse_id")
+        if hid is None:
+            continue
+        runners.append(RunnerFeatureInput(
+            horse_id=hid, age=s.get("age"), draw=s.get("draw"), weight_lbs=s.get("weight_lbs"),
+            official_rating=s.get("official_rating"), recent_form=s.get("recent_form"),
+        ))
+    if not runners:
+        return ""
+
+    top_hid = stats.get(top_horse, {}).get("horse_id")
+    rating = relative_official_rating(runners)
+    draw_feats = draw_bias_features(runners)
+    weight = relative_weight(runners)
+    form_scores = {r.horse_id: form_score(r.recent_form) for r in runners}
+    known_form = [v for v in form_scores.values() if v is not None]
+    mean_form = sum(known_form) / len(known_form) if known_form else None
+
+    sentences = []
+    if top_hid in rating:
+        edge = rating[top_hid]["rating_vs_mean"]
+        if edge > 3:
+            sentences.append(f"rated {edge:.0f} points above the field average")
+        elif edge < -3:
+            sentences.append(f"rated {abs(edge):.0f} points below the field average")
+        else:
+            sentences.append("rated close to the field average")
+    else:
+        sentences.append("a likely debutant with no official rating yet")
+
+    fs = form_scores.get(top_hid)
+    if fs is not None and mean_form is not None:
+        if fs < mean_form - 0.5:
+            sentences.append("in better recent form than its rivals")
+        elif fs > mean_form + 0.5:
+            sentences.append("in weaker recent form than its rivals")
+        else:
+            sentences.append("with recent form typical of this field")
+
+    if top_hid in draw_feats:
+        pct = draw_feats[top_hid]["draw_percentile"]
+        if pct <= 0.25:
+            sentences.append("drawn towards the low/rail side")
+        elif pct >= 0.75:
+            sentences.append("drawn towards the wide side")
+
+    explanation = f"{top_horse} is " + ", ".join(sentences) + "."
+
+    favourite = find_market_favourite(stats)
+    if favourite:
+        fav_name, fav_odds = favourite
+        if fav_name == top_horse:
+            explanation += f" The market also makes {top_horse} favourite (real odds {fav_odds:.1f})."
+        else:
+            explanation += (f" The market favourite is actually {fav_name} (real odds {fav_odds:.1f}) "
+                             f"— the model disagrees with the market here.")
+    else:
+        explanation += " No real market odds collected for this race yet."
+
+    confidence = real_calibration_confidence(top_prob)
+    return f'<p>{explanation}</p><p class="analysis-confidence">{confidence}</p>'
+
+
 def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> str:
     course_weather = course_weather or {}
     m1, m2, stats = race["model1"], race["model2"], race["stats"]
@@ -306,6 +451,8 @@ def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> st
           {w['wind_kmh']:.0f} km/h wind · <strong>{_going_hint(w)}</strong>
         </div>"""
 
+    analysis_html = build_race_analysis(race)
+
     return f"""
     <dialog class="race-card" id="race-{race['race_id']}">
       <div class="race-header">
@@ -318,6 +465,7 @@ def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> st
         <button class="close-btn" onclick="this.closest('dialog').close()" aria-label="Close">✕</button>
       </div>
       {weather_html}
+      <div class="race-analysis">{analysis_html}</div>
       <div class="runner-list">
         {''.join(rows_html)}
       </div>
@@ -527,6 +675,15 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
   .odds-chip {{ color: var(--good); font-weight: 600; }}
   .odds-chip.odds-pending {{ color: var(--text-muted); font-weight: 400; font-style: italic; }}
 
+  .race-analysis {{
+    background: color-mix(in srgb, var(--series-1) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--series-1) 25%, transparent);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 14px;
+  }}
+  .race-analysis p {{ margin: 0 0 6px; font-size: 12.5px; color: var(--text-primary); line-height: 1.5; }}
+  .race-analysis p:last-child {{ margin-bottom: 0; }}
+  .analysis-confidence {{ color: var(--text-secondary) !important; font-size: 11px !important; }}
+
   .section-label {{
     font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
     color: var(--text-muted); margin: 28px 0 10px;
@@ -610,6 +767,15 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     collected for that runner (see docs — this is forward-collecting only, so early races
     or races before the collector started running may show "not yet available", never a
     guessed number).</p>
+    <h3>Race analysis</h3>
+    <p>A plain-English summary of why the model backs its top pick — built entirely from
+    real computed numbers (rating vs. the field, recent form, draw), not free-text AI
+    generation. This is deliberate: a template over real data can only ever say what the
+    numbers actually show, with zero risk of inventing a claim. The confidence line is the
+    REAL observed win rate for predictions this strong, from actual backtesting — not a new
+    made-up score. Both models have a genuine, tested ~21-22% chance of picking the actual
+    winner (vs. 33.4% for just backing the market favourite) — this analysis explains the
+    reasoning honestly, it doesn't make the underlying prediction better than that.</p>
   </dialog>
 
   <div class="disclaimer">

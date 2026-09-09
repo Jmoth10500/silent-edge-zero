@@ -13,7 +13,10 @@ from scripts.generate_dashboard import (
     _going_hint,
     _pct,
     _stat_row,
+    build_race_analysis,
     fetch_course_weather,
+    find_market_favourite,
+    real_calibration_confidence,
     render_html,
     render_overview_chart,
     render_summary,
@@ -181,6 +184,68 @@ def test_render_overview_chart_click_opens_matching_race_dialog():
     assert "showModal()" in html
 
 
+def test_find_market_favourite_none_when_no_real_odds():
+    stats = {"Horse A": {"exchange_back": None}, "Horse B": {"exchange_back": None}}
+    assert find_market_favourite(stats) is None
+
+
+def test_find_market_favourite_shortest_odds_wins():
+    stats = {
+        "Horse A": {"exchange_back": 4.5},
+        "Horse B": {"exchange_back": 2.1},   # shortest = favourite
+        "Horse C": {"exchange_back": None},  # no real odds yet, excluded
+    }
+    fav = find_market_favourite(stats)
+    assert fav == ("Horse B", 2.1)
+
+
+def test_real_calibration_confidence_grounds_in_real_bin():
+    text = real_calibration_confidence(0.15)
+    assert "14.0%" in text  # the real bin's "actual" value formatted as a %
+
+
+def test_real_calibration_confidence_flags_small_real_sample():
+    text = real_calibration_confidence(0.65)  # the n=28 bin, well under 150
+    assert "small real sample" in text.lower()
+
+
+def test_build_race_analysis_empty_when_no_model2_predictions():
+    assert build_race_analysis({"model2": {}, "stats": {}}) == ""
+
+
+def test_build_race_analysis_real_features_and_market_comparison():
+    race = {
+        "model2": {"Deputy Vice": 0.5, "Blue Pete": 0.5},
+        "stats": {
+            "Deputy Vice": {"horse_id": 1, "draw": 1, "weight_lbs": 130, "official_rating": 100,
+                            "recent_form": "111", "exchange_back": 2.0},
+            "Blue Pete": {"horse_id": 2, "draw": 8, "weight_lbs": 120, "official_rating": 70,
+                          "recent_form": "666", "exchange_back": 5.0},
+        },
+    }
+    html = build_race_analysis(race)
+    assert "Deputy Vice" in html
+    assert "above the field average" in html  # real rating edge, +15 vs mean of 85
+    assert "market also makes Deputy Vice favourite" in html  # real odds agree
+    assert "real odds 2.0" in html
+
+
+def test_build_race_analysis_debutant_top_pick_reads_grammatically():
+    # real bug found and fixed 2026-09-09: "X is has no official rating"
+    race = {
+        "model2": {"No Rating Horse": 0.5, "Other Horse": 0.5},
+        "stats": {
+            "No Rating Horse": {"horse_id": 1, "draw": 1, "weight_lbs": 130, "official_rating": None,
+                                 "recent_form": None, "exchange_back": None},
+            "Other Horse": {"horse_id": 2, "draw": 8, "weight_lbs": 120, "official_rating": 90,
+                             "recent_form": "111", "exchange_back": None},
+        },
+    }
+    html = build_race_analysis(race)
+    assert "is has" not in html
+    assert "No Rating Horse is a likely debutant" in html
+
+
 def test_render_html_includes_backtest_context():
     from datetime import date
     html = render_html(date(2026, 9, 9), [])
@@ -208,6 +273,13 @@ if __name__ == "__main__":
         test_render_overview_chart_empty_races_returns_empty_string,
         test_render_overview_chart_shows_top_pick_per_race,
         test_render_overview_chart_click_opens_matching_race_dialog,
+        test_find_market_favourite_none_when_no_real_odds,
+        test_find_market_favourite_shortest_odds_wins,
+        test_real_calibration_confidence_grounds_in_real_bin,
+        test_real_calibration_confidence_flags_small_real_sample,
+        test_build_race_analysis_empty_when_no_model2_predictions,
+        test_build_race_analysis_real_features_and_market_comparison,
+        test_build_race_analysis_debutant_top_pick_reads_grammatically,
         test_render_html_includes_backtest_context,
     ]
     passed = 0
