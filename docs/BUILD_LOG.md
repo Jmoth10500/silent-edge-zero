@@ -500,3 +500,38 @@ tests — 81/81 tests pass via `python3 -m pytest tests/ -v`, up from 80):**
 - Do not create accounts on Jonathan's behalf (Betfair)
 - Do not present the draw-bias null result as if the feature is broken (it is now confirmed correctly implemented and populated) or as if course/distance draw bias definitely doesn't exist in reality — only that this particular implementation, honestly tested, didn't help these two models
 - Do not skip re-running the full test suite before committing — all 109 tests must actually pass
+
+---
+
+## 2026-09-09 — Session 10 continued: RL-001 reframed weather→going, real course coordinates, and a genuine "feature hurt Model 2" result
+
+**Investigated weather's real historical coverage (asked directly), found a structural problem, and reframed the feature before building it — per the standing "check before building" discipline.**
+
+**What's genuinely done and verified:**
+- **Weather coverage check:** `weather_snapshot` had only 13 real rows (a single date, 2026-09-08) and used Open-Meteo's *forecast* endpoint, not history. Confirmed live that Open-Meteo's free historical *archive* endpoint works and covers the full 2023-2026 window — but only 13 of 412 courses had real coordinates (8% of real GB races). Live-checked The Racing API's free `/v1/courses` too — no coordinates there either.
+- **Real course coordinates gathered:** all 59 current British racecourses (Wikipedia's own `{{coord}}` geodata via a live, batched MediaWiki API call for 53; web search against verified sources for the remaining 6). `data/gb_racecourse_coordinates.py`, `scripts/backfill_gb_course_coordinates.py`, 7 tests (incl. a real GB bounding-box sanity check on all 59 coordinates). Ran for real: GB race coordinate coverage since 2023 went from 8% to **59.5%** (34,136 of 57,326 races). Deliberately GB-only, matching the project's own stated Phase 1 scope (the Kaggle set also has ~200 non-GB course names).
+- **Structural finding before building further (this mattered):** weather (or any race-level constant) is mathematically INVISIBLE to both Model 1's softmax and Model 2's per-race renormalisation — a value identical for every runner in a race cancels out completely regardless of its weight. Flagged this to Jonathan before building anything further rather than producing a result guaranteed-null by construction.
+- **Reframed to real going affinity:** the real dataset already records the actual ground `going` (Good/Soft/Heavy/etc.) per historical race — direct ground truth, no weather API needed for backtesting. Built `src/features/going_affinity.py`: per-horse `soft_ground_affinity` from real strictly-past completed runs (min 2 runs each side of a turf/AW going scale, else excluded), times a +1/-1 today's-going indicator — a genuine per-RUNNER-varying interaction term, unlike bare going/weather. 15 tests. Wired as a 7th feature (`going_affinity_edge`) into the shared `build_race_features()` used by both models, leakage-safe (table rebuilt fresh per walk-forward split's training races). 2 more wiring tests in `test_model1_logistic_baseline.py`. Full suite: **133/133 pass**.
+- Sanity-checked the table populates for real before trusting the training run (2,469 real horses in the first fold alone, mean |affinity| ~0.20) — same discipline as the RL-004 distance_yards bug, this time confirming the feature IS firing, not silently zero.
+- **Real result** (`scripts/train_model2.py`, same 9 real walk-forward folds as every prior run): Model 1 pooled Brier unchanged (0.0875). **Model 2 got measurably WORSE: 0.0878 (was 0.0874/0.0873 with fewer features) — and for the first time lost to Model 1** (0.0878 vs 0.0875). Real, not a bug: the feature only has real signal for a few thousand horses per fold (0.0 "no evidence" for the rest), and gradient boosting appears to overfit to that sparse split. Full detail in `docs/RESEARCH_LAB.md` RL-001b.
+
+**What this means honestly:** three feature attempts now (real form, real draw bias, real going affinity) have all been genuinely tested. Two ~no difference, one measurably hurt Model 2. This repo's current 7-feature race-relative shape looks genuinely exhausted with either model class tried so far. The remaining untried lever is a different KIND of information (real price-movement data), not another feature on this same input shape — and that needs Betfair, still blocked on Jonathan.
+
+**What's still blocked (unchanged):**
+1. Betfair Delayed App Key — the only remaining real, novel-information gap
+2. Racing API's own results — still needs their Basic tier; not pursuing, Kaggle covers this need
+
+**What the next session should do, in priority order:**
+1. Check for new credentials as always.
+2. **Consider dropping `going_affinity_edge` from Model 2's feature set** (or gating it behind a minimum per-horse sample size stricter than the current min_runs_per_side=2) given it measurably hurt Model 2's real result — this is a genuine candidate for reverting/tuning, not just leaving in because it's built. Not done this session; flagging honestly rather than deciding unilaterally.
+3. Real price-movement features (`src/market/movement.py`, already built/tested) are the one remaining untried, genuinely-new-information lever — but need a real odds TIME SERIES per horse, not the single Kaggle starting price. Blocked on Betfair.
+4. There is very little "another feature on the same 7-column shape" scaffolding left worth building blind — three attempts have now been made and none helped. Say this plainly rather than manufacturing a 4th if nothing genuinely new is available.
+5. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+6. **Always run a long script unbuffered and backgrounded to a real log file**, never `| tee` in the foreground.
+7. Keep this file updated at the end of every session.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result data, or any model's training data, to "demo" anything
+- Do not create accounts on Jonathan's behalf (Betfair)
+- Do not add a race-level-constant feature (weather, going, anything not runner-varying) directly to either model again without first checking it survives softmax/renormalisation invariance — see this session's structural finding
+- Do not skip re-running the full test suite before committing — all 133 tests must actually pass

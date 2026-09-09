@@ -22,7 +22,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import psycopg2
 
-from scripts.train_model1 import RaceRow, build_split_draw_bias_table, load_races
+from scripts.train_model1 import (
+    RaceRow, build_split_draw_bias_table, build_split_going_affinity_table, load_races,
+)
 from src.evaluation.calibration import brier_score, calibration_curve, log_loss
 from src.models.model0_market_baseline import RaceRecord as M0RaceRecord  # noqa: F401 (kept for parity/reference)
 from src.models.model0_market_baseline import predict_race_probabilities as m0_predict
@@ -80,29 +82,36 @@ def main():
         test_races = [usable[i] for i in split.test_indices]
 
         draw_bias_table = build_split_draw_bias_table(train_races)
+        going_affinity_table = build_split_going_affinity_table(train_races)
 
         m2_train_set = [
             M2TrainingRace(
                 runners=r.runners, winner_horse_id=r.winner_horse_id,
-                course_id=r.course_id, distance_yards=r.distance_yards,
+                course_id=r.course_id, distance_yards=r.distance_yards, going=r.going,
             )
             for r in train_races
             if len(r.runners) >= 2  # a single-runner "race" can't teach the binary classifier anything
         ]
         m2_model = (
-            fit_gradient_boosting(m2_train_set, max_iter=max_iter, draw_bias_table=draw_bias_table)
+            fit_gradient_boosting(
+                m2_train_set, max_iter=max_iter, draw_bias_table=draw_bias_table,
+                going_affinity_table=going_affinity_table,
+            )
             if m2_train_set else None
         )
 
         m1_train_set = [
             M1TrainingRace(
                 runners=r.runners, winner_horse_id=r.winner_horse_id,
-                course_id=r.course_id, distance_yards=r.distance_yards,
+                course_id=r.course_id, distance_yards=r.distance_yards, going=r.going,
             )
             for r in train_races
         ]
         m1_weights = (
-            fit_logistic_baseline(m1_train_set, iterations=max_iter, draw_bias_table=draw_bias_table)
+            fit_logistic_baseline(
+                m1_train_set, iterations=max_iter, draw_bias_table=draw_bias_table,
+                going_affinity_table=going_affinity_table,
+            )
             if m1_train_set else dict(DEFAULT_WEIGHTS)
         )
 
@@ -115,6 +124,7 @@ def main():
                 m2_probs = m2_predict(
                     r.runners, m2_model, draw_bias_table=draw_bias_table,
                     course_id=r.course_id, distance_yards=r.distance_yards,
+                    going_affinity_table=going_affinity_table, going=r.going,
                 )
                 for horse_id, p in m2_probs.items():
                     split_m2_probs.append(p)
@@ -123,6 +133,7 @@ def main():
             probs = m1_predict(
                 r.runners, weights=m1_weights, draw_bias_table=draw_bias_table,
                 course_id=r.course_id, distance_yards=r.distance_yards,
+                going_affinity_table=going_affinity_table, going=r.going,
             )
             for horse_id, p in probs.items():
                 split_m1_probs.append(p)

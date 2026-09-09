@@ -33,6 +33,7 @@ import psycopg2
 
 from src.evaluation.calibration import brier_score, calibration_curve, log_loss
 from src.features.draw_bias_history import HistoricalRaceOutcome, build_draw_bias_table
+from src.features.going_affinity import HistoricalGoingRecord, build_going_affinity_table
 from src.features.runner_features import RunnerFeatureInput
 from src.models.model0_market_baseline import RaceRecord as M0RaceRecord
 from src.models.model0_market_baseline import RunnerOdds
@@ -55,13 +56,15 @@ class RaceRow:
     winner_horse_id: int | None
     course_id: int | None = None
     distance_yards: int | None = None
+    going: str | None = None
+    finishing_positions: dict = None  # horse_id -> finishing_position, real completions only
 
 
 def load_races(conn, start_date: str) -> list[RaceRow]:
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT r.id, r.race_date, r.course_id, r.distance_yards, rs.horse_id, rs.age,
+        SELECT r.id, r.race_date, r.course_id, r.distance_yards, r.going, rs.horse_id, rs.age,
                rs.draw, rs.weight_lbs, rs.official_rating, rs.recent_form,
                rr.finishing_position, rr.starting_price, rr.result_note
         FROM race r
@@ -75,7 +78,7 @@ def load_races(conn, start_date: str) -> list[RaceRow]:
 
     by_race: dict[int, dict] = {}
     order: list[int] = []
-    for (race_id, race_date, course_id, distance_yards, horse_id, age, draw, weight_lbs,
+    for (race_id, race_date, course_id, distance_yards, going, horse_id, age, draw, weight_lbs,
          official_rating, recent_form, finishing_position, starting_price, result_note) in cur:
         note = (result_note or "").strip().upper()
         if finishing_position is None and note in _NON_RUNNER_NOTES:
@@ -84,7 +87,7 @@ def load_races(conn, start_date: str) -> list[RaceRow]:
         if race_id not in by_race:
             by_race[race_id] = {
                 "race_date": race_date, "course_id": course_id, "distance_yards": distance_yards,
-                "runners": [], "odds": [], "winner": None,
+                "going": going, "runners": [], "odds": [], "winner": None, "finishing_positions": {},
             }
             order.append(race_id)
         entry = by_race[race_id]
@@ -97,6 +100,8 @@ def load_races(conn, start_date: str) -> list[RaceRow]:
             entry["odds"].append(RunnerOdds(horse_id=horse_id, decimal_odds=float(starting_price)))
         if finishing_position == 1:
             entry["winner"] = horse_id
+        if finishing_position is not None:
+            entry["finishing_positions"][horse_id] = finishing_position
 
     cur.close()
 
@@ -107,6 +112,7 @@ def load_races(conn, start_date: str) -> list[RaceRow]:
             race_id=race_id, race_date=e["race_date"], runners=e["runners"],
             odds=e["odds"], winner_horse_id=e["winner"],
             course_id=e["course_id"], distance_yards=e["distance_yards"],
+            going=e["going"], finishing_positions=e["finishing_positions"],
         ))
     return races
 
@@ -129,6 +135,23 @@ def build_split_draw_bias_table(train_races: list[RaceRow]):
                 won=(runner.horse_id == r.winner_horse_id),
             ))
     return build_draw_bias_table(outcomes)
+
+
+def build_split_going_affinity_table(train_races: list[RaceRow]):
+    """Leakage-safe by construction: only ever called with a walk-forward
+    split's TRAINING races (see main()), never the test races or the full
+    dataset — see src/features/going_affinity.py's module docstring. Uses
+    every runner's real finishing_position (not just the winner), field
+    size from the real field, and each race's own real going."""
+    records = []
+    for r in train_races:
+        field_size = len(r.runners)
+        for horse_id, finishing_position in r.finishing_positions.items():
+            records.append(HistoricalGoingRecord(
+                horse_id=horse_id, going=r.going,
+                finishing_position=finishing_position, field_size=field_size,
+            ))
+    return build_going_affinity_table(records)
 
 
 def main():
@@ -176,16 +199,20 @@ def main():
         test_races = [usable[i] for i in split.test_indices]
 
         draw_bias_table = build_split_draw_bias_table(train_races)
+        going_affinity_table = build_split_going_affinity_table(train_races)
 
         train_set = [
             M1TrainingRace(
                 runners=r.runners, winner_horse_id=r.winner_horse_id,
-                course_id=r.course_id, distance_yards=r.distance_yards,
+                course_id=r.course_id, distance_yards=r.distance_yards, going=r.going,
             )
             for r in train_races
         ]
         weights = (
-            fit_logistic_baseline(train_set, iterations=iterations, draw_bias_table=draw_bias_table)
+            fit_logistic_baseline(
+                train_set, iterations=iterations, draw_bias_table=draw_bias_table,
+                going_affinity_table=going_affinity_table,
+            )
             if train_set else dict(DEFAULT_WEIGHTS)
         )
 
@@ -196,6 +223,7 @@ def main():
             probs = m1_predict(
                 r.runners, weights=weights, draw_bias_table=draw_bias_table,
                 course_id=r.course_id, distance_yards=r.distance_yards,
+                going_affinity_table=going_affinity_table, going=r.going,
             )
             for horse_id, p in probs.items():
                 split_m1_probs.append(p)

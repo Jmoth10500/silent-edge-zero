@@ -14,6 +14,83 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
 - **Training/validation period:** TBD, needs real racecard history first.
 - **Status: IDEA** — logged now so it isn't lost, tested once real data exists.
 
+## RL-001b: Real implementation — per-horse going affinity (reframed from weather)
+
+- **Reframe, 2026-09-09:** RL-001's original hypothesis was about weather
+  (rainfall) affecting turf vs all-weather races differently. Investigating
+  it surfaced two things worth recording: (1) `weather_snapshot` had only
+  13 real rows (a single day) and only 8% of real GB races since 2023 had
+  a course with known coordinates — fixed as real groundwork (see below),
+  but (2) the more important finding: weather can only ever act as an
+  INTERACTION with a per-runner attribute, never a main effect, in either
+  model here — every runner in a race experiences identical weather, and
+  a feature identical across all runners in a race is mathematically
+  invariant under both Model 1's softmax and Model 2's per-race
+  renormalisation (it cancels out completely, regardless of its fitted
+  weight). And the real dataset already records the actual GROUND GOING
+  per historical race (`race.going`, e.g. 'Good To Soft', ~57K real rows)
+  — direct ground truth, not a noisy weather proxy, needing no API calls.
+  So RL-001 was rebuilt as a genuine per-horse going-affinity interaction
+  feature instead of a weather one.
+- **Course-coordinate groundwork (still real, still committed, just not
+  load-bearing for this particular feature):** gathered real coordinates
+  for all 59 current British racecourses (Wikipedia's own geodata,
+  verified live via the MediaWiki API, 6 resolved via web search where
+  Wikipedia had no `{{coord}}` data) — `data/gb_racecourse_coordinates.py`,
+  `scripts/backfill_gb_course_coordinates.py`. Real GB race coverage with
+  a known course coordinate went from 8% to 59.5%. This remains useful
+  groundwork for a live/future-facing weather feature (going isn't
+  finalised until close to race time, so a live system still needs a
+  weather-based going FORECAST) — just not needed for backtesting against
+  historical results, where the real going is already known.
+- **Implementation:** `src/features/going_affinity.py` —
+  `build_going_affinity_table()` computes each horse's own
+  `(avg finish percentile on the soft/slow side of its going scale) -
+  (avg finish percentile on the fast/firm side)` from real, strictly-past
+  completed runs (min 2 real runs on EACH side, else excluded — never
+  guessed). Turf and all-weather going use separate, non-comparable
+  ordinal scales (sourced from standard UK/Irish racing terminology, not
+  empirically validated — same honesty flag as RL-004's draw-percentile
+  placeholder). `going_interaction_edge()` = the horse's own affinity times
+  a +1/-1 indicator of whether TODAY's going is soft-side or fast-side —
+  this is what makes it a genuine per-runner-varying feature despite
+  `going` itself being race-constant. Wired as a 7th feature into the
+  shared `build_race_features()`, leakage-safe by construction (the table
+  is rebuilt fresh per walk-forward split from training races only, using
+  every runner's real finishing position, not just the winner). 15 new
+  tests in `tests/test_going_affinity.py`, plus 2 wiring tests in
+  `tests/test_model1_logistic_baseline.py`.
+- **Real result (2026-09-09, `scripts/train_model2.py`, same 9 real
+  walk-forward folds, 2023-06 to 2026-06, ~487k predictions):** Model 1
+  pooled Brier UNCHANGED at 0.0875. **Model 2 got slightly WORSE: 0.0878
+  (was 0.0874 with 6 features, 0.0873 with 5) — and for the first time,
+  Model 2 no longer beats Model 1** (0.0878 vs 0.0875). Sanity-checked
+  before trusting this (same discipline as the RL-004 distance_yards bug):
+  the affinity table genuinely populates (2,469 real horses in the first
+  fold alone, mean |affinity| ~0.20, so this isn't another silent-zero
+  bug) — the feature is real and firing, it's just not helping, and for
+  Model 2 it appears to be adding noise the gradient-boosted trees
+  overfit to (a feature with real signal for only ~2,500 of many more
+  horses per fold, versus 0.0 "no evidence" for the rest, is exactly the
+  kind of sparse, high-variance split a boosted tree can latch onto
+  spuriously).
+- **What this means honestly:** three feature attempts now (real form,
+  RL-007; real draw bias, RL-004; real going affinity, RL-001b) have been
+  genuinely tested. Two made ~no difference, one made Model 2 measurably
+  worse. This is a real, informative negative result, not a failed
+  session — it suggests this repo's current 7-feature race-relative shape,
+  built from 5 simple runner attributes plus two interaction terms, is
+  genuinely exhausted as a source of edge over the market with either
+  model class tried so far. The remaining untried lever is a different
+  kind of information entirely (real price-movement data, needs Betfair —
+  still blocked on Jonathan's signup), not another feature on this same
+  input shape.
+- **Status: TESTING — clean, complete, genuinely tested result.** Real
+  going affinity does not help Model 1 and measurably hurts Model 2 on
+  this feature set. Not recommending this feature be kept in its current
+  form for either model without further evidence it helps once genuinely
+  new information (price movement) is also in play.
+
 ## RL-002: Overround-removal method choice (proportional vs power vs Shin) materially changes calibration
 
 - **Hypothesis:** Shin's method, by modelling favourite-longshot bias explicitly, should produce better-calibrated market-probability baselines than proportional scaling, particularly at the long-odds end of the field.

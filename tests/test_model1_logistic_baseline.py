@@ -145,6 +145,26 @@ def test_build_race_features_draw_bias_edge_uses_table_when_given():
 # predict_race_probabilities
 # ---------------------------------------------------------------------------
 
+def test_build_race_features_going_affinity_edge_defaults_to_zero_without_table():
+    runners = [_runner(1, official_rating=80), _runner(2, official_rating=70)]
+    feats = build_race_features(runners)  # no going_affinity_table/going given
+    assert feats[1]["going_affinity_edge"] == 0.0
+    assert feats[2]["going_affinity_edge"] == 0.0
+
+
+def test_build_race_features_going_affinity_edge_uses_table_when_given():
+    # horse 1 is a soft-ground specialist (positive affinity); horse 2 has
+    # no table entry at all (e.g. not enough real history either side).
+    table = {1: 0.3}
+    runners = [_runner(1, official_rating=80), _runner(2, official_rating=70)]
+    feats = build_race_features(runners, going_affinity_table=table, going="Heavy")
+    assert feats[1]["going_affinity_edge"] == 0.3   # soft specialist on soft ground -> positive
+    assert feats[2]["going_affinity_edge"] == 0.0    # no evidence for horse 2
+
+    feats_fast = build_race_features(runners, going_affinity_table=table, going="Firm")
+    assert feats_fast[1]["going_affinity_edge"] == -0.3  # same specialist, fast ground -> negative
+
+
 def test_predict_with_default_weights_is_uniform():
     """Untrained model (DEFAULT_WEIGHTS, all zero) must be provably uniform
     — every runner's linear score is 0.0 regardless of its features, so
@@ -346,6 +366,8 @@ if __name__ == "__main__":
         test_build_race_features_empty_runners_returns_empty_dict,
         test_build_race_features_draw_bias_edge_defaults_to_zero_without_table,
         test_build_race_features_draw_bias_edge_uses_table_when_given,
+        test_build_race_features_going_affinity_edge_defaults_to_zero_without_table,
+        test_build_race_features_going_affinity_edge_uses_table_when_given,
         test_predict_with_default_weights_is_uniform,
         test_predict_sums_to_one_with_nonzero_weights,
         test_predict_empty_race_raises,

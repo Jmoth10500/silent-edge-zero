@@ -53,6 +53,15 @@ and fixed along the way (the feature was silently getting zero real data
 on the first attempt, which is why that first run looked unchanged for
 the wrong reason).
 
+**Update 2026-09-09 — a real 7th feature, `going_affinity_edge` (RL-001b,
+reframed from a weather hypothesis to real per-horse ground-going
+affinity — see `src/features/going_affinity.py`'s module docstring for
+why a bare weather/going value can't work as a main effect in a per-race
+softmax), was added and re-tested:** pooled Brier unchanged for THIS
+model (0.0875) but measurably worsened Model 2's real result (see
+`src/models/model2_gradient_boosting.py`). A genuine result, feature
+confirmed genuinely populated before trusting it.
+
 Session 5's RL-006 entry flagged one simplification explicitly for review:
 a runner missing `official_rating` got `rating_edge=0.0`, the same value as
 a genuinely average-rated runner — "no evidence" and "average" were
@@ -77,6 +86,7 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 from src.features.draw_bias_history import DrawBiasTable, draw_bias_edge as _draw_bias_edge
+from src.features.going_affinity import going_interaction_edge as _going_interaction_edge
 from src.features.runner_features import (
     RunnerFeatureInput,
     draw_bias_features,
@@ -87,7 +97,7 @@ from src.features.runner_features import (
 
 FEATURE_NAMES = (
     "rating_edge", "draw_edge", "form_edge", "weight_edge", "no_rating_flag",
-    "draw_bias_edge",
+    "draw_bias_edge", "going_affinity_edge",
 )
 
 # Untrained default: every weight at 0.0 means every runner's score is 0.0
@@ -103,6 +113,8 @@ def build_race_features(
     draw_bias_table: Optional[DrawBiasTable] = None,
     course_id: Optional[int] = None,
     distance_yards: Optional[int] = None,
+    going_affinity_table: Optional[dict[int, float]] = None,
+    going: Optional[str] = None,
 ) -> dict[int, dict[str, float]]:
     """Race-relative, zero-centered feature vector per horse_id — Model 1's
     input row.
@@ -136,6 +148,20 @@ def build_race_features(
     bucket has insufficient real sample size — same convention as every
     other feature here.
 
+    `going_affinity_edge` (RL-001) is this runner's own historical
+    soft/fast-ground affinity (looked up from `going_affinity_table`, built
+    by the caller from ONLY strictly-earlier real outcomes — see
+    `src/features/going_affinity.py`) times a +1/-1 indicator of whether
+    TODAY's `going` is on the soft or fast side of its own scale. Unlike
+    every other feature here, this one is a deliberate INTERACTION term —
+    `going` itself is identical for every runner in a race and would be
+    mathematically invisible to a per-race softmax (or Model 2's per-race
+    renormalisation), so it only enters through each horse's own past
+    affinity. Defaults to 0.0 ("no evidence") whenever the table is None,
+    the horse has no table entry, or today's `going` is missing/
+    unrecognised — see `going_affinity.py` for the "never guessed" rule
+    this follows.
+
     Returns {} for an empty `runners` sequence.
     """
     if not runners:
@@ -160,6 +186,7 @@ def build_race_features(
         db_edge = _draw_bias_edge(
             draw_bias_table or {}, course_id, distance_yards, r.draw, len(runners),
         )
+        ga_edge = _going_interaction_edge(r.horse_id, going, going_affinity_table or {})
         out[r.horse_id] = {
             "rating_edge": rating_edge,
             "draw_edge": draw_edge,
@@ -167,6 +194,7 @@ def build_race_features(
             "weight_edge": weight_edge,
             "no_rating_flag": no_rating_flag,
             "draw_bias_edge": db_edge,
+            "going_affinity_edge": ga_edge,
         }
     return out
 
@@ -191,6 +219,8 @@ def predict_race_probabilities(
     draw_bias_table: Optional[DrawBiasTable] = None,
     course_id: Optional[int] = None,
     distance_yards: Optional[int] = None,
+    going_affinity_table: Optional[dict[int, float]] = None,
+    going: Optional[str] = None,
 ) -> dict[int, float]:
     """Model 1's prediction: softmax over the linear score of each runner's
     race-relative feature vector, keyed by horse_id. Sums to 1.0 (up to
@@ -198,13 +228,16 @@ def predict_race_probabilities(
     DEFAULT_WEIGHTS — i.e. an untrained model, which is provably uniform
     (see `test_predict_with_default_weights_is_uniform`). Raises ValueError
     for an empty race, matching `model0_market_baseline.predict_race_probabilities`.
-    `draw_bias_table`/`course_id`/`distance_yards` are optional and only
-    feed `draw_bias_edge` — see `build_race_features`.
+    `draw_bias_table`/`course_id`/`distance_yards` and
+    `going_affinity_table`/`going` are optional and only feed
+    `draw_bias_edge`/`going_affinity_edge` — see `build_race_features`.
     """
     if not runners:
         raise ValueError("cannot predict an empty race")
     weights = weights if weights is not None else DEFAULT_WEIGHTS
-    feats = build_race_features(runners, draw_bias_table, course_id, distance_yards)
+    feats = build_race_features(
+        runners, draw_bias_table, course_id, distance_yards, going_affinity_table, going,
+    )
     scores = {hid: _linear_score(f, weights) for hid, f in feats.items()}
     return _softmax(scores)
 
@@ -222,6 +255,7 @@ class TrainingRace:
     winner_horse_id: int
     course_id: Optional[int] = None
     distance_yards: Optional[int] = None
+    going: Optional[str] = None
 
 
 def fit_logistic_baseline(
@@ -231,6 +265,7 @@ def fit_logistic_baseline(
     l2: float = 0.01,
     initial_weights: Optional[dict[str, float]] = None,
     draw_bias_table: Optional[DrawBiasTable] = None,
+    going_affinity_table: Optional[dict[int, float]] = None,
 ) -> dict[str, float]:
     """Batch gradient ASCENT on the multinomial-logit log-likelihood of the
     observed winners (equivalently: descent on cross-entropy loss). Pure
@@ -263,7 +298,10 @@ def fit_logistic_baseline(
                 f"race's own runners {sorted(horse_ids)}"
             )
         race_features.append((
-            build_race_features(race.runners, draw_bias_table, race.course_id, race.distance_yards),
+            build_race_features(
+                race.runners, draw_bias_table, race.course_id, race.distance_yards,
+                going_affinity_table, race.going,
+            ),
             race.winner_horse_id,
         ))
 
