@@ -36,7 +36,7 @@ Last verified: 2026-09-08 (live checks run this session, see notes per source)
 - **Real data-quality issue found and fixed:** the CSV's "missing value" marker isn't consistent — sometimes an en-dash (`–`), sometimes a plain hyphen (`-`), sometimes empty. A naive `float()` call crashed on row ~1.2M. Fixed with a `safe_float`/`safe_int` helper that treats any unparseable value as `None`, never a guess.
 - **Reliability:** good in practice — real winners, real starting prices (fractional odds like `11/4F` correctly converted to decimal), spot-checked against several real races.
 - **Replacement if unavailable:** other Kaggle horse-racing datasets exist (jpmiller/race-data "Big Data Derby", hwaitt/horse-racing) as fallbacks
-- **Status: BLOCKED — needs you to create a free Kaggle account, generate an API token at kaggle.com/settings, and drop `kaggle.json` into `~/.kaggle/`. Once done, tell me and the loader script (`scripts/load_kaggle_historical.py`, already written, untested) can run.**
+- **Status: LIVE — real account created, real token issued, real data loaded 2026-09-08 (Session 6). This section's own closing status line had gone stale since before Session 6 and still said BLOCKED / described the OLD (pre-real) auth method (`kaggle.json`, superseded by the single-token method documented above) — corrected 2026-09-09 (Session 19) to match this section's own body text three lines up, which already had it right. Same class of top-vs-body drift Session 17 found and fixed in the summary table below; this one was inside a section body, not the table, so that pass missed it.**
 
 ---
 
