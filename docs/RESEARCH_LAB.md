@@ -297,6 +297,45 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
   made only marginal-to-zero difference once genuinely tested. Weather
   (RL-001) and price-movement features remain untried.
 
+## RL-009: "How likely is this app to pick the winning horse?" — real top-pick hit rate
+
+- **Why this is a different question from RL-008's Brier scores:** Brier
+  score measures calibration (is a 20% prediction right ~20% of the time
+  across many races), not "how often is the single highest-probability
+  pick actually the winner". Jonathan asked the hit-rate question
+  directly (2026-09-09); this is the real answer, computed on the exact
+  same real walk-forward folds/data every other backtest in this repo
+  uses — no new data, a different real metric on it.
+- **Implementation:** `scripts/compute_hit_rate.py` — for every real test
+  race in every walk-forward fold, takes each model's single highest-
+  probability runner and checks whether it was the real winner. Also
+  reports the honest "no information at all" floor: the average of
+  `1/field_size` across real races (what a uniformly random pick would
+  score, given real GB field sizes).
+- **Real result (2026-09-09, same 9 walk-forward folds, 2023-06 to
+  2026-06, ~49-50k real races per model):**
+
+  | | Hit rate |
+  |---|---|
+  | No-info baseline (random pick) | 11.8% |
+  | Model 0 (market favourite) | 33.4% |
+  | Model 1 (statistical) | 21.5% |
+  | Model 2 (gradient boosting) | 21.7% |
+
+- **What this means in plain terms:** both real models pick the actual
+  winner roughly 1 in 5 races (21-22%) — almost double the no-information
+  floor (11.8%), so they are genuinely finding real signal, not noise.
+  But simply backing the market's own favourite wins 1 in 3 races (33.4%)
+  — the market is still clearly the best single predictor here, consistent
+  with every Brier-score result in RL-005 through RL-008. This is the
+  most honest, plain-language answer to "how good is this at picking
+  winners": better than guessing, worse than just following the crowd.
+- **Status: real, complete.** Not pursued further this session — same
+  conclusion as RL-008, the current feature set is exhausted; a materially
+  better hit rate needs either genuinely new information (price movement,
+  now unblocked via Smarkets — RL-010 candidate once real data
+  accumulates) or accepting the market as the practical baseline.
+
 ---
 
 *New entries go at the bottom, oldest first, so the log itself is chronological.*
