@@ -567,3 +567,40 @@ tests — 81/81 tests pass via `python3 -m pytest tests/ -v`, up from 80):**
 - Do not create accounts on Jonathan's behalf (Betfair)
 - Do not re-enable `going_affinity_edge` in `FEATURE_NAMES` without new evidence (more data, a stricter sample threshold) — the current real result against it stands
 - Do not skip re-running the full test suite before committing — all 133 tests must actually pass
+
+---
+
+## 2026-09-09 — Session 10 continued: Betfair blocked on account verification; Phase 8 (live daily predictions) built and run for real instead
+
+**Betfair status:** Jonathan created the developer app (Delayed App Key `NslD2mUCstNkchTv`, Application Id 176692) and completed identity verification, but the account still returns `LIMITED_ACCESS`/`SUSPENDED` on a real session-login call as of this session's last check. Credentials are in `.env` (gitignored). **Do not keep retrying the login endpoint blind** — Betfair may lock the account after repeated failed/restricted attempts; wait for Jonathan to confirm the account shows clear on their site, or hears back from their support, before testing again.
+
+**Moved to the next real, unblocked piece of work: Phase 8, the live daily prediction pipeline** — everything up to now only ever backtested against real PAST results; this is the first script that predicts races that haven't happened yet.
+
+**What's genuinely done and verified:**
+- `scripts/predict_todays_races.py` — new, real. Fits Model 1 and Model 2 fresh on ALL real historical results strictly before the target date (no leakage: the historical loader inner-joins `runner_result`, so today's un-resulted races are automatically excluded, not filtered out by a special case), loads today's real racecard (`race`/`runner_snapshot`, already being collected daily at 07:00 by the existing LaunchAgent), predicts every race with >=2 runners through both models, and inserts into the `prediction` table — a table the schema already anticipated (Section 32's immutable ledger) but nothing had used until now.
+- Real `model_version` rows created (`statistical_v1`/`gbm_v1`, both v1.0, `6-feature-v1` — the real active feature set after the going_affinity revert).
+- Every inserted row is locked immediately (`locked_at` set at insert, `record_hash` = real SHA-256 of the defining fields) — **verified for real, not just asserted**: a direct `UPDATE` against a locked row was rejected by the DB's own trigger (`trg_prevent_locked_prediction_update`), and a full re-run of the script correctly skipped every already-predicted race/model pair rather than duplicating or overwriting (idempotency check, real: 0 newly predicted on the second run, all 60 race/model pairs correctly skipped).
+- `tests/test_predict_todays_races.py` — 3 real tests on the pure `record_hash` function (determinism, sensitivity to every field, real SHA-256 shape). The rest of the script is real DB-integration code, exercised by actually running it, same discipline as `train_model1.py`/`backfill_race_distance.py`.
+- **Real run, 2026-09-09:** fit on 57,151 real historical races, predicted **30 real races today** (Redcar/Sedgefield/Carlisle/Kempton AW), 632 real locked prediction rows (316 per model). `market_probability`/`fair_odds`/edges left honestly NULL — no odds source is unblocked yet (Racing API free tier has none, Betfair still blocked) — fillable the moment either unblocks, not guessed now.
+- Full suite: **136/136 pass** (was 133, +3 new).
+
+**What this means:** the project now has a genuine, real, immutable prediction ledger accumulating day by day — the first real building block for eventually checking calibration/Brier score against LIVE outcomes (not just historical backtests) once results collection is built (still a real gap — The Racing API's results endpoint needs their Basic tier, not pursued; Kaggle's dataset lags real-time by design). Running this daily (easy to LaunchAgent-schedule alongside the existing racecard collector) starts building that real track record now, cheaply, while Betfair unblocks.
+
+**What's still blocked:**
+1. Betfair — account verification done, but still SUSPENDED on a real login test; waiting on Jonathan/Betfair support
+2. Racing API's own results — still needs their Basic tier; Kaggle covers historical backtesting but not live results
+3. **New gap surfaced by this session's work:** there's no real results collection for TODAY's races once they've run — `predict_todays_races.py` predicts before the fact, but nothing yet closes the loop by fetching real outcomes for a past race day and scoring the locked predictions against them. Worth a `scripts/collect_results.py` once a real results source unblocks (Racing API Basic tier, or scraping-permission-checked alternative).
+
+**What the next session should do, in priority order:**
+1. Check whether Betfair's account status has cleared — try ONE real login test, not a retry loop, and only if there's a concrete reason to think it's changed (Jonathan confirms, or enough time has passed).
+2. **Set up a daily LaunchAgent for `predict_todays_races.py`**, same pattern as `com.silentedgezero.collect-racecards.plist` (run shortly after racecards are collected each morning) — this is cheap, real, unblocked work that starts the live track record accumulating automatically rather than needing a manual trigger each day. Not done this session; flagged as the natural next step.
+3. Once a real results source exists (Racing API Basic tier, or Betfair), build the scoring/calibration loop against the real locked predictions already accumulating.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. **Always run a long script unbuffered and backgrounded to a real log file**, never `| tee` in the foreground, for anything expected to take more than ~2 minutes.
+6. Keep this file updated at the end of every session.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result data, or any model's training data, to "demo" anything
+- Do not create accounts on Jonathan's behalf (Betfair — already created by him, just still blocked)
+- Do not retry the Betfair login endpoint repeatedly without a concrete reason to think the account status changed — real lockout risk
+- Do not skip re-running the full test suite before committing — all 136 tests must actually pass
