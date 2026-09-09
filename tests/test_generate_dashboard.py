@@ -158,6 +158,17 @@ def test_render_overview_chart_shows_top_pick_per_race():
     assert "19.7%" in html
 
 
+def test_render_overview_chart_click_opens_matching_race_dialog():
+    from datetime import time
+    races = [{
+        "race_id": 57401, "off_time": time(13, 21), "course_name": "Redcar",
+        "model1": {}, "model2": {"Deputy Vice": 0.197},
+    }]
+    html = render_overview_chart(races)
+    assert "getElementById('race-57401')" in html
+    assert "showModal()" in html
+
+
 def test_render_html_includes_backtest_context():
     from datetime import date
     html = render_html(date(2026, 9, 9), [])
@@ -183,6 +194,7 @@ if __name__ == "__main__":
         test_render_weather_renders_real_figures,
         test_render_overview_chart_empty_races_returns_empty_string,
         test_render_overview_chart_shows_top_pick_per_race,
+        test_render_overview_chart_click_opens_matching_race_dialog,
         test_render_html_includes_backtest_context,
     ]
     passed = 0
