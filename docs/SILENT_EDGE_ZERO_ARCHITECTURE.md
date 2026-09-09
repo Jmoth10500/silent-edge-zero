@@ -87,6 +87,13 @@ silent-edge-zero/
                                   race. Built 2026-09-08 (cloud routine) — synthetic-fixture
                                   -only so far, same status Model 1 had before Sessions 8/9.
                                   See RESEARCH_LAB.md RL-008.
+      model2_hyperparameter_sweep.py — fits Model 2 once per combination in a
+                                  max_depth/learning_rate/max_iter grid against the same
+                                  synthetic always-wins signal, confirming the fitting
+                                  itself isn't fragile to reasonable setting changes before
+                                  a real Mac-side run. Added 2026-09-09 (cloud routine) —
+                                  a stability check, NOT a real hyperparameter benchmark.
+                                  See RESEARCH_LAB.md RL-008.
   scripts/
     collect_racecards.py       — LIVE since 2026-09-08 (Session 4): pulls real GB racecards
                                   from The Racing API into the DB. Mac-only (needs
@@ -132,6 +139,9 @@ silent-edge-zero/
     test_model2_gradient_boosting.py — Model 2 tests: renormalisation edge cases (all-zero,
                                   empty, negative), fit/predict error handling, and a
                                   signal-recovery convergence check — synthetic fixtures only.
+    test_model2_hyperparameter_sweep.py — cartesian-product correctness, input validation,
+                                  a 12-combination signal-recovery stability check, and
+                                  summarize_sweep() roll-up stats — synthetic fixtures only.
 ```
 
 ## Data integrity rules enforced in code, not just policy

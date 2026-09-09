@@ -8,6 +8,16 @@ The off_time regression test below exists because of a genuine bug found
 and fixed live: the API's own "off_time" field is ambiguous ("1:12", no
 AM/PM) and a naive time cast silently produced 01:12 AM instead of the
 real 13:12. off_dt (full ISO datetime) is the correct source of truth.
+
+The fixture body's own "date"/"off_dt" strings are frozen at the real
+2026-09-08 capture and are never asserted against directly (only fields
+mapped FROM the response are checked). Tests call get_racecards() with
+date.today() rather than a hardcoded calendar date, because the provider
+itself validates for_date against the real date.today() (the free tier
+only accepts "today"/"tomorrow") — a hardcoded date silently starts
+failing every day that isn't the day it was written on. Found live
+2026-09-09 (cloud routine, Session 13): this file used to pass
+date(2026, 9, 8) and broke the moment "today" became 2026-09-09.
 """
 import sys
 from datetime import date, datetime, timezone
@@ -87,7 +97,7 @@ def test_region_filter_excludes_non_gb():
         mock_resp.raise_for_status.return_value = None
         mock_get.return_value = mock_resp
 
-        cards = provider.get_racecards(date(2026, 9, 8), region="GB")
+        cards = provider.get_racecards(date.today(), region="GB")
 
     assert len(cards) == 1, f"expected only the GB race, got {len(cards)}"
     assert cards[0].course_name == "Leicester"
@@ -104,7 +114,7 @@ def test_ambiguous_off_time_is_corrected_via_off_dt():
         mock_resp.raise_for_status.return_value = None
         mock_get.return_value = mock_resp
 
-        cards = provider.get_racecards(date(2026, 9, 8), region="GB")
+        cards = provider.get_racecards(date.today(), region="GB")
 
     assert cards[0].off_time == "13:12", (
         f"REGRESSION: off_time resolved to {cards[0].off_time!r}, expected '13:12' — "
@@ -120,7 +130,7 @@ def test_distance_furlongs_converted_to_yards():
         mock_resp.raise_for_status.return_value = None
         mock_get.return_value = mock_resp
 
-        cards = provider.get_racecards(date(2026, 9, 8), region="GB")
+        cards = provider.get_racecards(date.today(), region="GB")
 
     # 7.0 furlongs * 220 yards/furlong = 1540 yards
     assert cards[0].distance_yards == 1540
@@ -134,7 +144,7 @@ def test_runner_fields_mapped_correctly():
         mock_resp.raise_for_status.return_value = None
         mock_get.return_value = mock_resp
 
-        cards = provider.get_racecards(date(2026, 9, 8), region="GB")
+        cards = provider.get_racecards(date.today(), region="GB")
 
     runner = cards[0].runners[0]
     assert runner.horse_name == "Test Horse"

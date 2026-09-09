@@ -186,8 +186,28 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
   splits, Model 0/1/2 scored side by side on the same folds) is ready to run but has not been —
   that needs Jonathan's Mac (the real DB). Until that real run happens, nothing here is evidence
   Model 2 predicts real racing any better (or worse) than Model 1 did.
+- **Hyperparameter-stability check (2026-09-09, cloud routine, Session 13):**
+  `src/models/model2_hyperparameter_sweep.py::sweep_gradient_boosting_hyperparameters` fits
+  Model 2 once per combination in a `max_depth` x `learning_rate` x `max_iter` grid against the
+  same "highest-rated runner always wins" synthetic fixture
+  `test_model2_gradient_boosting.py` already uses, and checks the fitted model still ranks that
+  runner-shape highest on a held-out race for every combination. **Result: stable across all 12
+  combinations tested** (`max_depth` in {2,3,4}, `learning_rate` in {0.1,0.3}, `max_iter` in
+  {30,60}) — every combination recovered the injected signal, none rated it below uniform.
+  This is NOT a real hyperparameter benchmark (still no real outcomes to tune against) — it only
+  answers the narrower question flagged since Session 10: is the fitting procedure itself
+  fragile to reasonable setting changes? No, not on this synthetic signal. `scripts/train_model2.py`
+  can trust its current default kwargs (or a small grid drawn from this same range) without first
+  discovering instability on Jonathan's Mac. `tests/test_model2_hyperparameter_sweep.py` — 9
+  tests: cartesian-product correctness (every combination present, none skipped/duplicated),
+  input validation (empty grid, empty grid-value list, empty training set, a requested winner
+  absent from the held-out race), the real 12-combination stability assertion above, and
+  `summarize_sweep()`'s roll-up stats (pass rate, min/max/mean predicted probability) checked
+  against hand-built all-pass and mixed-pass/fail result lists.
 - **Status: IDEA — implementation and pipeline plumbing done and unit-tested against synthetic
-  fixtures only (2026-09-08, cloud routine). No real-data run yet.**
+  fixtures only (2026-09-08, cloud routine); hyperparameter-fitting stability now also confirmed
+  on the same synthetic signal (2026-09-09, cloud routine). No real-data run yet — that's still
+  Mac-only.**
 
 ---
 

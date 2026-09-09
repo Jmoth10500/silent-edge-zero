@@ -781,3 +781,136 @@ tests — 136/136 tests pass via `python3 -m pytest tests/ -v`, up from 106):**
   Mac first, same discipline used for `off_time`/`off_dt`
 - Do not skip re-running the full test suite before committing — all 136 tests must actually
   pass, not just the new ones
+
+---
+
+## 2026-09-09 — Session 13 (autonomous overnight, cloud routine)
+
+**Confirmed the credential boundary first, per this session's explicit instructions:**
+`env | grep THERACINGAPI` returned nothing in this container — empty, exactly as the
+instructions said to expect. Only `CCR_ENABLE_TRACING=true` is set. This cloud routine still
+does not have `THERACINGAPI_USERNAME`/`THERACINGAPI_PASSWORD` or Kaggle credentials, and cannot
+reach the real 558K-row Kaggle-loaded dataset (Postgres on Jonathan's Mac only). Did **not**
+attempt `scripts/collect_racecards.py`, `scripts/collect_weather.py`,
+`scripts/load_kaggle_historical.py`, `scripts/derive_recent_form.py`, `scripts/train_model1.py`,
+or `scripts/train_model2.py` here. Racecard/weather collection and the real historical dataset
+stay **Mac-only** — unconfirmed otherwise in this file, so not assumed.
+
+**This session's scheduled prompt asked for Phase 6 (a synthetic-fixture statistical/logistic
+baseline model, built against the real racecard schema).** That work is not new, for the fourth
+session running: `src/models/model1_logistic_baseline.py` was built Session 5, extended Session
+7, and real-data trained/validated Sessions 8–9 (it lost to the market baseline — RL-006).
+Phase 7 (Model 2, gradient boosting) is also already done (Session 10, RL-008). `git log` at the
+true start of this session (`origin/main`, after fetching — see environment note below) was
+already at `e0dbfec` ("RL-001: real weather turf/AW rainfall interaction feature"), matching
+Session 12's own entry exactly. Per this file's own standing instruction ("read BUILD_LOG.md
+first... follow it"), did not duplicate any of this finished work. Instead picked up Session
+12's own "what the next session should do" item 3(a): **a hyperparameter sweep for Model 2 on a
+synthetic fixture, flagged as still not done since Session 10.**
+
+**Environment note (worth flagging, not a data problem):** this container's local `main` ref
+was stale on first checkout — `git checkout -B main origin/main` before fetching landed on
+`4935d67` (Session 6's commit), seven commits behind the real `origin/main` tip. Running
+`git fetch origin main` first, then re-running the same checkout, landed correctly on `e0dbfec`.
+Same class of issue Session 3 hit with a stale local ref in a fresh container — worth a future
+session always running `git fetch origin main` before trusting a bare `origin/main` ref in a
+freshly cloned container, not just after seeing a suspiciously old HEAD.
+
+**Real (if minor) bug found and fixed, unrelated to credentials:** `tests/test_racecard_theracingapi.py`
+had 4 failing tests on a clean run — `provider.get_racecards(date(2026, 9, 8), ...)` was hardcoded
+against the real capture date, but `TheRacingApiProvider.get_racecards` validates its `for_date`
+argument against the real `date.today()` (the free tier only accepts "today"/"tomorrow"). Once
+the real calendar date rolled past 2026-09-08 (today is 2026-09-09), every one of those 4 tests
+started raising `ValueError` instead of testing what they meant to test. Fixed by calling
+`provider.get_racecards(date.today(), region="GB")` instead of the hardcoded literal — none of
+the assertions depend on the actual calendar value, only on fields mapped from the fixture
+response body, so this doesn't weaken the tests at all, it just stops them from silently rotting
+one calendar day at a time. Worth a future session's attention if this pattern shows up
+elsewhere: search for other hardcoded `date(2026, ...)` literals passed to date-validating code.
+
+**What's genuinely done and verified this session (all real code, all with real passing
+tests — 145/145 tests pass via `python3 -m pytest tests/ -v`, up from 136 + the
+test_racecard_theracingapi.py fix above):**
+- `src/models/model2_hyperparameter_sweep.py` — **new module**. `sweep_gradient_boosting_hyperparameters()`
+  fits `src/models/model2_gradient_boosting.py::fit_gradient_boosting_baseline` once per
+  combination in the cartesian product of a caller-supplied hyperparameter grid (e.g.
+  `max_depth`/`learning_rate`/`max_iter`), predicts on the same held-out race each time, and
+  records whether the expected winner came out top-ranked and with what probability.
+  `summarize_sweep()` rolls a list of results up into pass-rate/min/max/mean-probability summary
+  stats. This directly answers the question flagged as open since Session 10 and repeated,
+  still undone, in Sessions 11 and 12: is Model 2's fitting procedure itself stable across
+  reasonable hyperparameter choices, or fragile in a way that would only be discovered after
+  burning real wall-clock time on Jonathan's Mac running `scripts/train_model2.py` against the
+  real Kaggle data? **Real result (on the synthetic fixture): stable across all 12 combinations
+  tested** (`max_depth` in {2,3,4} x `learning_rate` in {0.1,0.3} x `max_iter` in {30,60}) — every
+  combination correctly ranked the injected always-wins runner-shape highest on a held-out race,
+  none fell to or below uniform. **This is explicitly NOT a real hyperparameter benchmark** — no
+  real outcomes exist yet to tune against — only a check that the fitting mechanics themselves
+  aren't an accident of the current default kwargs. Labelled as such in the module docstring,
+  `docs/RESEARCH_LAB.md` RL-008, and here.
+- `tests/test_model2_hyperparameter_sweep.py` — 9 real tests: input validation (empty grid,
+  empty grid-value list, empty training set, a requested expected-winner absent from the
+  held-out race — all `ValueError`), cartesian-product correctness (a 2x3x1 grid produces
+  exactly 6 distinct combinations, none skipped or duplicated, checked against the literal
+  parameter tuples expected), the real 12-combination stability assertion described above, and
+  `summarize_sweep()`'s roll-up arithmetic hand-verified against both an all-pass and a
+  mixed-pass/fail hand-built result list.
+- `docs/RESEARCH_LAB.md` RL-008 — updated with the real sweep result and its honest scope
+  (stability check, not a benchmark).
+- `docs/SILENT_EDGE_ZERO_ARCHITECTURE.md` — directory listing updated: `model2_hyperparameter_sweep.py`
+  and its test file added.
+- Full test suite re-run and confirmed green after every change: `./db/setup_local_postgres.sh
+  && python3 db/init_db.py` (fresh container, as every prior autonomous session has needed) then
+  `python3 -m pytest tests/ -v` → **145/145 passed**, including the DB-backed `tests/test_leakage.py`
+  tests against a freshly bootstrapped local Postgres in this container, and the
+  `test_racecard_theracingapi.py` date fix above. `pip install pytest psycopg2-binary
+  python-dotenv requests scikit-learn` succeeded cleanly this session, no retries needed.
+
+**What's still blocked (unchanged):**
+1. Betfair Delayed App Key — for real market prices (Phase 4)
+2. Kaggle account credentials in THIS cloud environment — the real 558K-row dataset exists but
+   only on Jonathan's Mac; this routine cannot reach or reproduce it
+3. Racing API results — still needs their Basic tier; not pursuing, Kaggle covers this need
+4. A verified racecard surface/going field — genuinely Mac-only (needs a live API call, same
+   discipline Session 4 used for `off_time`), unchanged since Session 12
+
+**What the next session should do, in priority order:**
+1. **Check for new credentials as always** — `env | grep -iE "racing|kaggle|betfair"`, recent
+   commits, this file. **Also run `git fetch origin main` before trusting a bare `origin/main`
+   ref** — this session's environment note above explains why. If still cloud-only, don't
+   re-derive that, move on.
+2. **The single highest-leverage next steps are all Mac-only and unchanged from Session
+   11/12's own list:** (a) run `scripts/train_model2.py` against the real Kaggle-loaded DB
+   (still not done since Session 10 built it — this session's hyperparameter-stability result
+   means it can be run with confidence in the default kwargs); (b) wire
+   `src/features/draw_bias.py` into a real query over the Kaggle data to actually test RL-004's
+   hypothesis; (c) verify `/v1/racecards/free`'s real response for a surface/going field with a
+   live call so `src/features/weather_features.py` can eventually be wired to a real racecard.
+3. If still cloud-only and blocked on real data: **there is genuinely very little synthetic-only
+   plumbing left worth building blind at this point** — four consecutive autonomous sessions
+   (10, 11, 12, 13) have each found and closed one more remaining gap (Model 2, draw bias,
+   weather, Model 2 hyperparameter stability), and the honest state now is that nearly
+   everything buildable without real data access has been built and tested. Worth considering
+   if truly nothing else surfaces: (a) an `odds_betfair.py` provider stub against Betfair's
+   public Exchange API docs, still flagged as not written since Session 5 — this remains the
+   one clearly-still-open synthetic-only item; (b) re-read this file's full history for any
+   flagged-but-unaddressed design choice (e.g. RL-001's "force AW rainfall to exactly 0.0 vs a
+   fitted per-surface weight" — still just a flagged design choice, not a task) before inventing
+   new work for its own sake.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. Keep this file updated at the end of every session — add a new dated section above this
+   instruction, don't overwrite prior sessions' entries.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result/weather data, or any model's training data, to "demo"
+  anything
+- Do not create accounts on Jonathan's behalf (Betfair)
+- Do not attempt `scripts/collect_racecards.py`, `scripts/collect_weather.py`,
+  `scripts/load_kaggle_historical.py`, `scripts/derive_recent_form.py`, `scripts/train_model1.py`,
+  or `scripts/train_model2.py` from this cloud routine environment — no credentials/real DB here,
+  confirmed again this session, will fail or run against an empty database
+- Do not present `model2_hyperparameter_sweep.py`'s synthetic-fixture stability result as
+  evidence about which hyperparameters are best for real racing — it only shows the fitting
+  procedure itself isn't fragile, nothing about real predictive accuracy
+- Do not skip re-running the full test suite before committing — all 145 tests must actually
+  pass, not just the new ones
