@@ -97,8 +97,24 @@ from src.features.runner_features import (
 
 FEATURE_NAMES = (
     "rating_edge", "draw_edge", "form_edge", "weight_edge", "no_rating_flag",
-    "draw_bias_edge", "going_affinity_edge",
+    "draw_bias_edge",
 )
+# `going_affinity_edge` (RL-001b) is deliberately NOT in the active feature
+# set: real-tested 2026-09-09, it made no difference to Model 1 and
+# measurably WORSENED Model 2 (0.0874 -> 0.0878 pooled Brier, see
+# docs/RESEARCH_LAB.md RL-001b) — a genuine negative result, not a bug.
+# `build_race_features` below still computes it (the plumbing is real,
+# tested, and cheap to keep) so it's a one-line re-add to FEATURE_NAMES if
+# future evidence (e.g. a stricter min_runs_per_side, or more real data)
+# changes this conclusion — it is simply excluded from what either model
+# actually trains on or scores with, same "same feature set" comparison
+# discipline RL-008 established between Model 1 and Model 2.
+#
+# ALL_COMPUTED_FEATURE_NAMES is the full shape build_race_features() always
+# returns (including the excluded going_affinity_edge) — use this, not
+# FEATURE_NAMES, when asserting against the RAW per-runner dict shape;
+# FEATURE_NAMES is specifically "what the models score/fit with".
+ALL_COMPUTED_FEATURE_NAMES = FEATURE_NAMES + ("going_affinity_edge",)
 
 # Untrained default: every weight at 0.0 means every runner's score is 0.0
 # regardless of its features, so predict_race_probabilities falls back to a

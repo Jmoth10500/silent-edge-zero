@@ -535,3 +535,35 @@ tests — 81/81 tests pass via `python3 -m pytest tests/ -v`, up from 80):**
 - Do not create accounts on Jonathan's behalf (Betfair)
 - Do not add a race-level-constant feature (weather, going, anything not runner-varying) directly to either model again without first checking it survives softmax/renormalisation invariance — see this session's structural finding
 - Do not skip re-running the full test suite before committing — all 133 tests must actually pass
+
+---
+
+## 2026-09-09 — Session 10 continued: reverted going_affinity_edge from the active feature set
+
+**Jonathan asked for a recommendation on the going-affinity regression; agreed it should come out of both models, not just Model 2** — reasoning: (1) it hurts Model 2, does nothing for Model 1, no case for keeping it in either; (2) more importantly, Model 1 vs Model 2 is only a valid comparison (RL-008's own design) if they're scored on the SAME feature set — stripping it from only one model would break that going forward.
+
+**What's genuinely done:**
+- `src/models/model1_logistic_baseline.py`: `going_affinity_edge` removed from `FEATURE_NAMES` (the active scoring/fitting set) but kept fully computed in `build_race_features()` — added `ALL_COMPUTED_FEATURE_NAMES = FEATURE_NAMES + ("going_affinity_edge",)` so the real, tested plumbing (`src/features/going_affinity.py`, leakage-safe table-building, wiring through both models' fit/predict) stays intact and is a one-line re-add if future evidence changes the conclusion, rather than being ripped out and lost.
+- `tests/test_model1_logistic_baseline.py` updated to assert against `ALL_COMPUTED_FEATURE_NAMES` where checking the raw per-runner dict shape, `FEATURE_NAMES` where checking what's actually scored — 133/133 tests still pass.
+- **Real confirmation re-run** (`scripts/train_model2.py`, same 9 folds): pooled Brier now EXACTLY matches the known-good pre-going-affinity numbers — Model 2 0.0874, Model 1 0.0875 (both unchanged to 4dp), Model 0 0.0795, and Model 2 beats Model 1 again. The revert works cleanly, no partial/stale state.
+- `docs/RESEARCH_LAB.md` RL-001b updated: status now records the revert and why, explicitly pointing at the one-line re-enable path.
+
+**What this means:** the pipeline is back to its known-good 6-feature (rating/draw/form/weight/no_rating_flag/draw_bias) shape for both models, with going-affinity's real code sitting ready but inactive. Three real feature attempts (form, draw bias, going affinity) are now settled: two neutral (kept), one net-negative (reverted). Nothing left to try on this feature shape without genuinely new information.
+
+**What's still blocked (unchanged):**
+1. Betfair Delayed App Key — the only remaining real, novel-information lever
+2. Racing API's own results — still needs their Basic tier; not pursuing, Kaggle covers this need
+
+**What the next session should do, in priority order:**
+1. Check for new credentials as always.
+2. Real price-movement features remain the one untried, genuinely-new-information lever — blocked on Betfair. Consider raising this with Jonathan directly rather than continuing to flag it passively each session.
+3. There is no further "another feature on the same input shape" scaffolding worth building blind — say this plainly rather than manufacturing a 4th attempt.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. **Always run a long script unbuffered and backgrounded to a real log file**, never `| tee` in the foreground.
+6. Keep this file updated at the end of every session.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result data, or any model's training data, to "demo" anything
+- Do not create accounts on Jonathan's behalf (Betfair)
+- Do not re-enable `going_affinity_edge` in `FEATURE_NAMES` without new evidence (more data, a stricter sample threshold) — the current real result against it stands
+- Do not skip re-running the full test suite before committing — all 133 tests must actually pass

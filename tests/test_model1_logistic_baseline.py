@@ -17,6 +17,7 @@ TOL = 1e-9
 
 from src.features.runner_features import RunnerFeatureInput
 from src.models.model1_logistic_baseline import (
+    ALL_COMPUTED_FEATURE_NAMES,
     DEFAULT_WEIGHTS,
     FEATURE_NAMES,
     TrainingRace,
@@ -53,7 +54,7 @@ def test_build_race_features_centers_on_field_mean():
 
     assert set(feats.keys()) == {1, 2, 3}
     for hid in feats:
-        assert set(feats[hid].keys()) == set(FEATURE_NAMES)
+        assert set(feats[hid].keys()) == set(ALL_COMPUTED_FEATURE_NAMES)
 
     # rating mean = (90+80+70)/3 = 80 -> edges 10, 0, -10
     assert feats[1]["rating_edge"] == 10.0
@@ -90,7 +91,7 @@ def test_build_race_features_missing_fields_default_to_zero():
     # runner 2 has nothing known at all, INCLUDING no official_rating -> every
     # feature is the neutral 0.0 EXCEPT no_rating_flag, which is 1.0 (missing
     # rating is its own signal, not silently folded into "average" — RL-006)
-    expected_runner_2 = {name: 0.0 for name in FEATURE_NAMES}
+    expected_runner_2 = {name: 0.0 for name in ALL_COMPUTED_FEATURE_NAMES}
     expected_runner_2["no_rating_flag"] = 1.0
     assert feats[2] == expected_runner_2
 

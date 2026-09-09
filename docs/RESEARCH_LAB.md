@@ -85,11 +85,22 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
   kind of information entirely (real price-movement data, needs Betfair —
   still blocked on Jonathan's signup), not another feature on this same
   input shape.
-- **Status: TESTING — clean, complete, genuinely tested result.** Real
-  going affinity does not help Model 1 and measurably hurts Model 2 on
-  this feature set. Not recommending this feature be kept in its current
-  form for either model without further evidence it helps once genuinely
-  new information (price movement) is also in play.
+- **Reverted from the active feature set (2026-09-09, same session):**
+  since it made no difference to Model 1 and measurably hurt Model 2,
+  `going_affinity_edge` was removed from `FEATURE_NAMES` (what either
+  model actually trains/scores on) — confirmed via a real re-run that
+  this restores both models to their known-good pre-going numbers exactly
+  (Model 2 0.0874, Model 1 0.0875, unchanged). The computation itself
+  stays real and tested (`src/features/going_affinity.py`,
+  `build_race_features`'s `ALL_COMPUTED_FEATURE_NAMES`) — a one-line
+  re-add to `FEATURE_NAMES` if future evidence changes this conclusion
+  (e.g. a stricter `min_runs_per_side`, or more real data reducing the
+  sparsity Model 2 appears to have overfit to).
+- **Status: TESTING — clean, complete, genuinely tested result, reverted
+  from active use.** Real going affinity does not help Model 1 and
+  measurably hurts Model 2 on this feature set as implemented. Not
+  recommending this feature be re-enabled without further evidence it
+  helps once genuinely new information (price movement) is also in play.
 
 ## RL-002: Overround-removal method choice (proportional vs power vs Shin) materially changes calibration
 
