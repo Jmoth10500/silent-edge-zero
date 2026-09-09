@@ -914,3 +914,133 @@ test_racecard_theracingapi.py fix above):**
   procedure itself isn't fragile, nothing about real predictive accuracy
 - Do not skip re-running the full test suite before committing — all 145 tests must actually
   pass, not just the new ones
+
+---
+
+## 2026-09-09 — Session 14 (autonomous overnight, cloud routine)
+
+**Confirmed the credential boundary first, per this session's explicit instructions:**
+`env | grep THERACINGAPI` returned nothing in this container — empty, exactly as expected. Only
+`CCR_ENABLE_TRACING=true` is set. This cloud routine still does not have
+`THERACINGAPI_USERNAME`/`THERACINGAPI_PASSWORD` or Kaggle credentials, and cannot reach the real
+558K-row Kaggle-loaded dataset (Postgres on Jonathan's Mac only). Did **not** attempt
+`scripts/collect_racecards.py`, `scripts/collect_weather.py`, `scripts/load_kaggle_historical.py`,
+`scripts/derive_recent_form.py`, `scripts/train_model1.py`, or `scripts/train_model2.py` here.
+Racecard/weather collection and the real historical dataset stay **Mac-only** — unconfirmed
+otherwise in this file, so not assumed. `git fetch origin main` first confirmed the local ref
+was already at `origin/main`'s tip (`8c83a46`, Session 13's own commit) — no stale-ref issue this
+time.
+
+**This session's scheduled prompt asked for Phase 6 (a synthetic-fixture statistical/logistic
+baseline model).** That work is not new, for the fifth session running:
+`src/models/model1_logistic_baseline.py` was built Session 5, extended Session 7, real-data
+trained/validated Sessions 8–9 (it lost to the market baseline — RL-006), and Phase 7 (Model 2,
+gradient boosting) is also already done (Session 10, RL-008) with a hyperparameter-stability
+check added Session 13. Per this file's own standing instruction ("read BUILD_LOG.md first...
+follow it"), did not duplicate any of this finished work. Instead picked up Session 13's own
+"what the next session should do" item 3(a) — the one item every session since Session 5 has
+flagged as "the one clearly-still-open synthetic-only item": **an `odds_betfair.py` provider
+stub against Betfair's public Exchange API docs.**
+
+**What's genuinely done and verified this session (all real code, all with real passing
+tests — 153/153 tests pass via `python3 -m pytest tests/ -v`, up from 145):**
+- `src/providers/odds_betfair.py` — **new**, implements `OddsProvider` (already defined in
+  `src/providers/base.py` since Session 1, never previously implemented). Written against
+  Betfair's public Betting API docs (JSON-RPC method names/params/response shapes:
+  `listMarketCatalogue` for runner names, `listMarketBook` with `EX_BEST_OFFERS` for best back/lay
+  prices — a market's runner NAMES and its PRICES come back from two separate calls, keyed only
+  by `selectionId`, so `get_odds()` merges them and skips any selectionId present in the price
+  book but absent from the name catalogue rather than fabricating a name). **This is a STUB,
+  genuinely untested against a real account** — same honest status `racecard_theracingapi.py`
+  carried before Session 4 verified it live — because there is no Betfair Delayed App Key to test
+  against (still BLOCKED, `docs/FREE_DATA_SOURCES.md` #4). Labelled as such in the module
+  docstring, `docs/FREE_DATA_SOURCES.md`, `docs/SILENT_EDGE_ZERO_ARCHITECTURE.md`, and here — do
+  not trust any field mapping below until a live call actually confirms it, the same discipline
+  Session 4 used to catch the real `off_time`/`off_dt` ambiguity bug.
+- **Two real, honestly-documented gaps surfaced, not solved (deliberately, same discipline as
+  `weather_features.py`'s unmapped surface field from Session 12):** (1) Betfair auth needs a
+  session token from a *separate* login step (Betfair's identity service,
+  identitysso.betfair.com) that this provider does not perform — a session token expires and
+  re-authenticating is either an interactive login or a client-certificate setup, which is
+  Jonathan's call to make, not something to build blind against undocumented specifics; (2)
+  Betfair identifies a race by its own `marketId` (e.g. `"1.170258175"`), a completely different
+  ID space from The Racing API's `race_id` (e.g. `"rac_32297295303"`) — there is no
+  course-name/off-time reconciliation logic anywhere in this repo yet to map one provider's race
+  identity to the other's, and wiring this provider into the rest of the pipeline needs that step
+  first. Both documented in the module docstring rather than papered over with a guess.
+- `tests/test_odds_betfair.py` — 8 real tests, against a fixture shaped from Betfair's publicly
+  documented response format (explicitly NOT a real captured response, unlike
+  `test_racecard_theracingapi.py`'s fixture — flagged in the test file's own docstring): missing
+  credentials raises `RuntimeError`; runner names and prices correctly merged by `selectionId`
+  across the two separate calls; the best (first-rung) back/lay price is used, not just any rung;
+  an empty price ladder (no current liquidity on one side) returns `None`, not `0` or a crash; a
+  `selectionId` present in the price book but absent from the name catalogue is skipped entirely,
+  never given a fabricated name; a JSON-RPC top-level `"error"` key (the documented way Betfair
+  signals a failure on an otherwise-200 HTTP response) raises `RuntimeError` rather than being
+  silently swallowed as an empty result; the `_best_price` helper's edge cases (`None`, empty
+  list, single/multiple rungs) tested directly; `observed_at` is a real, timezone-aware UTC
+  datetime captured at call time.
+- `docs/SILENT_EDGE_ZERO_ARCHITECTURE.md` — directory listing updated: the old aspirational
+  "`(odds_betfair.py — NOT YET WRITTEN...)`" placeholder line replaced with the real file's actual
+  status; `test_odds_betfair.py` added to the test listing.
+- `docs/FREE_DATA_SOURCES.md` #4 (Betfair) — updated with the new stub's real status and the two
+  gaps above, without changing the underlying BLOCKED status (still needs Jonathan's account).
+- Full test suite re-run and confirmed green after every change: `./db/setup_local_postgres.sh &&
+  python3 db/init_db.py` (fresh container, as every prior autonomous session has needed) then
+  `python3 -m pytest tests/ -v` → **153/153 passed**, including the DB-backed `tests/test_leakage.py`
+  tests against a freshly bootstrapped local Postgres in this container. `pip install pytest
+  psycopg2-binary python-dotenv requests scikit-learn` succeeded cleanly this session, no retries
+  needed.
+
+**What's still blocked (unchanged):**
+1. Betfair Delayed App Key — for real market prices (Phase 4); the provider code now exists but
+   is genuinely untested against a live account
+2. Kaggle account credentials in THIS cloud environment — the real 558K-row dataset exists but
+   only on Jonathan's Mac; this routine cannot reach or reproduce it
+3. Racing API results — still needs their Basic tier; not pursuing, Kaggle covers this need
+4. A verified racecard surface/going field — genuinely Mac-only (needs a live API call), unchanged
+   since Session 12
+5. **New this session:** a Betfair marketId ↔ Racing API race_id reconciliation step (needed
+   before `odds_betfair.py` can be wired into the rest of the pipeline even once real credentials
+   exist) — not a Jonathan-signup blocker, a genuinely-not-yet-built piece of plumbing
+
+**What the next session should do, in priority order:**
+1. **Check for new credentials as always** — `env | grep -iE "racing|kaggle|betfair"`, recent
+   commits, this file. **Also run `git fetch origin main` before trusting a bare `origin/main`
+   ref** (Session 13's note, still good practice). If still cloud-only, don't re-derive that,
+   move on.
+2. **The single highest-leverage next steps are all Mac-only and unchanged from Sessions
+   11/12/13's own list:** (a) run `scripts/train_model2.py` against the real Kaggle-loaded DB
+   (still not done since Session 10 built it); (b) wire `src/features/draw_bias.py` into a real
+   query over the Kaggle data to actually test RL-004's hypothesis; (c) verify
+   `/v1/racecards/free`'s real response for a surface/going field with a live call so
+   `src/features/weather_features.py` can eventually be wired to a real racecard.
+3. If still cloud-only and blocked on real data: **genuinely very little synthetic-only plumbing
+   remains.** Five consecutive autonomous sessions (10–14) have each closed one more remaining gap
+   (Model 2, draw bias, weather, Model 2 hyperparameter stability, the Betfair odds stub). What's
+   left, if truly nothing else surfaces: (a) the race-identity reconciliation step flagged as
+   blocker 5 above — a pure function matching (course_name, off_time) across two providers'
+   racecards, buildable and testable against synthetic fixtures shaped like both providers' real
+   schemas without needing either provider's live credentials; (b) revisit any flagged-but-still-
+   just-flagged design choice from earlier sessions (e.g. RL-001's "force AW rainfall to exactly
+   0.0 vs. a fitted per-surface weight") before inventing new work for its own sake; (c) be honest
+   in the next summary if nothing genuinely useful remains rather than manufacturing scaffolding.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. Keep this file updated at the end of every session — add a new dated section above this
+   instruction, don't overwrite prior sessions' entries.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result/weather data, or any model's training data, to "demo"
+  anything
+- Do not create accounts on Jonathan's behalf (Betfair)
+- Do not attempt `scripts/collect_racecards.py`, `scripts/collect_weather.py`,
+  `scripts/load_kaggle_historical.py`, `scripts/derive_recent_form.py`, `scripts/train_model1.py`,
+  or `scripts/train_model2.py` from this cloud routine environment — no credentials/real DB here,
+  confirmed again this session, will fail or run against an empty database
+- Do not present `odds_betfair.py`'s docs-shaped fixture test results as evidence its field
+  mapping is correct against a real Betfair account — that has not been checked, unlike
+  `racecard_theracingapi.py`'s real captured-response fixture
+- Do not implement Betfair's login/session-token flow speculatively — it needs Jonathan's account
+  and a real decision (password login vs. certificate), not a guess
+- Do not skip re-running the full test suite before committing — all 153 tests must actually
+  pass, not just the new ones

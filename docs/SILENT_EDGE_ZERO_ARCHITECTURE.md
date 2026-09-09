@@ -39,8 +39,16 @@ silent-edge-zero/
                                   runnable on Jonathan's own machine (has the credentials
                                   in a local .env) — the cloud routine environment does not
                                   have THERACINGAPI_USERNAME/PASSWORD and never assumes it does.
-      (odds_betfair.py         — NOT YET WRITTEN, waiting on a Betfair Delayed App Key —
-                                  this line is aspirational, the file does not exist yet)
+      odds_betfair.py          — STUB, untested against a real account. Written 2026-09-09
+                                  (cloud routine) against Betfair's public Betting API docs
+                                  (JSON-RPC listMarketCatalogue/listMarketBook), same honest
+                                  status racecard_theracingapi.py carried before Session 4
+                                  verified it live. Still BLOCKED on a real Delayed App Key
+                                  (docs/FREE_DATA_SOURCES.md #4) — do not trust the field
+                                  mapping until a live call confirms it. Also flags a real,
+                                  still-unsolved gap: Betfair marketIds and Racing API race
+                                  IDs are different ID spaces with no reconciliation logic
+                                  built yet (see the module docstring).
     market/
       probability.py           — overround removal: proportional, power, Shin methods
       movement.py               — price movement features: opening/current price,
@@ -136,6 +144,12 @@ silent-edge-zero/
     test_racecard_theracingapi.py — LIVE provider tests against a real captured API response
                                   fixture (Session 4) — includes the ambiguous off_time
                                   regression case
+    test_odds_betfair.py        — STUB provider tests against a public-docs-shaped fixture
+                                  (NOT a real captured response, unlike the racecard fixture
+                                  above) — name/price merge by selectionId, an unmatched
+                                  selectionId correctly skipped rather than fabricated, an
+                                  empty price ladder returning None not 0, and a JSON-RPC
+                                  error-key response raising rather than being swallowed
     test_model2_gradient_boosting.py — Model 2 tests: renormalisation edge cases (all-zero,
                                   empty, negative), fit/predict error handling, and a
                                   signal-recovery convergence check — synthetic fixtures only.

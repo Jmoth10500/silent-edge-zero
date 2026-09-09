@@ -76,6 +76,7 @@ Last verified: 2026-09-08 (live checks run this session, see notes per source)
 - **Scraping permission:** N/A, use the API
 - **Reliability:** not yet tested — needs account
 - **Replacement if unavailable:** bookmaker-published odds via The Racing API's odds endpoint (see source 3) can substitute for a rough market-probability baseline if Betfair access stalls
+- **Provider stub:** `src/providers/odds_betfair.py` — written 2026-09-09 (cloud routine) against the public JSON-RPC docs (listMarketCatalogue for runner names, listMarketBook for best back/lay prices), 8 tests in `tests/test_odds_betfair.py` against a docs-shaped fixture (NOT a real captured response). Genuinely untested against a live account, same status racecard_theracingapi.py carried before Session 4 verified it live — do not trust the field mapping until a real call confirms it. Also documents, rather than solves, a real gap: auth needs a session token from a *separate* login step (identitysso.betfair.com) this provider doesn't perform, and Betfair marketIds live in a different ID space from Racing API race IDs with no reconciliation built yet.
 - **Status: BLOCKED — needs you to create a free Betfair account and register for a Delayed App Key (developer.betfair.com). This is the Model 0 (market baseline) data source — important but not as urgent as source 3, since bookmaker odds from Racing API can serve as an interim market-probability proxy.**
 
 ---
