@@ -211,4 +211,66 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
 
 ---
 
+## RL-009: Race-identity reconciliation — matching a Racing API race to a Betfair market
+
+- **The problem, not a hypothesis about racing itself:** `src/providers/odds_betfair.py`
+  (Session 14) takes a Betfair `marketId` (e.g. `"1.170258175"`) directly — it has no way to
+  discover that ID from a Racing API `race_id` (e.g. `"rac_32297295303"`), a completely
+  separate ID space. Without a matching step, Betfair odds can never be joined to a Racing
+  API racecard even once real credentials for both exist. This entry is plumbing, not a racing
+  hypothesis — logged here (rather than only in the architecture doc) because, like RL-004's
+  and RL-008's implementation-vs-hypothesis split, the matching LOGIC being correct is a
+  separate claim from the matching ASSUMPTION (two providers' course names and clocks actually
+  line up) being true, and that second claim is still completely untested.
+- **Implementation:** `src/reconciliation/race_identity.py::reconcile_race_identities()` —
+  matches each Racing API `RaceCard` to at most one Betfair `BetfairMarketIdentity` (a new,
+  minimal dataclass: `market_id`, `venue`, `market_start_time`) by normalized course name
+  (`normalize_course_name()` — case/punctuation/whitespace-insensitive, strips only "Racecourse"
+  and AW/"All Weather" qualifiers, deliberately does NOT fuzzy-match genuinely different course
+  name spellings like "Newmarket (July)" vs "Newmarket July Course") plus closest off-time
+  within a configurable `max_time_diff_minutes` tolerance (default 5). Greedy assignment: the
+  globally closest-in-time candidate pair is assigned first, so a race is never stolen from its
+  true match by a coarser candidate processed earlier. Pure computation only — no HTTP, no DB
+  access, same shape as `draw_bias.py`/`weather_features.py`; the caller is responsible for
+  supplying both providers' data already in a comparable form.
+- **Two real, honestly-flagged gaps this module does NOT resolve (documented in its own
+  docstring, not papered over):**
+  1. **Timezone/wall-clock alignment is unverified.** `RaceCard.off_time` is a "HH:MM" string
+     with no timezone attached (derived from The Racing API's `off_dt`, which does carry a UTC
+     offset, but that offset is discarded once `off_time` is built — see
+     `racecard_theracingapi.py`). Betfair's `marketStartTime` is documented as UTC. Nothing has
+     confirmed live whether these line up to within a few minutes once compared correctly — this
+     function does a NAIVE wall-clock comparison (stripping any tzinfo it's given, not
+     converting it), on the assumption the caller aligns both to the same convention first. A
+     genuine ~60-minute BST/UTC mismatch would silently produce zero matches (safe failure
+     direction), not wrong ones.
+  2. **`BetfairMarketIdentity` is written against Betfair's public `listMarketCatalogue` docs,
+     not a real captured response** — same "STUB, not live-verified" status the rest of
+     `odds_betfair.py` carries. Still BLOCKED on the Betfair Delayed App Key.
+- **Tests:** `tests/test_race_identity.py` — 17 tests: course-name normalization truth table
+  (case/punctuation/whitespace/"Racecourse"/AW-qualifier variants all collapse to the same
+  string; the deliberate "Newmarket (July)" vs "Newmarket July Course" non-match case), exact
+  and within-tolerance time matches, an at-the-boundary exact-tolerance match, a
+  beyond-tolerance non-match, a different-course-same-time non-match, two multi-candidate greedy-
+  assignment cases (closest-in-time pairing wins regardless of list order; a closer racecard
+  wins a shared market over a farther one, leaving the loser correctly unmatched rather than
+  guessed), a tz-aware `market_start_time` handled without crashing, and defensive/input-
+  validation cases (negative tolerance rejected, unparseable `off_time` left unmatched rather
+  than crashing, empty inputs return an empty result). One real bug caught by these tests before
+  being shipped: the first draft's "all weather"/"all-weather" phrase stripping only checked
+  each whitespace-split TOKEN against a suffix list, so the two-word phrase "all weather" never
+  matched (a token can't equal a two-word string) — fixed with a phrase-level regex strip before
+  the per-token filter runs; `pytest` caught it immediately (`test_normalize_strips_aw_qualifiers`
+  failed on `"Kempton - All Weather"` specifically), not shipped uncaught.
+- **`src/providers/odds_betfair.py` docstring updated** to point at this module instead of
+  saying "no reconciliation logic anywhere in this repo yet" — the matching LOGIC now exists and
+  is tested; wiring it into a real end-to-end pipeline (a real racecard + a real Betfair market
+  list, both real credentials) is still Mac-only and still blocked on the same Betfair account
+  gap as everything else in that provider.
+- **Status: DONE (the matching logic) / UNTESTED (the assumption it relies on).** This closes
+  the "genuinely-not-yet-built piece of plumbing" flagged as blocker 5 in BUILD_LOG's Session 14
+  entry. It does NOT unblock Betfair odds — that's still the Delayed App Key, unchanged.
+
+---
+
 *New entries go at the bottom, oldest first, so the log itself is chronological.*

@@ -26,15 +26,21 @@ against undocumented specifics. This provider only consumes an
 already-obtained session token; whoever runs it is responsible for that
 token being current.
 
-A second, separate, real gap (not solved here, flagged honestly rather
-than papered over): Betfair identifies a race by its own marketId (e.g.
-"1.170258175"), which lives in a completely different ID space from The
-Racing API's race_id (e.g. "rac_32297295303"). `get_odds()` below takes a
-Betfair marketId as `race_external_ref` — there is no reconciliation logic
-anywhere in this repo yet that maps one provider's race identity to the
-other's (the natural approach would be matching on course name + off_time,
-but that hasn't been built or tested). Wiring this provider into the rest
-of the pipeline needs that matching step first.
+A second, separate, real gap (not solved HERE, but no longer unbuilt
+elsewhere — flagged honestly rather than papered over): Betfair identifies
+a race by its own marketId (e.g. "1.170258175"), which lives in a
+completely different ID space from The Racing API's race_id (e.g.
+"rac_32297295303"). `get_odds()` below takes a Betfair marketId as
+`race_external_ref` — the matching logic now lives in
+`src/reconciliation/race_identity.py::reconcile_race_identities()`
+(course name + off-time proximity, added 2026-09-09, cloud routine; see
+docs/RESEARCH_LAB.md RL-009), tested against synthetic fixtures shaped
+like both providers' public schemas. It is NOT yet wired into this
+provider or into any real end-to-end pipeline, and its own underlying
+assumption (that the two providers' course-name spelling and clocks
+actually line up on a real side-by-side capture) is still completely
+untested — that needs a real Betfair response, still blocked on the same
+Delayed App Key as the rest of this module.
 
 Set BETFAIR_APP_KEY and BETFAIR_SESSION_TOKEN (in .env, gitignored, never
 commit these) once real access exists.

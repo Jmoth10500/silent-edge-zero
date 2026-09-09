@@ -47,8 +47,9 @@ silent-edge-zero/
                                   (docs/FREE_DATA_SOURCES.md #4) — do not trust the field
                                   mapping until a live call confirms it. Also flags a real,
                                   still-unsolved gap: Betfair marketIds and Racing API race
-                                  IDs are different ID spaces with no reconciliation logic
-                                  built yet (see the module docstring).
+                                  IDs are different ID spaces — reconciliation logic now
+                                  lives in src/reconciliation/race_identity.py (see below),
+                                  not yet wired into this provider (see the module docstring).
     market/
       probability.py           — overround removal: proportional, power, Shin methods
       movement.py               — price movement features: opening/current price,
@@ -74,6 +75,15 @@ silent-edge-zero/
                                   fixtures only — also flags that no racecard field maps a real
                                   surface/going string yet, a separate open gap from the missing
                                   real-data test itself. See RESEARCH_LAB.md RL-001.
+    reconciliation/
+      race_identity.py          — matches a Racing API RaceCard to a Betfair market
+                                  (BetfairMarketIdentity) by normalized course name + closest
+                                  off-time within a tolerance, greedy nearest-first assignment.
+                                  Pure computation, no HTTP/DB access. Added 2026-09-09 (cloud
+                                  routine) — the matching logic is tested against synthetic
+                                  fixtures, but its own assumption (the two providers' course
+                                  names/clocks actually line up live) is untested. Not yet wired
+                                  into odds_betfair.py. See RESEARCH_LAB.md RL-009.
     evaluation/
       calibration.py            — Brier score, log loss, calibration curve (Section 24)
     validation/
@@ -156,6 +166,10 @@ silent-edge-zero/
     test_model2_hyperparameter_sweep.py — cartesian-product correctness, input validation,
                                   a 12-combination signal-recovery stability check, and
                                   summarize_sweep() roll-up stats — synthetic fixtures only.
+    test_race_identity.py       — course-name normalization truth table, exact/tolerance/
+                                  boundary time-matching, greedy multi-candidate assignment,
+                                  tz-aware input handling, and defensive/validation cases —
+                                  synthetic fixtures shaped like both providers' real schemas.
 ```
 
 ## Data integrity rules enforced in code, not just policy
