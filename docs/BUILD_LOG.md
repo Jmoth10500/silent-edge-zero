@@ -677,3 +677,41 @@ tests — 81/81 tests pass via `python3 -m pytest tests/ -v`, up from 80):**
 - **Do not declare an RL-011 "GC" pattern real just because it fits the historical folds that produced it — it must be tested on real out-of-sample data via the same walk-forward harness as every other feature before being trusted or shipped**
 - Do not build the "GC" race-card tab before there's a real, walk-forward-tested signal behind it
 - Do not skip re-running the full test suite before committing — all 183 tests must actually pass
+
+---
+
+## 2026-09-10 — Session 10 continued: RL-011 "GC" investigation — real, disciplined, and rejected
+
+**Did the residual analysis Jonathan asked for, properly:** split the 9 real walk-forward folds into a 7-fold DISCOVERY set and a 2-fold VALIDATION set the discovery step never touches, per the discipline agreed on before starting (never declare a pattern real from the same data that produced it).
+
+**What's genuinely done and verified:**
+- `scripts/analyze_residuals.py` — real discovery pass, comparing confident hits (top pick won) vs confident misses (top pick lost) across 39,518 real top-pick predictions from the 7 discovery folds. Most real differences (rating/form/trainer/jockey edges) just confirmed the existing model features already work. One field stood out as genuinely NEW and not fed to either model: **field_size**, z=-25.3 (the largest of any field), hits averaging 9.0 runners vs misses averaging 10.0.
+- Recognised immediately why this can't be a bare input feature (identical for every runner in a race, invisible to per-race softmax/renormalisation — same trap as RL-001's original weather hypothesis) and reframed it correctly as a post-hoc calibration problem instead.
+- `src/evaluation/temperature_scaling.py` — real, tested (9 tests) temperature-scaling implementation (power-law rescale + renormalise, real grid-search fitting by Brier score).
+- `scripts/validate_field_size_calibration.py` — fits best temperature per field-size bucket using ONLY the 7 discovery folds, applies those fixed temperatures to the 2 validation folds' real predictions (never used in fitting), scores honestly before/after.
+- **Real validation result: no real improvement.** Brier 0.0862->0.0861 (noise), hit rate 23.5%->23.5% (unchanged) on 10,176 real, genuinely held-out validation races. The fitted temperatures were themselves modest (0.85-1.1, close to the T=1.0 no-op) — much less dramatic than the huge discovery z-score suggested.
+- Full suite: **192/192 pass** (was 183, +9 temperature-scaling tests).
+
+**What this means honestly:** the discovery-phase field-size effect was real in the discovery data but didn't survive fresh testing — most likely because field size correlates with other things the model already partially captures, so its raw hit/miss correlation overstated its incremental value once properly isolated. This is exactly the failure mode the discovery/validation split exists to catch, and it caught it. A real, legitimate null result, not a failed session — and it means RL-010 (trainer/jockey, the one genuine gain this session) stands as the actual improvement, not diluted by a false positive getting shipped alongside it.
+
+**No "GC" tab was built.** Nothing survived validation to put on the race card. If Jonathan wants this pursued further, the honest options are: (a) try other candidate patterns from the discovery table that weren't tested (distance_yards had a weaker but real z=3.0, untested), or (b) accept that the two real, disciplined attempts at finding a hidden edge (RL-010 trainer/jockey — worked; RL-011 field-size calibration — didn't) represent a fair, honest picture of what's findable in this data without genuinely new information sources (price movement, still pending Smarkets accumulation or Betfair).
+
+**What's still blocked (unchanged):**
+1. Betfair — still SUSPENDED as of last check
+2. Racing API's own results — still needs their Basic tier
+3. Real Smarkets price-movement data — infrastructure is live, no real accumulated data yet
+
+**What the next session should do, in priority order:**
+1. Check whether real Smarkets price-movement data has accumulated across a race day — this is still the most promising genuinely-new-information lever left untried.
+2. If Jonathan wants more RL-011-style investigation, the distance_yards signal (z=3.0, weaker but real, untested) is the next honest candidate — same discovery/validation discipline required.
+3. Check whether Betfair's account status has cleared, only if there's a concrete reason to think so.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. **Always run a long script unbuffered and backgrounded to a real log file**, never `| tee` in the foreground.
+6. Keep this file updated at the end of every session.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result/price data, or any model's training data, to "demo" anything
+- Do not create accounts on Jonathan's behalf
+- Do not retry the Betfair login endpoint without a concrete reason to think the account status changed
+- Do not revisit the field-size calibration idea without new real validation data — the current real result against it stands
+- Do not skip re-running the full test suite before committing — all 192 tests must actually pass

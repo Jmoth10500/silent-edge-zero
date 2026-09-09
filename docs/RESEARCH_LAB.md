@@ -403,6 +403,71 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
   same walk-forward way, never just declared from the pattern-finding
   step alone.
 
+## RL-011: "GC" residual/miss-pattern analysis (Jonathan's name in
+conversation — kept out of the code/docs; see docs/BUILD_LOG.md's
+honesty note on why)
+
+- **The ask:** Jonathan proposed looking at past top-picks vs. actual
+  winners for a pattern that "unlocks more winners." Agreed to do this as
+  disciplined residual analysis, not data-dredging: split the 9 real
+  walk-forward folds into a DISCOVERY set (first 7, chronologically
+  earliest) for pattern-finding, and a VALIDATION set (last 2, 2025-10
+  onward) the discovery step never touches — any candidate must survive a
+  fresh test on validation before being trusted, exactly the same
+  leakage discipline as every real feature in this project.
+- **Discovery (`scripts/analyze_residuals.py`):** compared real feature
+  values between CONFIDENT HITS (the race's top pick, which won) and
+  CONFIDENT MISSES (the race's top pick, which lost) across 39,518 real
+  top-pick predictions from the 7 discovery folds. Most fields (rating/
+  form/draw-bias/trainer/jockey edges) just confirmed the existing model
+  features are doing their job — of course winners show better values on
+  inputs the model already uses. One field stood out as genuinely new,
+  not fed to either model at all: **field_size** (z=-25.3, the largest of
+  any field checked) — hits averaged 9.0 runners, misses averaged 10.0.
+- **Why this can't be a bare input feature:** field size is identical for
+  every runner in a race — mathematically invisible to a per-race
+  softmax/renormalisation as a raw input (the exact same trap RL-001's
+  original weather hypothesis hit). The correct treatment is a post-hoc
+  CALIBRATION adjustment (temperature scaling per field-size bucket,
+  small fields more confident/sharpened, large fields less confident/
+  flattened), not a new training feature.
+- **Real implementation:** `src/evaluation/temperature_scaling.py` —
+  `apply_temperature()` (real power-law rescaling + renormalisation, hand-
+  verified), `fit_best_temperature()` (real grid search minimising Brier
+  score). 9 tests. `scripts/validate_field_size_calibration.py` fits the
+  best temperature per field-size bucket (small/medium/large, boundaries
+  from the real discovery data) using ONLY the 7 discovery folds, then
+  applies those fixed temperatures to the 2 validation folds' real
+  predictions — genuinely never touched by the fitting step.
+- **Real validation result (2026-09-10, 10,176 real validation races,
+  never used in fitting):**
+
+  | | Brier | LogLoss | Hit rate |
+  |---|---|---|---|
+  | No adjustment | 0.0862 | 0.3031 | 23.5% |
+  | Field-size scaled | 0.0861 | 0.3028 | 23.5% |
+
+  **No real, usable improvement.** The fitted temperatures themselves were
+  modest (small=1.1, medium=0.9, large=0.85 — much closer to the T=1.0
+  no-op than the huge discovery z-score might have suggested), and the
+  effect essentially vanished on genuinely held-out data.
+- **What this means honestly:** the discovery-phase field-size effect was
+  real (a real, large, statistically solid difference in the discovery
+  data), but did NOT survive fresh validation as a usable calibration
+  improvement — most likely because field size correlates with other
+  things the model already partially captures (e.g. bigger fields tend to
+  have a more competitive spread of rating/form edges among runners),
+  so its raw correlation with hit/miss overstated its INCREMENTAL value
+  once properly isolated and tested. This is exactly the failure mode
+  the discovery/validation split was built to catch — a legitimate,
+  informative real result, not a failed session. Reinforces the RL-009
+  conclusion once again: the easy wins are exhausted; RL-010 (trainer/
+  jockey) remains the one genuine gain found this session.
+- **Status: TESTED AND REJECTED.** Not wired into the dashboard, the
+  live pipeline, or either model — a real result that didn't hold up
+  doesn't get shipped. No "GC" tab on the race card; nothing was found
+  that earned one.
+
 ---
 
 *New entries go at the bottom, oldest first, so the log itself is chronological.*
