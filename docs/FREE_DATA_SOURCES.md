@@ -105,9 +105,10 @@ Last verified: 2026-09-08 (live checks run this session, see notes per source)
 |---|---|---|
 | Open-Meteo (weather) | **LIVE** | none — working now |
 | Kaggle historical results | **LIVE** — 558,370 real results loaded (2023–2026) | none — done |
-| The Racing API — racecards + results (free tier confirmed) | BLOCKED | needs your account signup (£0, "Get Started Free") + API key |
-| The Racing API — odds | Needs paid tier (£59.99/mo+) or Betfair instead | not on the free tier at all |
-| Betfair Exchange (market prices) | BLOCKED | needs your free developer account + Delayed App Key |
+| The Racing API — racecards (free tier) | **LIVE** — real account, real credentials tested, real races pulled since Session 4 (2026-09-08); Mac-only, daily-automated (Session 5) | none — done, but only runnable on Jonathan's Mac (`.env` credentials not present in this cloud routine) |
+| The Racing API — results | BLOCKED | needs paid Basic tier (£27.99/mo) — not pursued, Kaggle's historical dataset covers this need for free (Session 6) |
+| The Racing API — odds | BLOCKED | needs paid Standard tier (£59.99/mo+) or Betfair instead |
+| Betfair Exchange (market prices) | BLOCKED | needs your free developer account + Delayed App Key. Provider stub + race-identity reconciliation logic both written and unit-tested (Sessions 14–15), neither live-verified |
 | BHA official ratings | Reference only | scraping permission not checked, deliberately deferred |
 
-**The single highest-value unblock: sign up for The Racing API and send me the key.** That alone lights up racecards, results, and odds — three of the four core data feeds — in one step.
+**This table previously (incorrectly) showed The Racing API as fully BLOCKED — stale since before Session 4 confirmed racecards LIVE. Corrected 2026-09-09 (Session 17) to match this file's own body text above, which already had it right.** The one real remaining unblock left on Jonathan: a free Betfair developer account + Delayed App Key, for real market prices (Phase 4). Kaggle now covers historical outcomes, so Racing API's paid results tier is not being pursued.

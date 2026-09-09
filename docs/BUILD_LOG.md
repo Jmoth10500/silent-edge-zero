@@ -1337,3 +1337,119 @@ tests — 177/177 tests pass via `python3 -m pytest tests/ -v`, up from 170):**
   finding), not something to debug if observed
 - Do not skip re-running the full test suite before committing — all 177 tests must actually
   pass, not just the new ones
+
+---
+
+## 2026-09-09 — Session 17 (autonomous overnight, cloud routine)
+
+**Confirmed the credential boundary first, per this session's explicit instructions:**
+`env | grep THERACINGAPI` returned nothing in this container — empty, exactly as expected. This
+cloud routine still does not have `THERACINGAPI_USERNAME`/`THERACINGAPI_PASSWORD` or Kaggle/
+Betfair credentials, and cannot reach the real 558K-row Kaggle-loaded dataset (Postgres on
+Jonathan's Mac only). Did **not** attempt `scripts/collect_racecards.py`,
+`scripts/collect_weather.py`, `scripts/load_kaggle_historical.py`, `scripts/derive_recent_form.py`,
+`scripts/train_model1.py`, or `scripts/train_model2.py` here. Racecard/weather collection and the
+real historical dataset stay **Mac-only** — unconfirmed otherwise in this file, so not assumed.
+`git fetch origin main` first (Sessions 13/14/15/16's own advice) confirmed the container's local
+`main` ref was stale, same class of issue those sessions already documented — fixed with
+`git checkout -B main origin/main`, not re-diagnosed from scratch.
+
+**This session's scheduled prompt asked for Phase 6 (a synthetic-fixture statistical/logistic
+baseline model built and tested against the real racecard schema).** That work is not new, for
+the eighth session running: `src/models/model1_logistic_baseline.py` was built Session 5,
+extended Session 7, real-data trained/validated Sessions 8–9 (it lost to the market baseline —
+RL-006), and Phase 7 (Model 2, gradient boosting) is also already done (Session 10, RL-008),
+with a hyperparameter-stability check (Session 13) and RL-004/RL-001 wiring into both models'
+feature vectors (Session 16). Per this file's own standing instruction ("read BUILD_LOG.md
+first... follow it"), did not duplicate any of this finished work.
+
+**Did a genuinely thorough check for any real remaining synthetic-only work before concluding
+there is none, rather than taking Session 16's own assessment on faith:**
+- `grep -rn "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` — **zero results.** No dangling markers
+  anywhere in the codebase pointing at unfinished work.
+- Re-read `docs/SILENT_EDGE_ZERO_ARCHITECTURE.md`'s full directory listing and
+  `docs/RESEARCH_LAB.md` end-to-end (RL-001 through RL-009) — every entry's "Status" line and
+  "what's still open" note points at either (a) a real-data test that needs Jonathan's Mac
+  (Kaggle DB, live Racing API/Betfair calls), or (b) a design choice explicitly flagged as "not a
+  task, just worth remembering" (e.g. RL-001's AW-zeroing-vs-fitted-weight choice, RL-008's
+  independent-classifier-vs-joint-model choice) — nothing left in either doc reads as
+  buildable-now-without-real-data-and-not-yet-built.
+- Re-read `docs/FREE_DATA_SOURCES.md` and `docs/FUTURE_PAID_UPGRADES.md` in full — no unactioned
+  item that doesn't require either a real account (Betfair, still the one open signup) or real
+  spend evidence that doesn't exist yet.
+- **Found and fixed one genuine, if small, bug — not new scaffolding, a correction:**
+  `docs/FREE_DATA_SOURCES.md`'s own summary table (bottom of the file) had gone stale since
+  before Session 4 and was actively self-contradictory: the table's "The Racing API" row still
+  said **BLOCKED — needs your account signup**, while the very same file's own body text three
+  sections above (written Session 4/5) has said **LIVE for racecards, BLOCKED only for the paid
+  results tier** for eight sessions running. A future session skimming just the table (a
+  reasonable thing to do, it's the file's own summary) would have wrongly concluded racecards are
+  still blocked. Corrected the table to split racecards (LIVE, Mac-only) from results (BLOCKED,
+  needs paid tier) from odds (BLOCKED), matching the body text, and left a note in the table
+  explaining the correction so it isn't silently reintroduced.
+
+**Ran the full test suite as a real check, not an assumption:** `./db/setup_local_postgres.sh &&
+python3 db/init_db.py` (fresh container, as every prior autonomous session has needed), then
+`python3 -m pytest tests/ -v` → **177/177 passed**, unchanged from Session 16 — no regressions,
+no new tests needed (no new library code was written this session, only a documentation fix).
+
+**Honest conclusion, stated plainly rather than manufactured: there is genuinely no more
+synthetic-only plumbing left to build blind in this project.** Eight consecutive autonomous
+sessions (10–17) have each closed one real gap (Model 2, draw bias, weather, Model 2
+hyperparameter stability, the Betfair odds stub, race-identity reconciliation, wiring draw-bias/
+weather into the models, and now a documentation-accuracy pass that found nothing left to build).
+Every remaining open item in `RESEARCH_LAB.md` and `BUILD_LOG.md`'s own "what's still blocked"
+list needs one of: (1) Jonathan's Mac and the real Kaggle-loaded DB (train_model2.py's real run,
+draw_bias.py's real test), (2) a live API call only possible with real credentials (the racecard
+surface/going field, Betfair's live field mapping), or (3) a real account Jonathan hasn't created
+yet (Betfair Delayed App Key — the one remaining signup). None of these three are something this
+cloud routine can do, has ever been able to do, or will become able to do without a credential
+change explicitly confirmed in this file first.
+
+**What's still blocked (unchanged):**
+1. Betfair Delayed App Key — for real market prices (Phase 4); the provider code and the
+   race-identity matching logic both exist but neither is tested against a live account
+2. Kaggle account credentials in THIS cloud environment — the real 558K-row dataset exists but
+   only on Jonathan's Mac; this routine cannot reach or reproduce it
+3. Racing API results — still needs their Basic tier; not pursuing, Kaggle covers this need
+4. A verified racecard surface/going field — genuinely Mac-only (needs a live API call), unchanged
+   since Session 12
+
+**What the next session should do, in priority order:**
+1. **Check for new credentials as always** — `env | grep -iE "racing|kaggle|betfair"` (remember
+   the `CCR_ENABLE_TRACING` substring false-positive, Session 16's note), recent commits, this
+   file. **Also run `git fetch origin main` before trusting a bare `origin/main` ref** — every
+   session since 3/13/15/16 has needed `git checkout -B main origin/main` after fetching in a
+   fresh container; don't re-diagnose it. If still cloud-only, don't re-derive that, move on.
+2. **The single highest-leverage next steps are all Mac-only, unchanged for eight sessions
+   running:** (a) run `scripts/train_model2.py` against the real Kaggle-loaded DB (still not done
+   since Session 10 built it); (b) compute real `compute_course_distance_draw_bias()` results from
+   the real Kaggle history and pass them through the existing `TrainingRace.draw_bias_lookup`
+   wiring (Session 16) when re-running `scripts/train_model1.py`/`train_model2.py`; (c) verify
+   `/v1/racecards/free`'s real response for a surface/going field with a live call (remember:
+   RL-001's weather hypothesis can only be meaningfully tested via Model 2, not Model 1 — see
+   Session 16's finding, don't re-discover that).
+3. **If still cloud-only: this session's honest conclusion stands until something changes it.**
+   Don't assume a ninth autonomous session will find a tenth synthetic-only task just because the
+   previous eight did — re-verify with the same discipline this session used (grep for TODOs,
+   re-read RESEARCH_LAB.md/ARCHITECTURE.md/FREE_DATA_SOURCES.md end-to-end) rather than either
+   inventing busywork or assuming nothing has changed without checking. If a genuine gap
+   surfaces, build it the same way every prior session has. If not, say so plainly again — that's
+   not a failed session, it's an accurate one, and repeating it honestly is more useful than
+   padding this file with manufactured scaffolding.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. Keep this file updated at the end of every session — add a new dated section above this
+   instruction, don't overwrite prior sessions' entries.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result/weather data, or any model's training data, to "demo"
+  anything
+- Do not create accounts on Jonathan's behalf (Betfair)
+- Do not attempt `scripts/collect_racecards.py`, `scripts/collect_weather.py`,
+  `scripts/load_kaggle_historical.py`, `scripts/derive_recent_form.py`, `scripts/train_model1.py`,
+  or `scripts/train_model2.py` from this cloud routine environment — no credentials/real DB here,
+  confirmed again this session, will fail or run against an empty database
+- Do not manufacture new modules/features purely to have something to commit — this session found
+  genuinely nothing left to build blind and said so, rather than inventing a task
+- Do not skip re-running the full test suite before committing — all 177 tests must actually
+  pass, not just the new ones
