@@ -1180,3 +1180,160 @@ the same as everything else in `odds_betfair.py`.
   is still completely untested, only the matching LOGIC is proven correct
 - Do not skip re-running the full test suite before committing — all 170 tests must actually
   pass, not just the new ones
+
+---
+
+## 2026-09-09 — Session 16 (autonomous overnight, cloud routine)
+
+**Confirmed the credential boundary first, per this session's explicit instructions:**
+`env | grep THERACINGAPI` returned nothing in this container. `env | grep -iE "racing|kaggle|betfair"`
+matched only `CCR_ENABLE_TRACING=true` — a substring false-positive on "tracing" containing
+"racing", not a real credential, same false-positive every prior session would have hit had it
+grepped that broadly. This cloud routine still does not have `THERACINGAPI_USERNAME`/
+`THERACINGAPI_PASSWORD` or Kaggle/Betfair credentials, and cannot reach the real 558K-row
+Kaggle-loaded dataset (Postgres on Jonathan's Mac only). Did **not** attempt
+`scripts/collect_racecards.py`, `scripts/collect_weather.py`, `scripts/load_kaggle_historical.py`,
+`scripts/derive_recent_form.py`, `scripts/train_model1.py`, or `scripts/train_model2.py` here.
+Racecard/weather collection and the real historical dataset stay **Mac-only** — unconfirmed
+otherwise in this file, so not assumed. `git fetch origin main` first confirmed the container's
+local `main` ref was stale (`git log origin/main` was 10 commits ahead of the local `main`
+branch, even though `HEAD` was already correctly detached at `origin/main`'s real tip,
+`c11d21f`, Session 15's own commit) — same class of stale-ref issue Sessions 3/13/15 already
+documented; fixed with `git checkout -B main origin/main`, not re-diagnosed from scratch.
+
+**This session's scheduled prompt asked for Phase 6 (a synthetic-fixture statistical/logistic
+baseline model).** That work is not new, for the seventh session running:
+`src/models/model1_logistic_baseline.py` was built Session 5, extended Session 7, real-data
+trained/validated Sessions 8–9 (it lost to the market baseline — RL-006), and Phase 7 (Model 2,
+gradient boosting) is also already done (Session 10, RL-008). Per this file's own standing
+instruction ("read BUILD_LOG.md first... follow it"), did not duplicate any of this finished
+work. Session 15 explicitly left open whether a seventh synthetic-only task was still genuinely
+worth doing, or whether the honest report was "nothing left to build blind." Reviewed the
+codebase for real, still-open gaps rather than assuming either answer: `src/features/draw_bias.py`
+(RL-004, Session 11) and `src/features/weather_features.py` (RL-001, Session 12) had both existed
+as standalone, unit-tested pure computations for 4-5 sessions but were **never actually wired
+into Model 1 or Model 2's feature vector** — every session since flagged this as open plumbing
+("call `compute_course_distance_draw_bias()` from within `train_model1.py`/`train_model2.py` at
+train time") without ever closing it. This is genuine, non-duplicated, synthetic-fixture-testable
+work, so it's what this session did.
+
+**What's genuinely done and verified this session (all real code, all with real passing
+tests — 177/177 tests pass via `python3 -m pytest tests/ -v`, up from 170):**
+- `src/models/model1_logistic_baseline.py::build_race_features` now takes two new optional,
+  caller-supplied extras: `draw_bias_lookup` (one `compute_course_distance_draw_bias()` result
+  per horse_id) and `weather` (one `weather_race_features()` result, applied identically to
+  every runner in the race — rainfall is a fact about the RACE, not about any one horse).
+  `FEATURE_NAMES` grew from 5 to 9: `draw_bias_edge`/`no_draw_bias_flag` and `rainfall_edge`/
+  `no_weather_flag` join the existing five, each following the same "0.0 = no evidence, paired
+  with a 1.0 'no data' flag" discipline `no_rating_flag` already established. Omitting both
+  extras entirely (every caller in this repo before today) leaves every runner in a race with
+  the SAME neutral value for the new features — a constant across that race's own runners — which
+  provably leaves `predict_race_probabilities`/`fit_logistic_baseline`'s existing behaviour
+  unchanged (softmax is invariant to adding an identical constant to every runner's score; see
+  `test_omitting_extras_matches_prior_behaviour`). `TrainingRace` gained the same two optional
+  fields (default `None`, so every existing `TrainingRace(...)` call anywhere in this repo,
+  including in the Mac-only `scripts/train_model1.py`/`train_model2.py`, still works unchanged —
+  verified both scripts still parse and import cleanly against the new signature). `predict_race_probabilities`
+  gained matching optional kwargs. `src/models/model2_gradient_boosting.py` inherited all of this
+  automatically (it shares `build_race_features`/`FEATURE_NAMES`/`TrainingRace` deliberately, per
+  RL-008's own design) — its `fit_gradient_boosting_baseline`/`predict_race_probabilities` also
+  gained the matching plumbing.
+- **A real, mathematically-provable finding surfaced while doing this, not a bug — the most
+  substantive result of this session:** because `draw_bias_edge` varies PER RUNNER within a race
+  (each horse has its own draw) but `weather` is identical for every runner in a race, and Model
+  1's score is a per-race softmax (conditional logit), `rainfall_edge`/`no_weather_flag`'s fitted
+  weight can **provably never move off its zero initialisation in Model 1**, for any input data,
+  any number of iterations — softmax is invariant to adding the same constant to every
+  alternative's score (the classic conditional-logit "choice-invariant covariate" result, e.g.
+  McFadden 1974). `tests/test_model1_logistic_baseline.py::test_race_constant_weather_feature_never_gets_gradient`
+  proves this directly, using weather values deliberately strongly confounded with the winner
+  across races (if this were an empirical near-zero effect rather than a hard mathematical
+  property, gradient ascent would still pick up some nonzero weight — it doesn't, exactly 0.0).
+  `draw_bias_edge` has no such problem (`test_fit_recovers_draw_bias_signal_sign` confirms
+  gradient ascent recovers its sign normally, same discipline as every other feature's
+  convergence test). **Practical consequence: RL-001's weather hypothesis can never be tested via
+  Model 1 as built, no matter how much real data eventually arrives — it needs Model 2 (an
+  independent per-runner binary classifier, not subject to this constraint) or a genuinely
+  different model shape.** This is exactly the kind of thing worth knowing BEFORE burning a real
+  Mac-side training run trying to get Model 1 to pick up a weather signal that cannot exist there
+  by construction — documented prominently in the module docstring, `docs/RESEARCH_LAB.md`
+  RL-001/RL-006/RL-008, and here so it isn't rediscovered the hard way.
+- 6 new tests in `tests/test_model1_logistic_baseline.py` (existing tests updated for the two new
+  feature-key pairs, not just left to fail): `test_build_race_features_wires_in_draw_bias_lookup`
+  (using `compute_course_distance_draw_bias()`'s own real return shape, not a hand-crafted
+  stand-in), `test_build_race_features_wires_in_weather`, `test_build_race_features_weather_aw_zero_rainfall_is_real_data_not_missing`
+  (0.0 rainfall on AW is real data, distinct from "no weather data at all" — `no_weather_flag`
+  must be 0.0, not 1.0, in that case), `test_omitting_extras_matches_prior_behaviour`,
+  `test_fit_recovers_draw_bias_signal_sign`, and
+  `test_race_constant_weather_feature_never_gets_gradient` (the mathematical proof above). 1 new
+  test in `tests/test_model2_gradient_boosting.py`:
+  `test_fit_and_predict_accept_draw_bias_lookup_and_weather_via_training_race` (plumbing-only —
+  Model 2 is NOT subject to Model 1's inertness proof, but that's a separate, still-untested
+  claim about real predictive power, not proven by this test).
+- `docs/RESEARCH_LAB.md` — RL-001, RL-004, RL-006, RL-008 all updated with the wiring, the
+  mathematical finding, and what's still open (real data for both hypotheses; RL-001 specifically
+  now needs Model 2, not Model 1).
+- Full test suite re-run and confirmed green after every change: `./db/setup_local_postgres.sh
+  && python3 db/init_db.py` (fresh container, as every prior autonomous session has needed) then
+  `python3 -m pytest tests/ -v` → **177/177 passed**, including the DB-backed `tests/test_leakage.py`
+  tests against a freshly bootstrapped local Postgres in this container. `pip install pytest
+  psycopg2-binary python-dotenv requests scikit-learn` succeeded cleanly this session, no retries
+  needed.
+
+**What's still blocked (unchanged):**
+1. Betfair Delayed App Key — for real market prices (Phase 4); the provider code and the
+   race-identity matching logic both exist but neither is tested against a live account
+2. Kaggle account credentials in THIS cloud environment — the real 558K-row dataset exists but
+   only on Jonathan's Mac; this routine cannot reach or reproduce it
+3. Racing API results — still needs their Basic tier; not pursuing, Kaggle covers this need
+4. A verified racecard surface/going field — genuinely Mac-only (needs a live API call), unchanged
+   since Session 12
+
+**What the next session should do, in priority order:**
+1. **Check for new credentials as always** — `env | grep -iE "racing|kaggle|betfair"` (remember:
+   this will false-positive-match `CCR_ENABLE_TRACING` on the "tracing" substring — that is NOT a
+   credential, check the actual variable name before concluding otherwise), recent commits, this
+   file. **Also run `git fetch origin main` before trusting a bare `origin/main` ref** — this
+   session hit the same stale-local-ref issue Sessions 3/13/15 already documented;
+   `git checkout -B main origin/main` after fetching is the fix, don't re-diagnose it. If still
+   cloud-only, don't re-derive that, move on.
+2. **The single highest-leverage next steps are all Mac-only and unchanged from Sessions
+   11–15's own list, now with one addition:** (a) run `scripts/train_model2.py` against the real
+   Kaggle-loaded DB (still not done since Session 10 built it — seven sessions running now); (b)
+   compute real `compute_course_distance_draw_bias()` results from the real Kaggle history and
+   pass them through the now-existing `TrainingRace.draw_bias_lookup` wiring when re-running
+   `scripts/train_model1.py`/`train_model2.py` — this is now a straightforward "pass real data
+   through plumbing that already exists" task, not a design question; (c) verify
+   `/v1/racecards/free`'s real response for a surface/going field with a live call so
+   `weather_features.py` can eventually be wired to a real racecard (note: even once done,
+   remember RL-001's weather hypothesis can only be meaningfully tested via Model 2, not Model 1
+   — see this session's finding above, don't waste Mac time re-discovering that).
+3. If still cloud-only and blocked on real data: **genuinely very little synthetic-only plumbing
+   remains at this point.** Seven consecutive autonomous sessions (10–16) have each closed one
+   more remaining gap (Model 2, draw bias, weather, Model 2 hyperparameter stability, the Betfair
+   odds stub, race-identity reconciliation, and now wiring draw-bias/weather into the actual
+   models). Be honest in the next summary if nothing genuinely useful surfaces rather than
+   manufacturing scaffolding for its own sake — the project now needs Jonathan's Mac time (a real
+   Model 2 run, a real draw-bias test, a surface-field live check) more than another purely
+   synthetic autonomous session, and that's worth saying plainly rather than inventing an eighth
+   task if a genuine one doesn't turn up.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. Keep this file updated at the end of every session — add a new dated section above this
+   instruction, don't overwrite prior sessions' entries.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result/weather data, or any model's training data, to "demo"
+  anything
+- Do not create accounts on Jonathan's behalf (Betfair)
+- Do not attempt `scripts/collect_racecards.py`, `scripts/collect_weather.py`,
+  `scripts/load_kaggle_historical.py`, `scripts/derive_recent_form.py`, `scripts/train_model1.py`,
+  or `scripts/train_model2.py` from this cloud routine environment — no credentials/real DB here,
+  confirmed again this session, will fail or run against an empty database
+- Do not present `draw_bias_edge`'s or `rainfall_edge`'s synthetic-fixture test results as
+  evidence a real draw bias or weather effect exists — RL-004/RL-001's actual hypotheses are
+  still completely untested against real data
+- Do not expect a real Mac-side training run to move Model 1's `rainfall_edge`/`no_weather_flag`
+  weights off 0.0 — that is mathematically guaranteed by this model's shape (see this session's
+  finding), not something to debug if observed
+- Do not skip re-running the full test suite before committing — all 177 tests must actually
+  pass, not just the new ones

@@ -9,13 +9,16 @@ an int, draw as an int, recent_form as an undelimited string like
 """
 import math
 import sys
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 TOL = 1e-9
 
+from src.features.draw_bias import compute_course_distance_draw_bias, HistoricalDrawRecord
 from src.features.runner_features import RunnerFeatureInput
+from src.features.weather_features import weather_race_features
 from src.models.model1_logistic_baseline import (
     DEFAULT_WEIGHTS,
     FEATURE_NAMES,
@@ -24,6 +27,23 @@ from src.models.model1_logistic_baseline import (
     fit_logistic_baseline,
     predict_race_probabilities,
 )
+from src.providers.base import WeatherSnapshot
+
+
+def _weather_snapshot(rainfall_24h_mm=8.0):
+    now = datetime(2026, 9, 9, 6, 0, tzinfo=timezone.utc)
+    return WeatherSnapshot(
+        course_name="Ascot",
+        for_date=date(2026, 9, 9),
+        rainfall_6h_mm=1.0,
+        rainfall_24h_mm=rainfall_24h_mm,
+        temperature_c=12.0,
+        wind_speed_kmh=15.0,
+        wind_direction_deg=180.0,
+        observed_at=now,
+        available_at=now,
+        source="open-meteo",
+    )
 
 
 def _runner(horse_id, age=None, draw=None, weight_lbs=None, official_rating=None, recent_form=None):
@@ -76,6 +96,14 @@ def test_build_race_features_centers_on_field_mean():
     assert feats[2]["no_rating_flag"] == 0.0
     assert feats[3]["no_rating_flag"] == 0.0
 
+    # no draw_bias_lookup/weather passed -> every runner gets the neutral
+    # 0.0 value plus the "no data" flag for both new feature pairs
+    for hid in (1, 2, 3):
+        assert feats[hid]["draw_bias_edge"] == 0.0
+        assert feats[hid]["no_draw_bias_flag"] == 1.0
+        assert feats[hid]["rainfall_edge"] == 0.0
+        assert feats[hid]["no_weather_flag"] == 1.0
+
 
 def test_build_race_features_missing_fields_default_to_zero():
     runners = [
@@ -89,9 +117,14 @@ def test_build_race_features_missing_fields_default_to_zero():
     assert set(feats.keys()) == {1, 2, 3}
     # runner 2 has nothing known at all, INCLUDING no official_rating -> every
     # feature is the neutral 0.0 EXCEPT no_rating_flag, which is 1.0 (missing
-    # rating is its own signal, not silently folded into "average" — RL-006)
+    # rating is its own signal, not silently folded into "average" — RL-006).
+    # No draw_bias_lookup/weather was passed either, so no_draw_bias_flag and
+    # no_weather_flag are also 1.0 for everyone in this race (see
+    # test_omitting_extras_matches_prior_behaviour for why that's a no-op).
     expected_runner_2 = {name: 0.0 for name in FEATURE_NAMES}
     expected_runner_2["no_rating_flag"] = 1.0
+    expected_runner_2["no_draw_bias_flag"] = 1.0
+    expected_runner_2["no_weather_flag"] = 1.0
     assert feats[2] == expected_runner_2
 
     # runner 3 has a draw but nothing else -> draw_edge computed (from the
@@ -109,6 +142,108 @@ def test_build_race_features_missing_fields_default_to_zero():
 
 def test_build_race_features_empty_runners_returns_empty_dict():
     assert build_race_features([]) == {}
+
+
+# ---------------------------------------------------------------------------
+# build_race_features: RL-004/RL-001 wiring (draw_bias_lookup, weather)
+# ---------------------------------------------------------------------------
+
+def test_build_race_features_wires_in_draw_bias_lookup():
+    """RL-004 wiring: draw_bias_lookup is keyed by horse_id, using
+    compute_course_distance_draw_bias's own real return shape (not a
+    hand-crafted stand-in for it) -- a rail draw (1) that always wins and a
+    wide draw (6) that never wins in the synthetic history below."""
+    history = []
+    for _ in range(20):
+        history.append(HistoricalDrawRecord(course_id=1, distance_yards=1600, draw=1, field_size=6, finishing_position=1))
+        history.append(HistoricalDrawRecord(course_id=1, distance_yards=1600, draw=6, field_size=6, finishing_position=6))
+    bias_draw1 = compute_course_distance_draw_bias(history, course_id=1, distance_yards=1600, draw=1, field_size=6)
+    bias_draw6 = compute_course_distance_draw_bias(history, course_id=1, distance_yards=1600, draw=6, field_size=6)
+    assert bias_draw1 is not None and bias_draw6 is not None  # sanity: sample size met
+    assert bias_draw1["win_rate_vs_baseline"] == 0.5   # 1.0 bucket rate - 0.5 baseline
+    assert bias_draw6["win_rate_vs_baseline"] == -0.5  # 0.0 bucket rate - 0.5 baseline
+
+    runners = [
+        _runner(1, draw=1, official_rating=80),
+        _runner(2, draw=6, official_rating=80),
+        _runner(3, draw=3, official_rating=80),  # deliberately no lookup entry
+    ]
+    feats = build_race_features(runners, draw_bias_lookup={1: bias_draw1, 2: bias_draw6})
+
+    assert feats[1]["draw_bias_edge"] == 0.5
+    assert feats[1]["no_draw_bias_flag"] == 0.0
+    assert feats[2]["draw_bias_edge"] == -0.5
+    assert feats[2]["no_draw_bias_flag"] == 0.0
+    # runner 3 has no entry in the lookup -> neutral 0.0 + flagged, never guessed
+    assert feats[3]["draw_bias_edge"] == 0.0
+    assert feats[3]["no_draw_bias_flag"] == 1.0
+
+
+def test_build_race_features_wires_in_weather():
+    """RL-001 wiring: weather is a fact about the RACE, not about any one
+    horse, so unlike draw_bias_lookup it is applied identically to every
+    runner in the race (this is the property that makes it inert for
+    Model 1's softmax -- see test_race_constant_weather_feature_never_gets_gradient
+    below and the module docstring)."""
+    runners = [_runner(1, official_rating=80), _runner(2, official_rating=70)]
+    weather = weather_race_features(_weather_snapshot(rainfall_24h_mm=8.0), surface="Good to Soft (Turf)")
+    feats = build_race_features(runners, weather=weather)
+
+    assert feats[1]["rainfall_edge"] == 8.0
+    assert feats[2]["rainfall_edge"] == 8.0  # identical for every runner in the race
+    assert feats[1]["no_weather_flag"] == 0.0
+    assert feats[2]["no_weather_flag"] == 0.0
+
+
+def test_build_race_features_weather_aw_zero_rainfall_is_real_data_not_missing():
+    """An AW race's rainfall_edge is genuinely 0.0 (RL-001's design choice —
+    see weather_features.turf_rainfall_interaction), which must be
+    distinguished from "no weather data at all": no_weather_flag is 0.0
+    (data IS present), not 1.0."""
+    runners = [_runner(1, official_rating=80)]
+    weather = weather_race_features(_weather_snapshot(rainfall_24h_mm=8.0), surface="Standard (AW)")
+    feats = build_race_features(runners, weather=weather)
+    assert feats[1]["rainfall_edge"] == 0.0
+    assert feats[1]["no_weather_flag"] == 0.0
+
+
+def test_omitting_extras_matches_prior_behaviour():
+    """Softmax invariance sanity check (see the module docstring): whether
+    draw_bias_lookup/weather are omitted entirely, or every runner in the
+    race happens to share the SAME value, predict_race_probabilities is
+    unaffected -- softmax is invariant to adding an identical constant to
+    every runner's score. This is what makes adding these two extras a
+    genuine no-op for every race built before they existed."""
+    runners = [
+        _runner(1, official_rating=88, draw=3, weight_lbs=128, recent_form="1582F3"),
+        _runner(2, official_rating=74, draw=7, weight_lbs=124, recent_form="42P16"),
+        _runner(3, official_rating=91, draw=1, weight_lbs=133, recent_form="211"),
+    ]
+    weights = {
+        "rating_edge": 0.08,
+        "draw_edge": -0.3,
+        "form_edge": -0.15,
+        "weight_edge": 0.02,
+        "no_rating_flag": -0.4,
+        "draw_bias_edge": 0.5,
+        "no_draw_bias_flag": -0.2,
+        "rainfall_edge": 0.01,
+        "no_weather_flag": 0.3,
+    }
+    probs_omitted = predict_race_probabilities(runners, weights=weights)
+
+    same_bias = {"win_rate_vs_baseline": 0.2}  # identical for every runner below
+    lookup = {1: same_bias, 2: same_bias, 3: same_bias}
+    weather = {"turf_rainfall_interaction": 5.0}  # already race-level, so already identical
+    probs_with_constant_extras = predict_race_probabilities(
+        runners, weights=weights, draw_bias_lookup=lookup, weather=weather
+    )
+
+    for hid in (1, 2, 3):
+        assert math.isclose(probs_omitted[hid], probs_with_constant_extras[hid], rel_tol=1e-9), (
+            f"runner {hid}: adding an identical constant to every runner's score "
+            f"must not change the softmax output"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +343,12 @@ def test_fit_single_race_single_step_hand_verified():
     One step at learning_rate=0.05 -> weight["rating_edge"] = 0.05*5.0 = 0.25.
     Every other feature's gradient is 0 (all runners have 0.0 there — both
     runners have a known official_rating, so no_rating_flag is 0.0 for both
-    too), and l2*0=0, so every other weight stays exactly 0.0.
+    too), and l2*0=0, so every other weight stays exactly 0.0. No
+    draw_bias_lookup/weather was passed either, so no_draw_bias_flag and
+    no_weather_flag are both a CONSTANT 1.0 across the two runners (neither
+    has draw-bias/weather data) — a constant feature's gradient
+    (f * (1-0.5) + f * (0-0.5) = f*0.5 - f*0.5 = 0) is 0 regardless of what
+    that constant is, so those weights stay 0.0 too.
     """
     race = TrainingRace(
         runners=[
@@ -224,6 +364,10 @@ def test_fit_single_race_single_step_hand_verified():
     assert weights["form_edge"] == 0.0
     assert weights["weight_edge"] == 0.0
     assert weights["no_rating_flag"] == 0.0
+    assert weights["draw_bias_edge"] == 0.0
+    assert weights["no_draw_bias_flag"] == 0.0
+    assert weights["rainfall_edge"] == 0.0
+    assert weights["no_weather_flag"] == 0.0
 
 
 def test_fit_recovers_rating_signal_sign():
@@ -309,11 +453,96 @@ def test_fit_recovers_debutant_signal_sign():
     )
 
 
+def test_fit_recovers_draw_bias_signal_sign():
+    """Convergence check for the RL-004 wiring (draw_bias_edge): two
+    runners, IDENTICAL on every other feature (same rating, no draw/weight/
+    form given, so draw_edge/weight_edge/form_edge/no_rating_flag are all
+    0.0 for both and cancel out), differing only in their per-runner
+    draw_bias_lookup value. The favoured runner always wins across the
+    synthetic set. Gradient ascent must recover a POSITIVE weight on
+    draw_bias_edge, and the fitted model must then rate that runner above
+    the other on a held-out race -- same discipline (and same caveat: not a
+    benchmark, RL-004's real hypothesis needs real data) as
+    test_fit_recovers_rating_signal_sign."""
+    favoured = {"win_rate_vs_baseline": 0.3}
+    unfavoured = {"win_rate_vs_baseline": -0.3}
+    lookup = {10: favoured, 20: unfavoured}
+    races = []
+    for _ in range(20):
+        runners = [
+            _runner(10, official_rating=75),
+            _runner(20, official_rating=75),
+        ]
+        races.append(TrainingRace(runners=runners, winner_horse_id=10, draw_bias_lookup=lookup))
+
+    weights = fit_logistic_baseline(races, learning_rate=0.1, iterations=300, l2=0.001)
+    assert weights["draw_bias_edge"] > 0.0, (
+        f"expected a positive draw_bias_edge weight after fitting on a set where the "
+        f"favourably-biased runner always wins, got {weights['draw_bias_edge']}"
+    )
+    # nothing else differentiates runners 10 and 20 in any race
+    assert weights["rating_edge"] == 0.0
+    assert weights["draw_edge"] == 0.0
+    assert weights["form_edge"] == 0.0
+    assert weights["weight_edge"] == 0.0
+    assert weights["no_rating_flag"] == 0.0
+
+    held_out = [_runner(10, official_rating=75), _runner(20, official_rating=75)]
+    probs = predict_race_probabilities(held_out, weights=weights, draw_bias_lookup=lookup)
+    assert probs[10] > probs[20], "fitted model should rate the historically favoured-draw runner higher"
+
+
+def test_race_constant_weather_feature_never_gets_gradient():
+    """The real mathematical finding documented in the module docstring:
+    Model 1 is a per-race softmax (conditional logit), and softmax is
+    invariant to adding the same constant to every alternative's score.
+    weather is a fact about the RACE (identical for every runner in it), so
+    rainfall_edge/no_weather_flag can NEVER receive a nonzero gradient in
+    THIS model, no matter what weather values are used or how heavily they
+    correlate with which runner-SHAPE wins across races -- unlike
+    draw_bias_edge (test_fit_recovers_draw_bias_signal_sign above), which
+    varies per runner within a race and is NOT subject to this.
+
+    Deliberately uses weather values that correlate strongly with the
+    winner-shape across races (wet races -> the lower-rated runner wins) --
+    if this were a bug rather than a hard mathematical property, gradient
+    ascent would pick up a nonzero weight here exactly like it does for
+    draw_bias_edge above. It must not."""
+    wet = {"turf_rainfall_interaction": 20.0}
+    dry = {"turf_rainfall_interaction": 0.0}
+    races = []
+    for i in range(20):
+        runners = [
+            _runner(10, official_rating=60),  # lower-rated
+            _runner(20, official_rating=90),  # higher-rated
+        ]
+        # deliberately confounded: on wet races the LOWER-rated runner wins
+        if i % 2 == 0:
+            races.append(TrainingRace(runners=runners, winner_horse_id=10, weather=wet))
+        else:
+            races.append(TrainingRace(runners=runners, winner_horse_id=20, weather=dry))
+
+    weights = fit_logistic_baseline(races, learning_rate=0.1, iterations=300, l2=0.001)
+    assert weights["rainfall_edge"] == 0.0, (
+        "a race-constant feature must never receive a nonzero gradient in a per-race "
+        "softmax model, regardless of how strongly it correlates with the winner across races"
+    )
+    assert weights["no_weather_flag"] == 0.0
+    # the genuinely per-runner rating_edge, by contrast, SHOULD be free to move here
+    # (it isn't asserted to any particular sign -- the confound above pulls it in
+    # different directions each half of the set -- only that it CAN move, unlike
+    # the weather weights, is being demonstrated by leaving it unconstrained)
+
+
 if __name__ == "__main__":
     tests = [
         test_build_race_features_centers_on_field_mean,
         test_build_race_features_missing_fields_default_to_zero,
         test_build_race_features_empty_runners_returns_empty_dict,
+        test_build_race_features_wires_in_draw_bias_lookup,
+        test_build_race_features_wires_in_weather,
+        test_build_race_features_weather_aw_zero_rainfall_is_real_data_not_missing,
+        test_omitting_extras_matches_prior_behaviour,
         test_predict_with_default_weights_is_uniform,
         test_predict_sums_to_one_with_nonzero_weights,
         test_predict_empty_race_raises,
@@ -322,6 +551,8 @@ if __name__ == "__main__":
         test_fit_single_race_single_step_hand_verified,
         test_fit_recovers_rating_signal_sign,
         test_fit_recovers_debutant_signal_sign,
+        test_fit_recovers_draw_bias_signal_sign,
+        test_race_constant_weather_feature_never_gets_gradient,
     ]
     passed = 0
     for t in tests:

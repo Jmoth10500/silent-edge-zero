@@ -13,8 +13,10 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
 - **Implementation:** `src/features/weather_features.py` (2026-09-08, autonomous overnight session) — `is_all_weather_surface()` classifies a caller-supplied surface/going string as AW/turf/ambiguous (never guessed on an unrecognised string), `turf_rainfall_interaction()` is the actual RL-001 feature (24h rainfall passed through on turf, forced to exactly 0.0 on AW, `None` when either input can't be classified), `weather_race_features()` combines a `WeatherSnapshot` (already LIVE, `src/providers/weather_open_meteo.py`, no key needed) with a surface string into a flat feature dict, same "omit missing, never impute" rule as `feature_vector.py`. Pure computation, no HTTP/DB access — the caller supplies both the snapshot and the surface string, same discipline as `draw_bias.py`'s caller-supplied historical records.
 - **Design choice flagged for review, not proven:** forcing the interaction to exactly 0.0 on AW bakes the hypothesis in as a fixed assumption rather than letting a fitted model discover a per-surface effect itself — there's no real data yet to compare the two approaches.
 - **Real gap this exposed:** `src/providers/racecard_theracingapi.py` has no verified surface/going field mapping at all yet — `weather_features.py`'s surface classifier is written against known real GB/IRE going descriptions (e.g. `"Standard (AW)"`, `"Good to Soft (Turf)"`) but nothing in this repo yet supplies that string from a live racecard. Confirming the real field name/format (same "verify against a live response before writing a parser" discipline used for `off_time`/`off_dt` and results) is needed before this feature can run on anything but a manually-supplied surface string.
-- **Training/validation period:** TBD, needs real racecard history (with a verified surface field) + real weather + real results, all joined, before RL-001's actual hypothesis can be tested.
-- **Status: TESTING (partial)** — the feature computation is built and unit-tested (`tests/test_weather_features.py`, 2026-09-08) against synthetic surface strings and a synthetic `WeatherSnapshot`; the real hypothesis (does rainfall genuinely predict turf outcomes more than AW ones) is still completely untested, and is now blocked on two things, not one: real (weather, result) history AND a verified racecard surface field.
+- **Wired into Model 1/2's feature vector (2026-09-09, autonomous overnight session):** `src/models/model1_logistic_baseline.py::build_race_features` now takes an optional `weather` dict (one `weather_race_features()` result) and adds `rainfall_edge`/`no_weather_flag` to the feature set, applied identically to every runner in a race (weather is a race-level fact, not a per-horse one). Model 2 inherits this unchanged since it shares `build_race_features`/`FEATURE_NAMES`.
+- **A real, mathematically-provable finding surfaced by this wiring, not a bug:** because weather is identical for every runner in a race, and Model 1's score is a per-race softmax (conditional logit), `rainfall_edge`'s fitted weight can PROVABLY never move off its zero initialisation in Model 1 — softmax is invariant to adding the same constant to every alternative's score (the classic conditional-logit "choice-invariant covariate" result). `tests/test_model1_logistic_baseline.py::test_race_constant_weather_feature_never_gets_gradient` proves this directly, deliberately using weather values strongly confounded with the winner across races. This means **RL-001 can never be tested via Model 1 as built, no matter how much real data arrives** — it needs Model 2 (an independent per-runner binary classifier, not subject to this constraint) or a genuinely different model shape. Worth remembering before spending real training time trying to get Model 1 to pick up a weather signal.
+- **Training/validation period:** TBD, needs real racecard history (with a verified surface field) + real weather + real results, all joined, before RL-001's actual hypothesis can be tested — and now specifically needs Model 2 or a future model, not Model 1.
+- **Status: TESTING (partial)** — the feature computation and its wiring into Model 1/2 are built and unit-tested (`tests/test_weather_features.py`, `tests/test_model1_logistic_baseline.py`, `tests/test_model2_gradient_boosting.py`) against synthetic surface strings/snapshots; the real hypothesis (does rainfall genuinely predict turf outcomes more than AW ones) is still completely untested, and is now blocked on three things: real (weather, result) history, a verified racecard surface field, and — newly understood this session — a model class other than Model 1's conditional logit.
 
 ## RL-002: Overround-removal method choice (proportional vs power vs Shin) materially changes calibration
 
@@ -39,8 +41,9 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
 - **Why it might work / why it's a placeholder:** genuine draw bias is course- and distance-specific (e.g. a low draw can be a major advantage at one course/distance and irrelevant at another) — that requires historical results grouped by course+distance, which the real 558K-row Kaggle-loaded dataset (Sessions 6/8/9) now genuinely provides, but that data lives only on Jonathan's Mac.
 - **Implementation (placeholder, in the model's actual feature set):** `src/features/runner_features.py::draw_bias_features()` — deliberately does NOT claim any bias direction, just the neutral positional fact.
 - **Implementation (the real hypothesis itself, new this session):** `src/features/draw_bias.py::compute_course_distance_draw_bias()` — buckets historical (course, distance, surface, draw) runners into `num_buckets` draw groups and returns the queried draw's own bucket win rate against the group's overall baseline win rate (the actual "bias" signal), gated by `min_sample_size` so a sparse course/distance/surface combination honestly returns `None` rather than a noisy number. Leakage safety is the CALLER's responsibility (same discipline as `scripts/derive_recent_form.py`) — the module itself does no date filtering and no DB access, pure aggregation only. Tested with hand-verified win-rate arithmetic against synthetic fixtures (`tests/test_draw_bias.py`, 13 tests) — **not yet run against the real Kaggle history**, so RL-004's actual hypothesis is still untested, only its computation is now built and correct.
-- **Training/validation period:** TBD — needs the real Kaggle-loaded (course, distance, draw, finishing_position) rows, Mac-only, plus deciding whether to wire the result into Model 1/2's feature vector as a sixth feature or keep it as a standalone diagnostic first.
-- **Status: TESTING (partial)** — the real computation is built and unit-tested; the hypothesis itself (does a genuine course/distance draw bias exist and does it help) is still open, exactly as before, just no longer blocked on missing plumbing.
+- **Wired into Model 1/2's feature vector (2026-09-09, autonomous overnight session):** the "deciding whether to wire it in" question above is resolved — `src/models/model1_logistic_baseline.py::build_race_features` now takes an optional `draw_bias_lookup` dict (one `compute_course_distance_draw_bias()` result per horse_id) and adds `draw_bias_edge`/`no_draw_bias_flag` to the feature set. Unlike weather (RL-001), this genuinely varies per runner within a race (each horse has its own draw), so it is NOT subject to RL-001's conditional-logit inertness problem — `tests/test_model1_logistic_baseline.py::test_fit_recovers_draw_bias_signal_sign` confirms gradient ascent can and does move this weight. `TrainingRace` carries `draw_bias_lookup` per race so a future Mac-side training run can pass real per-runner draw-bias figures straight in; Model 2 inherits the same wiring unchanged (shares `build_race_features`).
+- **Training/validation period:** TBD — needs the real Kaggle-loaded (course, distance, draw, finishing_position) rows, Mac-only, to actually compute real `compute_course_distance_draw_bias()` results and pass them through the now-existing wiring above.
+- **Status: TESTING (partial)** — the real computation AND its wiring into Model 1/2 are built and unit-tested; the hypothesis itself (does a genuine course/distance draw bias exist and does it help) is still open, exactly as before, just no longer blocked on any missing plumbing at all.
 
 ## RL-005: Market baseline (Model 0) as the bar every real model must clear
 
@@ -94,6 +97,14 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
   (Session 5) and debutant-never-wins (Session 7, cloud) — in
   `tests/test_model1_logistic_baseline.py`, fixtures shaped exactly like the real, verified
   racecard schema (`tests/test_racecard_theracingapi.py`).
+- **Update (2026-09-09, autonomous overnight session): two more optional features wired in,
+  bringing the total to nine.** `draw_bias_edge`/`no_draw_bias_flag` (RL-004) and
+  `rainfall_edge`/`no_weather_flag` (RL-001) — see those entries for detail. The real result
+  above (Model 1 lost to Model 0) predates this and used the original five-feature set; it has
+  NOT been re-run with the fuller feature set yet (Mac-only, needs real draw-bias/weather data
+  joined to real results). Also surfaced this session: `rainfall_edge` can mathematically never
+  affect Model 1's predictions at all (see RL-001) — a real re-run should not expect it to move,
+  that would be the model behaving correctly, not a bug.
 - **Real result (2026-09-08, Session 8 interactive, `scripts/train_model1.py`, walk-forward,
   min_train_days=180, test_window_days=60, iterations=150, real Kaggle-sourced results 2023-06
   to 2026-06):** Model 1 lost to Model 0 (market baseline, RL-005) on Brier score and log loss
@@ -186,6 +197,18 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
   splits, Model 0/1/2 scored side by side on the same folds) is ready to run but has not been —
   that needs Jonathan's Mac (the real DB). Until that real run happens, nothing here is evidence
   Model 2 predicts real racing any better (or worse) than Model 1 did.
+- **Update (2026-09-09, autonomous overnight session):** since Model 2 shares Model 1's
+  `build_race_features`/`FEATURE_NAMES` unchanged (per the design choice above), it
+  automatically inherited the RL-004/RL-001 wiring (`draw_bias_edge`/`no_draw_bias_flag`,
+  `rainfall_edge`/`no_weather_flag`) the moment Model 1 gained it — `TrainingRace.draw_bias_lookup`/
+  `.weather` and `predict_race_probabilities`'s matching kwargs both flow straight into Model 2's
+  fit/predict path with no separate wiring needed
+  (`tests/test_model2_gradient_boosting.py::test_fit_and_predict_accept_draw_bias_lookup_and_weather_via_training_race`).
+  Unlike Model 1, Model 2 is NOT subject to RL-001's conditional-logit inertness proof — it fits
+  each runner as an independent binary classification, so a race-constant weather feature is not
+  mathematically barred from carrying information here. This makes Model 2 (not Model 1) the
+  right place to eventually test RL-001's real hypothesis once real data exists — still
+  completely untested either way.
 - **Hyperparameter-stability check (2026-09-09, cloud routine, Session 13):**
   `src/models/model2_hyperparameter_sweep.py::sweep_gradient_boosting_hyperparameters` fits
   Model 2 once per combination in a `max_depth` x `learning_rate` x `max_iter` grid against the

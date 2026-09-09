@@ -57,6 +57,57 @@ distinct from "average rating", instead of the two being silently
 conflated. Like every other feature here, this is a hypothesis the fitted
 weight's sign will decide, never asserted up front.
 
+**Update — wiring RL-004 (course/distance draw bias) and RL-001 (weather)
+in, still synthetic-only:** `src/features/draw_bias.py` and
+`src/features/weather_features.py` have existed as standalone, unit-tested
+pure computations since Sessions 11/12, but neither was ever actually
+plugged into a model's feature vector — every session since flagged this as
+open plumbing rather than closing it. `build_race_features` now accepts two
+optional, caller-supplied extras: `draw_bias_lookup` (one
+`compute_course_distance_draw_bias()` result per horse_id, keyed the same
+way the rest of this module keys everything) and `weather` (one
+`weather_race_features()` result dict, applied identically to every runner
+in the race — rainfall is a fact about the RACE, not about any one horse).
+Both default to `None`, and when omitted every runner in that race gets the
+SAME neutral 0.0 value plus a 1.0 "no data" flag for the corresponding
+feature — because that flag is then a CONSTANT across every runner in the
+race, and softmax is invariant to adding the same constant to every
+runner's score, omitting these extras changes nothing about
+`predict_race_probabilities`'s or `fit_logistic_baseline`'s existing
+behaviour (verified in
+`tests/test_model1_logistic_baseline.py::test_omitting_extras_matches_prior_behaviour`).
+This is still no claim that a real draw bias or rainfall effect exists —
+RL-004 and RL-001's actual hypotheses remain untested against real data,
+completely unchanged by this — only that the plumbing to let a fitted
+weight test them, the moment real historical draw-bias stats and real
+racecard-linked weather exist, is no longer missing. `TrainingRace` and
+`predict_race_probabilities` both thread the same two optional extras
+through, per-race, so a future Mac-side training run can pass real data in
+without any further wiring.
+
+**A real mathematical finding surfaced while wiring this in, not a bug:**
+`draw_bias_edge` varies PER RUNNER within a race (each horse has its own
+draw), so it behaves like every other feature here. `rainfall_edge`/
+`no_weather_flag` do not — weather is a fact about the RACE, identical for
+every runner in it. Model 1's score is a per-race softmax, and softmax is
+provably invariant to adding the same constant to every alternative's score
+(this is the classic conditional-logit "choice-invariant covariate" result
+— see e.g. McFadden 1974). That means, for THIS model class specifically,
+the rainfall features' fitted weight can never move off its 0.0
+initialisation, for ANY input data, ANY number of iterations — the gradient
+w.r.t. a genuinely race-constant feature is exactly 0.0 by construction, not
+just empirically small. `tests/test_model1_logistic_baseline.py::test_race_constant_weather_feature_never_gets_gradient`
+proves this directly. This is NOT true of Model 2
+(`src/models/model2_gradient_boosting.py`), which fits each runner as an
+independent binary classification rather than a joint per-race choice, so a
+race-level feature genuinely can carry information there — weather is a
+real candidate feature for Model 2, not for Model 1 as built. The wiring
+above is kept in this module anyway (both models share `build_race_features`,
+and `draw_bias_edge` is genuinely useful here) but Model 1's own weight on
+`rainfall_edge`/`no_weather_flag` should be expected to sit at exactly 0.0
+even after a real Mac-side training run — that would be the model working
+correctly, not a bug to chase.
+
 Trained by plain batch gradient ascent on the observed winner's
 log-likelihood, in pure Python — no numpy/scikit-learn. Both are still
 commented out in requirements.txt; this repo has done its own small-scale
@@ -76,7 +127,17 @@ from src.features.runner_features import (
     relative_weight,
 )
 
-FEATURE_NAMES = ("rating_edge", "draw_edge", "form_edge", "weight_edge", "no_rating_flag")
+FEATURE_NAMES = (
+    "rating_edge",
+    "draw_edge",
+    "form_edge",
+    "weight_edge",
+    "no_rating_flag",
+    "draw_bias_edge",
+    "no_draw_bias_flag",
+    "rainfall_edge",
+    "no_weather_flag",
+)
 
 # Untrained default: every weight at 0.0 means every runner's score is 0.0
 # regardless of its features, so predict_race_probabilities falls back to a
@@ -86,7 +147,11 @@ FEATURE_NAMES = ("rating_edge", "draw_edge", "form_edge", "weight_edge", "no_rat
 DEFAULT_WEIGHTS: dict[str, float] = {name: 0.0 for name in FEATURE_NAMES}
 
 
-def build_race_features(runners: Sequence[RunnerFeatureInput]) -> dict[int, dict[str, float]]:
+def build_race_features(
+    runners: Sequence[RunnerFeatureInput],
+    draw_bias_lookup: Optional[dict[int, Optional[dict]]] = None,
+    weather: Optional[dict] = None,
+) -> dict[int, dict[str, float]]:
     """Race-relative, zero-centered feature vector per horse_id — Model 1's
     input row.
 
@@ -99,15 +164,37 @@ def build_race_features(runners: Sequence[RunnerFeatureInput]) -> dict[int, dict
     runner is exactly average. This is a modelling simplification (it
     treats missing != average as if they were interchangeable for scoring
     purposes), flagged honestly rather than silently — see RL-006 — and
-    every runner still gets a full feature dict (all four keys, always),
-    unlike `src/features/feature_vector.py` which omits missing keys
-    entirely; a softmax score needs a real number for every runner or the
-    race can't be scored at all.
+    every runner still gets a full feature dict (every key in FEATURE_NAMES,
+    always), unlike `src/features/feature_vector.py` which omits missing
+    keys entirely; a softmax score needs a real number for every runner or
+    the race can't be scored at all.
 
     `no_rating_flag` is the one exception to "0.0 = no evidence either
     way": it is 1.0 whenever `official_rating` is missing (and 0.0 when
     it's known), so a debutant-shaped runner is distinguishable from a
     genuinely average-rated one — see the module docstring and RL-006.
+
+    `draw_bias_lookup` (optional) is this runner's own
+    `src/features/draw_bias.py::compute_course_distance_draw_bias()` result,
+    keyed by horse_id — pass `None` for a horse_id (or omit it from the
+    dict, or omit `draw_bias_lookup` entirely) when that runner's draw
+    couldn't be bucketed or there wasn't enough historical sample size;
+    `draw_bias_edge` is that result's `win_rate_vs_baseline` when present,
+    0.0 otherwise, with `no_draw_bias_flag` marking which case applies —
+    same "flag, don't silently impute" discipline as `no_rating_flag`.
+
+    `weather` (optional) is one `src/features/weather_features.py::weather_race_features()`
+    result — a fact about the RACE, not about any one horse, so unlike
+    `draw_bias_lookup` it is applied identically to every runner in `runners`.
+    `rainfall_edge` is `weather["turf_rainfall_interaction"]` when present,
+    0.0 otherwise, with `no_weather_flag` marking which case applies.
+
+    Omitting `draw_bias_lookup`/`weather` entirely (the default) gives every
+    runner in the race the SAME 0.0/1.0 pair for the corresponding features
+    — a constant across that race's own runners — which leaves
+    `predict_race_probabilities`/`fit_logistic_baseline`'s behaviour exactly
+    as it was before these two extras existed (softmax is invariant to a
+    constant added to every runner's score); see the module docstring.
 
     Returns {} for an empty `runners` sequence.
     """
@@ -122,6 +209,14 @@ def build_race_features(runners: Sequence[RunnerFeatureInput]) -> dict[int, dict
     known_form = [v for v in form_scores.values() if v is not None]
     mean_form = sum(known_form) / len(known_form) if known_form else None
 
+    draw_bias_lookup = draw_bias_lookup or {}
+    if weather and weather.get("turf_rainfall_interaction") is not None:
+        rainfall_edge = weather["turf_rainfall_interaction"]
+        no_weather_flag = 0.0
+    else:
+        rainfall_edge = 0.0
+        no_weather_flag = 1.0
+
     out: dict[int, dict[str, float]] = {}
     for r in runners:
         rating_edge = rating[r.horse_id]["rating_vs_mean"] if r.horse_id in rating else 0.0
@@ -130,12 +225,21 @@ def build_race_features(runners: Sequence[RunnerFeatureInput]) -> dict[int, dict
         fs = form_scores.get(r.horse_id)
         form_edge = (fs - mean_form) if (fs is not None and mean_form is not None) else 0.0
         no_rating_flag = 0.0 if r.horse_id in rating else 1.0
+
+        db = draw_bias_lookup.get(r.horse_id)
+        draw_bias_edge = db["win_rate_vs_baseline"] if db is not None else 0.0
+        no_draw_bias_flag = 0.0 if db is not None else 1.0
+
         out[r.horse_id] = {
             "rating_edge": rating_edge,
             "draw_edge": draw_edge,
             "form_edge": form_edge,
             "weight_edge": weight_edge,
             "no_rating_flag": no_rating_flag,
+            "draw_bias_edge": draw_bias_edge,
+            "no_draw_bias_flag": no_draw_bias_flag,
+            "rainfall_edge": rainfall_edge,
+            "no_weather_flag": no_weather_flag,
         }
     return out
 
@@ -157,18 +261,22 @@ def _softmax(scores: dict[int, float]) -> dict[int, float]:
 def predict_race_probabilities(
     runners: Sequence[RunnerFeatureInput],
     weights: Optional[dict[str, float]] = None,
+    draw_bias_lookup: Optional[dict[int, Optional[dict]]] = None,
+    weather: Optional[dict] = None,
 ) -> dict[int, float]:
     """Model 1's prediction: softmax over the linear score of each runner's
     race-relative feature vector, keyed by horse_id. Sums to 1.0 (up to
     float rounding) by construction. `weights=None` (default) uses
     DEFAULT_WEIGHTS — i.e. an untrained model, which is provably uniform
-    (see `test_predict_with_default_weights_is_uniform`). Raises ValueError
-    for an empty race, matching `model0_market_baseline.predict_race_probabilities`.
+    (see `test_predict_with_default_weights_is_uniform`). `draw_bias_lookup`/
+    `weather` are passed straight through to `build_race_features` — see
+    its docstring. Raises ValueError for an empty race, matching
+    `model0_market_baseline.predict_race_probabilities`.
     """
     if not runners:
         raise ValueError("cannot predict an empty race")
     weights = weights if weights is not None else DEFAULT_WEIGHTS
-    feats = build_race_features(runners)
+    feats = build_race_features(runners, draw_bias_lookup=draw_bias_lookup, weather=weather)
     scores = {hid: _linear_score(f, weights) for hid, f in feats.items()}
     return _softmax(scores)
 
@@ -180,10 +288,17 @@ class TrainingRace:
     result once real results exist — in this repo today every caller of
     `fit_logistic_baseline` in tests/ builds these from synthetic fixtures,
     clearly labelled as such, per the ground rule against presenting
-    fabricated data as real."""
+    fabricated data as real.
+
+    `draw_bias_lookup`/`weather` are the same optional per-race extras
+    `build_race_features` accepts (see its docstring) — both default to
+    `None`, matching every `TrainingRace` built anywhere in this repo before
+    they existed."""
 
     runners: Sequence[RunnerFeatureInput]
     winner_horse_id: int
+    draw_bias_lookup: Optional[dict[int, Optional[dict]]] = None
+    weather: Optional[dict] = None
 
 
 def fit_logistic_baseline(
@@ -223,7 +338,10 @@ def fit_logistic_baseline(
                 f"winner_horse_id={race.winner_horse_id} is not among this "
                 f"race's own runners {sorted(horse_ids)}"
             )
-        race_features.append((build_race_features(race.runners), race.winner_horse_id))
+        feats = build_race_features(
+            race.runners, draw_bias_lookup=race.draw_bias_lookup, weather=race.weather
+        )
+        race_features.append((feats, race.winner_horse_id))
 
     n_races = len(race_features)
     for _ in range(iterations):

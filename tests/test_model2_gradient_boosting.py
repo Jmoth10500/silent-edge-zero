@@ -172,6 +172,50 @@ def test_predict_sums_to_one_and_covers_every_runner():
         assert 0.0 <= p <= 1.0
 
 
+def test_fit_and_predict_accept_draw_bias_lookup_and_weather_via_training_race():
+    """RL-004/RL-001 wiring, Model 2 side: TrainingRace.draw_bias_lookup and
+    .weather (added to src/models/model1_logistic_baseline.py, shared by
+    this module via build_race_features) must round-trip through
+    fit_gradient_boosting_baseline and predict_race_probabilities without
+    error. Unlike Model 1's per-race softmax (see
+    test_model1_logistic_baseline.py::test_race_constant_weather_feature_never_gets_gradient),
+    Model 2 fits each runner as an INDEPENDENT binary classification, so a
+    race-level weather feature is not mathematically barred from carrying
+    information here — this test only proves the plumbing works end to end,
+    not that Model 2 actually learns anything from it (that needs real
+    data, same as every other claim in this module)."""
+    favoured = {"win_rate_vs_baseline": 0.3}
+    unfavoured = {"win_rate_vs_baseline": -0.3}
+    wet = {"turf_rainfall_interaction": 15.0}
+    races = []
+    for i in range(15):
+        runners = [
+            _runner(10, official_rating=60, draw=3),
+            _runner(20, official_rating=75, draw=5),
+            _runner(30, official_rating=90, draw=7),
+        ]
+        winner = 30 if i % 3 == 0 else (20 if i % 3 == 1 else 10)
+        races.append(TrainingRace(
+            runners=runners,
+            winner_horse_id=winner,
+            draw_bias_lookup={10: unfavoured, 20: favoured, 30: favoured},
+            weather=wet,
+        ))
+
+    model = fit_gradient_boosting_baseline(races, **_FAST_KWARGS)
+
+    held_out = [
+        _runner(10, official_rating=60, draw=3),
+        _runner(20, official_rating=75, draw=5),
+        _runner(30, official_rating=90, draw=7),
+    ]
+    probs = predict_race_probabilities(
+        held_out, model=model, draw_bias_lookup={10: unfavoured, 20: favoured, 30: favoured}, weather=wet
+    )
+    assert set(probs.keys()) == {10, 20, 30}
+    assert math.isclose(sum(probs.values()), 1.0, rel_tol=1e-9)
+
+
 def test_fit_recovers_rating_signal_on_held_out_race():
     """Not a benchmark (needs real outcomes for that — see RL-006/RL-008,
     same discipline as Model 1's own convergence tests) — just a pipeline
@@ -216,6 +260,7 @@ if __name__ == "__main__":
         test_predict_empty_race_raises,
         test_predict_without_model_raises,
         test_predict_sums_to_one_and_covers_every_runner,
+        test_fit_and_predict_accept_draw_bias_lookup_and_weather_via_training_race,
         test_fit_recovers_rating_signal_on_held_out_race,
     ]
     passed = 0

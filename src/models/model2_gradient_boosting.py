@@ -56,11 +56,22 @@ xgboost/lightgbm/pandas/polars) is needed yet.
 **Same features as Model 1, deliberately:** this module reuses
 `src/models/model1_logistic_baseline.py::build_race_features`/
 `FEATURE_NAMES` (rating vs. field mean, draw percentile vs. 0.5,
-recency-weighted form vs. field mean, weight vs. field mean, and the
-missing-rating indicator) rather than inventing a new feature set. The
-point of Model 2 is to test whether a different MODEL CLASS over the SAME
+recency-weighted form vs. field mean, weight vs. field mean, the
+missing-rating indicator, and — since the RL-004/RL-001 wiring below —
+course/distance draw bias and turf/AW rainfall, each with its own
+missing-data flag) rather than inventing a new feature set. The point of
+Model 2 is to test whether a different MODEL CLASS over the SAME
 information does better — isolating that one variable — not to also change
-what the model can see.
+what the model can see. `fit_gradient_boosting_baseline`/
+`predict_race_probabilities` both read `TrainingRace.draw_bias_lookup`/
+`.weather` the same optional way Model 1 does (see that module's
+docstring) — omitted, as every caller in this repo's tests still does, they
+default to the same 0.0/1.0-flagged neutral values Model 1 falls back to,
+which is a real feature value here too (unlike Model 1's softmax, Model 2's
+independent per-runner classifier has no built-in invariance to a constant
+feature, but a genuinely CONSTANT feature carries no split information for
+a tree either way, so this is still a no-op in practice, not just in
+theory).
 """
 from dataclasses import dataclass
 from typing import Optional, Sequence
@@ -151,7 +162,9 @@ def fit_gradient_boosting_baseline(
                 f"winner_horse_id={race.winner_horse_id} is not among this "
                 f"race's own runners {sorted(horse_ids)}"
             )
-        feats = build_race_features(race.runners)
+        feats = build_race_features(
+            race.runners, draw_bias_lookup=race.draw_bias_lookup, weather=race.weather
+        )
         for hid, f in feats.items():
             X.append(_feature_row(f))
             y.append(1 if hid == race.winner_horse_id else 0)
@@ -166,6 +179,8 @@ def fit_gradient_boosting_baseline(
 def predict_race_probabilities(
     runners: Sequence[RunnerFeatureInput],
     model: Optional[GradientBoostingModel] = None,
+    draw_bias_lookup: Optional[dict] = None,
+    weather: Optional[dict] = None,
 ) -> dict:
     """Model 2's prediction: each runner's independent P(win) from the
     fitted binary classifier, renormalised to sum to 1.0 across the race
@@ -178,7 +193,9 @@ def predict_race_probabilities(
     produce a probability at all (it would raise inside sklearn instead,
     less clearly). Also raises ValueError for an empty race, matching
     `model0_market_baseline.predict_race_probabilities` and
-    `model1_logistic_baseline.predict_race_probabilities`.
+    `model1_logistic_baseline.predict_race_probabilities`. `draw_bias_lookup`/
+    `weather` are passed straight through to `build_race_features` — see
+    Model 1's module docstring.
     """
     if not runners:
         raise ValueError("cannot predict an empty race")
@@ -189,7 +206,7 @@ def predict_race_probabilities(
             "fit_gradient_boosting_baseline"
         )
 
-    feats = build_race_features(runners)
+    feats = build_race_features(runners, draw_bias_lookup=draw_bias_lookup, weather=weather)
     horse_ids = [r.horse_id for r in runners]
     X = [_feature_row(feats[hid]) for hid in horse_ids]
     raw = model.classifier.predict_proba(X)[:, 1]  # P(class=1, i.e. "wins")
