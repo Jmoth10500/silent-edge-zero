@@ -750,6 +750,17 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     decide how much weight each horse carries. <strong>Higher OR = a faster/better-rated horse.</strong>
     A horse with no OR yet (often a first-time-out debutant) shows no OR chip at all — never
     guessed.</p>
+    <p><strong>The scale is open-ended, not capped at 100</strong> — it goes as high as a horse's
+    real ability:</p>
+    <ul>
+      <li><strong>40–90</strong> — most ordinary handicappers</li>
+      <li><strong>90–110</strong> — good handicappers / minor stakes horses</li>
+      <li><strong>110–130</strong> — Group/Graded class</li>
+      <li><strong>130–140+</strong> — elite Flat horses (top milers/sprinters)</li>
+      <li><strong>150–170+</strong> — the best National Hunt (jumps) chasers/hurdlers can rate even higher</li>
+    </ul>
+    <p>There's no single "average" — it depends entirely on the class of race. A maiden
+    hurdle will mostly show ratings in the 80s–110s; a Group 1 will be 120+.</p>
     <h3>Form — recent finishing positions</h3>
     <p>Read <strong>left to right, oldest race first</strong> — so the <strong>last character
     is the horse's most recent run</strong>. Each character is one race:</p>
