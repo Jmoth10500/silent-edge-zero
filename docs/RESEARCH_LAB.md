@@ -141,6 +141,61 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
   See RL-006 for the resulting real re-run.
 - **Status: DONE.**
 
+## RL-008: Model 2 — gradient boosting over the same feature set as Model 1
+
+- **Hypothesis:** a genuinely different model class (gradient-boosted trees,
+  `HistGradientBoostingClassifier`) over the SAME race-relative feature set
+  as Model 1 (rating/draw/form/weight edges + no_rating_flag) should beat
+  Model 1, since tree ensembles can capture nonlinear interactions a linear
+  softmax cannot — and the real question this repo cares about (RL-006):
+  can either fitted model beat the market baseline (Model 0)?
+- **Why scikit-learn here, unlike Model 1:** reimplementing boosted-tree
+  splitting well in pure Python is a real project of its own, not a good
+  use of time the way Model 1's 4-5 parameter logistic regression was.
+  scikit-learn is free/open-source and was already anticipated in
+  `requirements.txt` since Phase 6 — see `src/models/model2_gradient_boosting.py`'s
+  module docstring for the full reasoning.
+- **Implementation:** `src/models/model2_gradient_boosting.py` — reuses
+  `model1_logistic_baseline.build_race_features` unchanged (same 5 features,
+  so any accuracy difference is attributable to model class, not feature
+  engineering), framed as per-runner binary win/lose classification with
+  raw probabilities renormalised to sum to 1.0 per race (no native
+  race-grouped-choice objective in `HistGradientBoostingClassifier`).
+  `tests/test_model2_gradient_boosting.py` — 8 tests: renormalisation edge
+  cases (including an all-zero fallback to uniform), empty/single-class/
+  bad-winner error handling, and a synthetic rating-determines-winner
+  convergence check, mirroring Model 1's own test discipline.
+- **Real result (2026-09-09, `scripts/train_model2.py`, walk-forward,
+  min_train_days=180, test_window_days=120, max_iter=50, real Kaggle-sourced
+  results 2023-06 to 2026-06, 9 folds, ~487k real runner predictions,
+  identical folds/data to Model 1's own real test):** pooled Brier=0.0873,
+  log loss=0.3086. **Beat Model 1 (Brier 0.0875, LogLoss 0.3097) on pooled
+  Brier score, and on 8 of 9 individual folds** — a small but consistent
+  edge from the different model class over the identical feature set,
+  confirming the RL-008 hypothesis's first half. **Did NOT beat Model 0**
+  (the de-vigged market baseline, Brier 0.0795, LogLoss 0.2738) on Brier
+  score on any fold — the gap to the market (0.0078) is essentially
+  unchanged from Model 1's own gap (0.0080), i.e. changing model class
+  barely moved the needle against the market, even though it did help
+  slightly against Model 1. Calibration is reasonable through the
+  well-populated 0.0-0.3 bins (which cover >99% of the real predictions);
+  the 0.5+ bins have too little volume (n<150 combined) to say anything
+  about calibration there.
+- **What this means honestly:** the "complicated system does not
+  automatically win" principle (Section 39) held again — a materially more
+  complex model, same information, still lost to the market. This is
+  further evidence the bottleneck here is the FEATURE set (only 5
+  race-relative stats, no market/price data, no course/distance-specific
+  draw bias, no weather), not the model class Model 1 already exhausted
+  with a simpler, cheaper model. Chasing a third model class on this same
+  5-feature input isn't a promising next step; richer features (RL-001,
+  RL-004) or genuinely new information (price movement, Betfair once
+  unblocked) are.
+- **Status: TESTING — clean, complete result.** Model 2 beats Model 1
+  narrowly, both still lose clearly to Model 0. Not pursuing model-class
+  tuning (hyperparameter sweep) further against this same feature set — see
+  reasoning above.
+
 ---
 
 *New entries go at the bottom, oldest first, so the log itself is chronological.*

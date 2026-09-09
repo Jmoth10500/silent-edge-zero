@@ -3,8 +3,14 @@ requests>=2.31.0
 psycopg2-binary>=2.9.9
 python-dotenv>=1.0.0
 
-# Phase 6+ (not yet used, listed for when modelling starts)
-# scikit-learn>=1.4.0
+# Phase 7 — Model 2 (gradient boosting, docs/RESEARCH_LAB.md RL-008): a
+# hand-rolled boosted-tree implementation isn't a good use of time the way
+# Model 1's 4-parameter logistic regression was (see model1's own docstring
+# for that reasoning) — scikit-learn's HistGradientBoostingClassifier is
+# free/open-source, already anticipated here since Phase 6, and this is the
+# point real justification exists to add it.
+scikit-learn>=1.4.0
+numpy>=1.26.0
 # catboost>=1.2.0
 # xgboost>=2.0.0
 # lightgbm>=4.3.0

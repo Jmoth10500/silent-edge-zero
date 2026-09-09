@@ -79,13 +79,31 @@ def _mocked_provider():
     return provider
 
 
+class _FrozenDate(date):
+    """The fixture is dated 2026-09-08, and get_racecards() compares
+    for_date against date.today() to pick the free tier's 'today'/'tomorrow'
+    param (see the source docstring) — so these tests broke the day after
+    they were written, purely from calendar drift, nothing to do with the
+    provider itself. Freeze 'today' at the fixture's own date instead of
+    hardcoding a day that expires."""
+
+    @classmethod
+    def today(cls):
+        return date(2026, 9, 8)
+
+
+def _mocked_get(mock_get):
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = REAL_FIXTURE_RESPONSE
+    mock_resp.raise_for_status.return_value = None
+    mock_get.return_value = mock_resp
+
+
 def test_region_filter_excludes_non_gb():
     provider = _mocked_provider()
-    with patch("src.providers.racecard_theracingapi.requests.get") as mock_get:
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = REAL_FIXTURE_RESPONSE
-        mock_resp.raise_for_status.return_value = None
-        mock_get.return_value = mock_resp
+    with patch("src.providers.racecard_theracingapi.requests.get") as mock_get, \
+         patch("src.providers.racecard_theracingapi.date", _FrozenDate):
+        _mocked_get(mock_get)
 
         cards = provider.get_racecards(date(2026, 9, 8), region="GB")
 
@@ -98,11 +116,9 @@ def test_ambiguous_off_time_is_corrected_via_off_dt():
     not be silently misread as 01:12 (which happened when off_time was
     trusted directly instead of deriving it from off_dt)."""
     provider = _mocked_provider()
-    with patch("src.providers.racecard_theracingapi.requests.get") as mock_get:
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = REAL_FIXTURE_RESPONSE
-        mock_resp.raise_for_status.return_value = None
-        mock_get.return_value = mock_resp
+    with patch("src.providers.racecard_theracingapi.requests.get") as mock_get, \
+         patch("src.providers.racecard_theracingapi.date", _FrozenDate):
+        _mocked_get(mock_get)
 
         cards = provider.get_racecards(date(2026, 9, 8), region="GB")
 
@@ -114,11 +130,9 @@ def test_ambiguous_off_time_is_corrected_via_off_dt():
 
 def test_distance_furlongs_converted_to_yards():
     provider = _mocked_provider()
-    with patch("src.providers.racecard_theracingapi.requests.get") as mock_get:
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = REAL_FIXTURE_RESPONSE
-        mock_resp.raise_for_status.return_value = None
-        mock_get.return_value = mock_resp
+    with patch("src.providers.racecard_theracingapi.requests.get") as mock_get, \
+         patch("src.providers.racecard_theracingapi.date", _FrozenDate):
+        _mocked_get(mock_get)
 
         cards = provider.get_racecards(date(2026, 9, 8), region="GB")
 
@@ -128,11 +142,9 @@ def test_distance_furlongs_converted_to_yards():
 
 def test_runner_fields_mapped_correctly():
     provider = _mocked_provider()
-    with patch("src.providers.racecard_theracingapi.requests.get") as mock_get:
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = REAL_FIXTURE_RESPONSE
-        mock_resp.raise_for_status.return_value = None
-        mock_get.return_value = mock_resp
+    with patch("src.providers.racecard_theracingapi.requests.get") as mock_get, \
+         patch("src.providers.racecard_theracingapi.date", _FrozenDate):
+        _mocked_get(mock_get)
 
         cards = provider.get_racecards(date(2026, 9, 8), region="GB")
 

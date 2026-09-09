@@ -428,3 +428,40 @@ tests — 81/81 tests pass via `python3 -m pytest tests/ -v`, up from 80):**
 2. Racing API's own results — still needs their Basic tier; not pursuing, Kaggle covers this need
 
 **Suggested next step:** Phase 7 — build Model 2 (gradient boosting) against the same real walk-forward harness now proven out end-to-end, or add a genuinely new feature (course/distance draw bias, weather) to Model 1 before concluding this feature family is exhausted.
+
+---
+
+## 2026-09-09 — Session 10 (interactive, Jonathan's own machine)
+
+**Phase 7 done: Model 2 (gradient boosting) built, tested, and real-walk-forward-validated against the same real Kaggle data and same folds as Model 1, per the standing suggestion at the end of Session 9.**
+
+**What's genuinely done and verified:**
+- Added `scikit-learn`/`numpy` to `requirements.txt` (installed, `sklearn 1.9.0`) — genuinely justified now, unlike Model 1's deliberate pure-Python choice: reimplementing boosted-tree splitting well isn't a good use of time for 5 features. See `src/models/model2_gradient_boosting.py`'s module docstring for the full reasoning.
+- `src/models/model2_gradient_boosting.py` — Model 2, `HistGradientBoostingClassifier` over the exact same 5-feature race-relative set as Model 1 (`build_race_features`, unchanged, imported directly), so any accuracy difference is attributable to model class alone. Framed as per-runner binary win/lose classification (no native race-grouped-choice objective in sklearn's GBM), raw probabilities renormalised to sum to 1.0 per race via `_renormalise_race` (falls back to uniform if every runner scores exactly 0.0, same honesty pattern as Model 1's untrained case).
+- `tests/test_model2_gradient_boosting.py` — 8 tests: renormalisation (including the all-zero fallback), empty-race-list/single-class-target/bad-winner-id error handling, sums-to-1/range checks, and a synthetic rating-determines-winner convergence check mirroring Model 1's own.
+- **Fixed 4 pre-existing, unrelated test failures found while running the full suite:** `tests/test_racecard_theracingapi.py`'s fixture was hardcoded to `date(2026, 9, 8)` and the provider validates `for_date` against `date.today()` — those tests silently broke the day after they were written, purely from calendar drift (today is 2026-09-09 now), nothing to do with the provider itself. Fixed by freezing `date.today()` to the fixture's own date via a small `_FrozenDate` subclass patched alongside the existing `requests.get` mock, rather than hardcoding a day that will expire again. Full suite: **89/89 pass** (was 81, +8 new Model 2 tests).
+- `scripts/train_model2.py` — new, real, walk-forward trains Model 2 and scores it against Model 0 AND Model 1 on identical folds (reuses `scripts/train_model1.py`'s `load_races`, imported as a module — no duplicated loader logic).
+- **Real result** (min_train_days=180, test_window_days=120, max_iter=50 — cheaper settings than Model 1's run because a first attempt at the default test_window_days=60/max_iter=150 took >16 min wall-clock across ~50 CPU-minutes and had to be killed/rerun; the process note below explains why): 9 walk-forward folds, 2023-06 to 2026-06, ~487K real runner predictions, identical data/folds to Model 1's real test. **Model 2 pooled Brier=0.0873/LogLoss=0.3086 — beat Model 1 (0.0875/0.3097) on pooled Brier and on 8 of 9 individual folds, a small but consistent and genuine improvement — but did NOT beat Model 0** (market baseline, 0.0795/0.2738) on any fold. The gap to the market barely moved (0.0078 vs Model 1's 0.0080). Full detail and interpretation in `docs/RESEARCH_LAB.md` RL-008.
+- **Process note:** the first real training attempt (default `test_window_days=60`, `max_iter=150`) ran for 15m52s wall-clock (confirmed after the fact via `time`) but produced ZERO stdout before being killed — Python fully buffers stdout when piped through `tee` (not line-buffered like a real terminal), so all of that run's output was lost when it was killed just as (it turned out) it had actually finished. Rerun with `python3 -u` (unbuffered) and a background shell job so output streamed to a log file in real time — this is the fix for any future long-running script in this repo: always use `python3 -u ... > logfile 2>&1 &`-style unbuffered background execution, never `| tee` for a long job you might need to check on or kill mid-run.
+- `docs/RESEARCH_LAB.md` — new entry RL-008 with the full real result and honest interpretation (model class alone barely moves the market gap; the bottleneck is the feature set, not the model).
+- Full test suite re-run and green: `python3 -m pytest tests/ -v` → **89/89 passed**.
+
+**What this means honestly:** Section 39's "complicated system does not automatically win" held for a second time — a materially more complex model (gradient boosting vs. logistic regression), same 5 features, still lost clearly to the dumb market baseline, though it did edge out Model 1. This is real evidence the bottleneck right now is the FEATURE set (5 race-relative stats, no market/price signal, no course/distance-specific draw bias, no weather), not the model class — Model 1 already showed simple beats complex isn't guaranteed to reverse just by adding model complexity. Chasing a third model class on this same input isn't the promising next step; richer features are.
+
+**What's still blocked (unchanged):**
+1. Betfair Delayed App Key — real market prices (Phase 4)
+2. Racing API's own results — still needs their Basic tier; not pursuing, Kaggle covers this need
+
+**What the next session should do, in priority order:**
+1. **Check for new credentials as always** — env vars, recent commits, this file.
+2. **The real next lever, per RL-008's own conclusion, is richer features, not another model class:** course/distance-specific draw bias (RL-004 — the Kaggle `raceform.csv` has `course`/`distance` columns, real historical draw-position-vs-finish data is derivable the same way `derive_recent_form.py` derived form), or a weather-interaction feature (RL-001 — `weather_snapshot` table already has live Open-Meteo data, though it's only been collecting since Session 1/2026-09-08 so historical coverage is thin; the Kaggle data has no weather column, worth checking before assuming this is buildable against the historical set at all).
+3. Consider a Model 2 hyperparameter sweep (max_depth/learning_rate/max_iter) only if richer features are exhausted first — RL-008 explicitly recommends against tuning this same 5-feature input further before that.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB (Mac sessions probably don't need it if Postgres is already running locally, but cloud/fresh-container sessions always will).
+5. **Always run a long script (>~2 min expected) unbuffered and backgrounded to a real log file** (`python3 -u script.py > logfile 2>&1 &`), never `| tee` in the foreground — see this session's process note above for why that lost a full 16-minute run's output.
+6. Keep this file updated at the end of every session.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result data, or any model's training data, to "demo" anything
+- Do not create accounts on Jonathan's behalf (Betfair)
+- Do not present Model 2's result as anything other than what it is: beats Model 1 narrowly, still loses to the market
+- Do not skip re-running the full test suite before committing — all 89 tests must actually pass, not just the new ones
