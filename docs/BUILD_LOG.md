@@ -604,3 +604,40 @@ tests — 81/81 tests pass via `python3 -m pytest tests/ -v`, up from 80):**
 - Do not create accounts on Jonathan's behalf (Betfair — already created by him, just still blocked)
 - Do not retry the Betfair login endpoint repeatedly without a concrete reason to think the account status changed — real lockout risk
 - Do not skip re-running the full test suite before committing — all 136 tests must actually pass
+
+---
+
+## 2026-09-09 — Session 10 continued: dashboard, and a real free Betfair alternative found (Smarkets)
+
+**Built a local live-predictions dashboard**, then, since Betfair remained blocked, researched genuinely free/open-source alternatives specifically for market/price data — not results (Kaggle already covers historical results).
+
+**What's genuinely done and verified:**
+- `scripts/generate_dashboard.py` + `dashboard.html` (gitignored, regenerated fresh each run) — a real local HTML dashboard reading only already-locked `prediction` rows: every race, both models' top picks, an agree/disagree badge, and honest real backtest context (Model 0/1/2 Brier scores) so it's never presented as more validated than it is. Not a hosted Artifact — this is Jonathan's own private data, viewed locally, same pattern as this ecosystem's other Dave reports. Wired into the `predict-races` LaunchAgent chain (07:15 daily) and verified via the real scheduled path. 4 new tests on the pure rendering helpers.
+- **Real research, live-verified, not assumed:** checked whether any free/open-source alternative to Betfair exists specifically for market/price-movement data. Found **Smarkets** — a genuine separate betting exchange with a real public read-only API needing **zero authentication** (confirmed live: pulled real GB race data — Doncaster, Epsom Downs, Lingfield, Warwick, Worcester — with no account, no key). Checked and ruled out Betfair's own "Historic Data" downloads (tied to the same suspended account) and every other option found (Racing Post, Sportradar, OddsMatrix) — all paid.
+- **Real price semantics verified live before trusting them:** Smarkets' quotes endpoint returns prices as basis-points implied probability (10000 = 100%) — confirmed by summing a real race's full book of best-bid probabilities (78.6%, sane for a thin >24h-out back book) rather than assuming the units.
+- `src/providers/odds_smarkets.py` — real provider: paginated event listing (Smarkets' own pagination uses a real `next_page` cursor, correctly followed), win-market lookup, contract+quote fetch combined into per-runner `exchange_back`/`exchange_lay`/`midprice`/`spread` (all real decimal odds, matching `market_snapshot`'s existing schema exactly). 8 tests against real captured response fixtures (same discipline as `test_racecard_theracingapi.py`).
+- `scripts/collect_smarkets_prices.py` — real, matches Smarkets events to our own `race` rows by (normalised course name, off_time within 10 minutes) and runners by (country-suffix-stripped, case-insensitive horse name), skipping any race where the runner counts don't line up rather than trusting a partial match. Writes real `market_snapshot` rows (a time series by design — every run adds new rows, never overwrites). 5 tests on the pure matching logic.
+- **Real, honest limitation confirmed live:** Smarkets, like Open-Meteo's forecast endpoint before it, only exposes UPCOMING markets — today's already-finished races are gone from its listings by the time this was built. So this can only build a price-movement dataset forward from now, same shape as the weather/coordinate work — it cannot backfill the 2023-2026 Kaggle window. Ran it live against both today (0 matches — races already finished) and tomorrow (0 matches — tomorrow's racecard doesn't exist in our DB until the 07:00 collector runs) to confirm the real HTTP flow runs cleanly end-to-end with no errors in both honest zero-match cases.
+- New `com.silentedgezero.collect-smarkets-prices` LaunchAgent — runs every 20 minutes, all day (StartInterval, not calendar-windowed — simpler than a race-hours-only schedule and the script is cheap enough that continuous polling costs nothing real). Loaded and verified via a real manual trigger.
+- Full suite: **153/153 pass** (was 136, +4 dashboard, +8 Smarkets provider, +5 Smarkets matching).
+
+**What this means:** the project now has a real, live, free, unblocked path to price-movement data that doesn't depend on Betfair at all — but it genuinely can't produce a result until tomorrow (or later), once both (a) a real racecard exists for a given day and (b) the poller has run at least twice across that day to see a price change. Nothing to report on accuracy/movement yet — this is infrastructure, not a result.
+
+**What's still blocked/pending:**
+1. Betfair — still SUSPENDED as of last check; not retried this session (no new reason to think it's changed)
+2. Racing API's own results — still needs their Basic tier
+3. **New, real, and expected:** no Smarkets price-movement DATA exists yet — the collector only just started running. Check back after at least one full race day has run through both collectors.
+
+**What the next session should do, in priority order:**
+1. Check `market_snapshot` for real rows — if a race day has passed with the collector running, verify real matches happened (not just clean zero-match runs) and spot-check a few against what's plausible.
+2. Once real price snapshots exist across a race's build-up, build the actual price-MOVEMENT feature (`src/market/movement.py` already exists and is tested against synthetic data — this is the first point real Smarkets data could feed it for real).
+3. Check whether Betfair's account status has cleared, but only if there's a concrete reason to think so.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. Keep this file updated at the end of every session.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result/price data, or any model's training data, to "demo" anything
+- Do not create accounts on Jonathan's behalf
+- Do not retry the Betfair login endpoint without a concrete reason to think the account status changed
+- Do not treat a single Smarkets price reading as validated against a second source — only the unit interpretation (basis points) was checked, not cross-exchange accuracy
+- Do not skip re-running the full test suite before committing — all 153 tests must actually pass

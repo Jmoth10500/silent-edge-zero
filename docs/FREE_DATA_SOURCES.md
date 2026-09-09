@@ -76,7 +76,26 @@ Last verified: 2026-09-08 (live checks run this session, see notes per source)
 - **Scraping permission:** N/A, use the API
 - **Reliability:** not yet tested — needs account
 - **Replacement if unavailable:** bookmaker-published odds via The Racing API's odds endpoint (see source 3) can substitute for a rough market-probability baseline if Betfair access stalls
-- **Status: BLOCKED — needs you to create a free Betfair account and register for a Delayed App Key (developer.betfair.com). This is the Model 0 (market baseline) data source — important but not as urgent as source 3, since bookmaker odds from Racing API can serve as an interim market-probability proxy.**
+- **Status: BLOCKED — account created, Delayed App Key issued (2026-09-09), but a real session-login call still returns `LIMITED_ACCESS`/`SUSPENDED` even after identity verification. Credentials in `.env`. Do not retry the login endpoint repeatedly (real lockout risk) — only retry with a concrete reason to think the status changed.**
+
+---
+
+## 4b. Smarkets Exchange — market prices (back/lay), the real free alternative to Betfair
+
+- **URL:** https://api.smarkets.com/v3/ (public API), https://docs.smarkets.com/ (real docs, live)
+- **Data supplied:** exchange back/lay prices (as basis-points implied probability, confirmed live), market IDs, runner/contract IDs, real per-runner form/rating/draw/jockey/trainer info (a bonus — richer than needed)
+- **API availability:** real, public, read-only REST API
+- **Auth required:** **none** — confirmed live 2026-09-09, no signup, no key, no account
+- **Free limits:** none found/hit; genuinely free, no tier
+- **Attribution:** not checked in depth — low priority for a private research tool, revisit if this ever becomes anything public-facing
+- **Commercial restrictions:** not checked in depth — same caveat
+- **Redistribution restrictions:** not checked — do not redistribute raw Smarkets price data as a feed without checking their terms first
+- **Terms checked:** not read in full — only the API behaviour was verified live, not their ToS
+- **Scraping permission:** N/A — real public API, not scraped
+- **Reliability:** confirmed live 2026-09-09 (real GB events pulled: Doncaster, Epsom Downs, Lingfield, Warwick, Worcester)
+- **Real limitation, confirmed live, same shape as Open-Meteo's forecast endpoint (RL-001):** only exposes UPCOMING markets — no historical/retroactive endpoint. Cannot backfill the 2023-2026 backtest window; can only build a real price-movement dataset going forward from whenever polling starts (`scripts/collect_smarkets_prices.py`, LaunchAgent every 20 min).
+- **Replacement if unavailable:** none needed right now — this itself is the replacement for Betfair while that account is blocked.
+- **Status: LIVE and in use, forward-only.** `src/providers/odds_smarkets.py` + `scripts/collect_smarkets_prices.py`, real tests against real captured fixtures, real LaunchAgent running.
 
 ---
 
