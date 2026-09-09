@@ -145,17 +145,17 @@ def render_race(race: dict) -> str:
             m1_note = f'<span class="m1-note">M1 prefers this one ({_pct(m1.get(h, 0.0))})</span>'
 
         rows_html.append(f"""
-        <details class="{row_class}">
-          <summary>
+        <div class="{row_class}">
+          <div class="runner-summary">
             <span class="runner-name">{h}{' <span class="top-badge">TOP PICK</span>' if is_top else ''}</span>
             <span class="runner-prob">
               {m1_note}
               {_bar_html(p2, 'var(--series-1)')}
               <span class="prob-value">{_pct(p2)}</span>
             </span>
-          </summary>
+          </div>
           {_stat_row(stats.get(h, {}))}
-        </details>""")
+        </div>""")
 
     agree_badge = '<span class="agree-badge agree">MODELS AGREE</span>' if agree else '<span class="agree-badge disagree">MODELS DISAGREE</span>'
 
@@ -323,19 +323,13 @@ def render_html(race_date: date, races: list[dict]) -> str:
   }}
   .agree-badge.agree {{ background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }}
   .agree-badge.disagree {{ background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }}
-  details.runner-row {{ border-top: 1px solid var(--border); }}
-  details.runner-row:first-child {{ border-top: none; }}
-  details.runner-row summary {{
+  .runner-row {{ border-top: 1px solid var(--border); }}
+  .runner-row:first-child {{ border-top: none; }}
+  .runner-row .runner-summary {{
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 8px 6px; cursor: pointer; list-style: none;
+    padding: 8px 6px 0;
   }}
-  details.runner-row summary::-webkit-details-marker {{ display: none; }}
-  details.runner-row summary::after {{
-    content: "›"; color: var(--text-muted); font-size: 16px; margin-left: 8px;
-    transform: rotate(90deg); transition: transform .15s;
-  }}
-  details[open].runner-row summary::after {{ transform: rotate(270deg); }}
-  details.runner-row.top-pick {{ background: color-mix(in srgb, var(--series-1) 6%, transparent); border-radius: 6px; }}
+  .runner-row.top-pick {{ background: color-mix(in srgb, var(--series-1) 6%, transparent); border-radius: 6px; }}
   .runner-name {{ font-size: 13.5px; }}
   .top-badge {{
     font-size: 9px; font-weight: 700; letter-spacing: .03em; color: var(--series-1);
