@@ -43,7 +43,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import psycopg2
 
-from scripts.train_model1 import build_split_draw_bias_table, load_races
+from scripts.train_model1 import build_split_connections_tables, build_split_draw_bias_table, load_races
 from src.features.runner_features import RunnerFeatureInput
 from src.models.model1_logistic_baseline import DEFAULT_WEIGHTS
 from src.models.model1_logistic_baseline import TrainingRace as M1TrainingRace
@@ -53,8 +53,8 @@ from src.models.model2_gradient_boosting import TrainingRace as M2TrainingRace
 from src.models.model2_gradient_boosting import fit_gradient_boosting
 from src.models.model2_gradient_boosting import predict_race_probabilities as m2_predict
 
-MODEL1_NAME, MODEL1_VERSION = "statistical_v1", "1.0"
-MODEL2_NAME, MODEL2_VERSION = "gbm_v1", "1.0"
+MODEL1_NAME, MODEL1_VERSION = "statistical_v1", "1.1"
+MODEL2_NAME, MODEL2_VERSION = "gbm_v1", "1.1"
 
 
 def get_or_create_model_version(conn, name: str, version: str, feature_version: str, description: str) -> int:
@@ -82,7 +82,8 @@ def load_todays_races(conn, race_date: date):
     cur.execute(
         """
         SELECT r.id, r.race_name, r.off_time, r.course_id, c.name, r.distance_yards, r.going,
-               rs.horse_id, h.name, rs.age, rs.draw, rs.weight_lbs, rs.official_rating, rs.recent_form
+               rs.horse_id, h.name, rs.age, rs.draw, rs.weight_lbs, rs.official_rating, rs.recent_form,
+               rs.trainer_id, rs.jockey_id
         FROM race r
         JOIN course c ON c.id = r.course_id
         JOIN runner_snapshot rs ON rs.race_id = r.id
@@ -97,7 +98,8 @@ def load_todays_races(conn, race_date: date):
     order: list[int] = []
     horse_names: dict[int, str] = {}
     for (race_id, race_name, off_time, course_id, course_name, distance_yards, going,
-         horse_id, horse_name, age, draw, weight_lbs, official_rating, recent_form) in cur:
+         horse_id, horse_name, age, draw, weight_lbs, official_rating, recent_form,
+         trainer_id, jockey_id) in cur:
         if race_id not in by_race:
             by_race[race_id] = {
                 "race_name": race_name, "off_time": off_time, "course_id": course_id,
@@ -108,6 +110,7 @@ def load_todays_races(conn, race_date: date):
         by_race[race_id]["runners"].append(RunnerFeatureInput(
             horse_id=horse_id, age=age, draw=draw, weight_lbs=weight_lbs,
             official_rating=official_rating, recent_form=recent_form,
+            trainer_id=trainer_id, jockey_id=jockey_id,
         ))
         horse_names[horse_id] = horse_name
     cur.close()
@@ -170,6 +173,9 @@ def main():
     print(f"{len(historical):,} real historical races available for fitting.")
 
     draw_bias_table = build_split_draw_bias_table(historical)
+    trainer_table, jockey_table = build_split_connections_tables(historical)
+    print(f"Real trainer strike-rate table: {len(trainer_table):,} trainers with >=20 real runs. "
+          f"Jockey table: {len(jockey_table):,} jockeys.")
 
     m1_train = [
         M1TrainingRace(runners=r.runners, winner_horse_id=r.winner_horse_id,
@@ -177,7 +183,10 @@ def main():
         for r in historical
     ]
     print("Fitting Model 1 (logistic baseline) on all real historical data...")
-    m1_weights = fit_logistic_baseline(m1_train, iterations=150, draw_bias_table=draw_bias_table)
+    m1_weights = fit_logistic_baseline(
+        m1_train, iterations=150, draw_bias_table=draw_bias_table,
+        trainer_table=trainer_table, jockey_table=jockey_table,
+    )
 
     m2_train = [
         M2TrainingRace(runners=r.runners, winner_horse_id=r.winner_horse_id,
@@ -185,15 +194,20 @@ def main():
         for r in historical if len(r.runners) >= 2
     ]
     print("Fitting Model 2 (gradient boosting) on all real historical data...")
-    m2_model = fit_gradient_boosting(m2_train, max_iter=150, draw_bias_table=draw_bias_table)
+    m2_model = fit_gradient_boosting(
+        m2_train, max_iter=150, draw_bias_table=draw_bias_table,
+        trainer_table=trainer_table, jockey_table=jockey_table,
+    )
 
     m1_version_id = get_or_create_model_version(
-        conn, MODEL1_NAME, MODEL1_VERSION, "6-feature-v1",
-        "Logistic baseline, real fit on all historical data as of the prediction date, live daily prediction (Phase 8).",
+        conn, MODEL1_NAME, MODEL1_VERSION, "8-feature-v1-connections",
+        "Logistic baseline, real fit on all historical data as of the prediction date, "
+        "live daily prediction (Phase 8). Adds real trainer/jockey strike-rate features (RL-010).",
     )
     m2_version_id = get_or_create_model_version(
-        conn, MODEL2_NAME, MODEL2_VERSION, "6-feature-v1",
-        "Gradient boosting, real fit on all historical data as of the prediction date, live daily prediction (Phase 8).",
+        conn, MODEL2_NAME, MODEL2_VERSION, "8-feature-v1-connections",
+        "Gradient boosting, real fit on all historical data as of the prediction date, "
+        "live daily prediction (Phase 8). Adds real trainer/jockey strike-rate features (RL-010).",
     )
 
     todays_races, meta, horse_names = load_todays_races(conn, race_date)
@@ -210,7 +224,8 @@ def main():
 
         if not already_predicted(conn, r.race_id, m1_version_id):
             m1_probs = m1_predict(r.runners, weights=m1_weights, draw_bias_table=draw_bias_table,
-                                   course_id=r.course_id, distance_yards=r.distance_yards)
+                                   course_id=r.course_id, distance_yards=r.distance_yards,
+                                   trainer_table=trainer_table, jockey_table=jockey_table)
             insert_predictions(conn, r.race_id, m1_version_id, m1_probs)
             n_m1 += 1
             top = max(m1_probs.items(), key=lambda kv: kv[1])
@@ -220,7 +235,8 @@ def main():
 
         if not already_predicted(conn, r.race_id, m2_version_id):
             m2_probs = m2_predict(r.runners, m2_model, draw_bias_table=draw_bias_table,
-                                   course_id=r.course_id, distance_yards=r.distance_yards)
+                                   course_id=r.course_id, distance_yards=r.distance_yards,
+                                   trainer_table=trainer_table, jockey_table=jockey_table)
             insert_predictions(conn, r.race_id, m2_version_id, m2_probs)
             n_m2 += 1
             top = max(m2_probs.items(), key=lambda kv: kv[1])

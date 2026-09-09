@@ -28,6 +28,8 @@ class RunnerFeatureInput:
     official_rating: Optional[int] = None
     recent_form: Optional[str] = None  # e.g. '1-3-6-2', '132F6'
     days_since_last_run: Optional[int] = None
+    trainer_id: Optional[int] = None
+    jockey_id: Optional[int] = None
 
 
 # Non-completion codes in a UK/Ireland form string, scored as a bad finish

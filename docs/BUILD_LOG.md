@@ -641,3 +641,39 @@ tests — 81/81 tests pass via `python3 -m pytest tests/ -v`, up from 80):**
 - Do not retry the Betfair login endpoint without a concrete reason to think the account status changed
 - Do not treat a single Smarkets price reading as validated against a second source — only the unit interpretation (basis points) was checked, not cross-exchange accuracy
 - Do not skip re-running the full test suite before committing — all 153 tests must actually pass
+
+---
+
+## 2026-09-09/10 — Session 10 continued: dashboard iterations, then RL-010 — the first real feature win
+
+**Dashboard, per a long sequence of real Jonathan feedback on the built UI:** single primary model (M2) not two columns, always-visible racecard stats (not click-to-expand), races open as a popup dialog instead of a long scroll, dark mode toggle, a confidence-overview bar chart, live per-course weather (Open-Meteo, real GB coordinates), a real market-favourite chip, a deterministic (not freeform-LLM) race-analysis paragraph grounded in real feature values, a confidence line grounded in real backtested calibration, a help panel explaining OR/Form (including real BHA rating bands). All committed incrementally, each with real tests and a real regeneration against live data before committing. See commits `740befe` through `c8083f7`.
+
+**Then a real gap analysis, then RL-010:** Jonathan asked directly what it would take to beat the market, and for a genuine "what's missing and what's it worth" analysis. Rather than guess, checked the DB directly for real unused signal first — found trainer win rates ranging 2.4%-28.6% and a similar jockey spread, over 300+ real races each, completely unused by either model.
+
+**What's genuinely done and verified:**
+- `src/features/connections_strike_rate.py` — real trainer/jockey win-rate tables (min 20 real runs), race-field-relative edges, same "never guessed, fitted weight decides sign" discipline as every prior feature. Wired into `build_race_features()` (now 8 active features + `going_affinity_edge` still computed-but-inactive = 9 total), both models' fit/predict, `scripts/train_model1.py`/`train_model2.py`/`compute_hit_rate.py`, and the live daily pipeline (`predict_todays_races.py`, model versions bumped 1.0->1.1). 9 new tests.
+- **Real result — the first genuine positive result of any feature tried:** Model 2 Brier 0.0874->0.0866, hit rate 21.7%->**23.2%** (+1.5pp, the largest gain yet). Model 1 barely moved (21.5%->21.7%) — its linear structure seems less able to exploit this higher-cardinality signal than Model 2's tree splits. Still well short of the market (33.3%) but real, meaningful progress. Full detail in `docs/RESEARCH_LAB.md` RL-010.
+- Sanity-checked before trusting: 765 real trainers / 600 real jockeys with genuine >=20-run table entries in the first fold alone.
+- Full suite: **183/183 pass** (was 174, +9 new).
+
+**"GC" (Jonathan's naming) — residual/miss-pattern analysis, proposed but not started:** Jonathan asked for an algorithm mining past top-picks-vs-actual-winners for a pattern that "unlocks more winners." Agreed to do this as real, disciplined residual analysis (look at genuine misses from the completed walk-forward backtests for an explainable common thread, then test any real candidate with the same walk-forward discipline as everything else — never declare a pattern "found" just because it fits the historical data that produced it, that's the textbook overfitting trap in this exact domain). Jonathan agreed to call it "GC" in the UI (short, doesn't spell out an unproven claim on the page itself) — logged here as **RL-011**, not started this session. If something real survives walk-forward testing, the plan is a dedicated "GC" tab on each race card showing its pick, same UI pattern as the existing model badges — built only once there's something real behind it, not before.
+
+**What's still blocked (unchanged):**
+1. Betfair — still SUSPENDED as of last check
+2. Racing API's own results — still needs their Basic tier
+
+**What the next session should do, in priority order:**
+1. **RL-011 (the "GC" analysis)** — pull real per-race prediction-vs-outcome pairs from the completed walk-forward folds, look for a genuine, explainable pattern among confident misses, and if one survives a fresh walk-forward test, build it as a real feature (not a UI element first).
+2. Check whether Betfair's account status has cleared, only if there's a concrete reason to think so.
+3. Once real Smarkets price data has accumulated across a race day, build the real market-odds comparison the dashboard is already wired to show.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. **Always run a long script unbuffered and backgrounded to a real log file**, never `| tee` in the foreground.
+6. Keep this file updated at the end of every session.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result/price data, or any model's training data, to "demo" anything
+- Do not create accounts on Jonathan's behalf
+- Do not retry the Betfair login endpoint without a concrete reason to think the account status changed
+- **Do not declare an RL-011 "GC" pattern real just because it fits the historical folds that produced it — it must be tested on real out-of-sample data via the same walk-forward harness as every other feature before being trusted or shipped**
+- Do not build the "GC" race-card tab before there's a real, walk-forward-tested signal behind it
+- Do not skip re-running the full test suite before committing — all 183 tests must actually pass

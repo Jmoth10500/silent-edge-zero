@@ -336,6 +336,73 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
   now unblocked via Smarkets — RL-010 candidate once real data
   accumulates) or accepting the market as the practical baseline.
 
+## RL-010: Trainer/jockey real strike-rate features — the first genuine improvement
+
+- **Origin:** Jonathan asked for a real gap analysis on closing the gap
+  from the RL-009 hit rate (21.7%) to the market's 33.4%. Before proposing
+  anything, the DB was checked directly for real, already-collected,
+  completely unused signal — and found a large one: real trainer win
+  rates over 300+ real races each ranged from **2.4% (Max Young) to 28.6%
+  (Charlie Appleby)**; jockeys showed the same real spread (Paul Townend
+  35.2% down to low single digits for low-volume riders). Neither model
+  used trainer or jockey identity at all before this.
+- **Implementation:** `src/features/connections_strike_rate.py` —
+  `build_win_rate_table()` computes a real win rate per trainer_id/
+  jockey_id from strictly-earlier real runs (min 20 real runs to get a
+  table entry, else excluded — never guessed from too little evidence).
+  `connections_edges()` centers each runner's real rate on the race's own
+  field mean among runners with a KNOWN rate, same "fitted weight decides
+  the sign" discipline as every other edge feature here (RL-004's
+  precedent) even though the real-world direction is obvious. Wired as
+  a 7th/8th feature pair (`trainer_edge`, `jockey_edge`) into the shared
+  `build_race_features()`, leakage-safe (tables rebuilt fresh per
+  walk-forward split's training races only — `build_split_connections_tables()`
+  in `scripts/train_model1.py`). Also wired into the live daily pipeline
+  (`scripts/predict_todays_races.py`, model versions bumped to 1.1). 9 new
+  tests (`tests/test_connections_strike_rate.py` + 2 wiring tests in
+  `test_model1_logistic_baseline.py`).
+- **Real result, sanity-checked before trusting (765 real trainers,
+  600 real jockeys with real >=20-run table entries in the first fold
+  alone — genuinely populated, not a silent-zero bug):**
+
+  | | Brier (Model 2) | Brier (Model 1) | Hit rate (Model 2) | Hit rate (Model 1) |
+  |---|---|---|---|---|
+  | Before (RL-008 feature set) | 0.0874 | 0.0875 | 21.7% | 21.5% |
+  | With trainer/jockey (RL-010) | **0.0866** | 0.0875 (flat) | **23.2%** | 21.7% (flat) |
+
+  **This is the first feature attempt in this project's history that
+  produced a genuine, real improvement** — not marginal-to-zero (form,
+  draw bias) and not negative (going affinity). Model 2's real hit rate
+  moved +1.5 percentage points, the single largest gain of any feature
+  tried. Model 1 barely moved — the logistic model's linear structure
+  appears less able to exploit this signal than Model 2's tree splits,
+  consistent with trainer/jockey identity being a higher-cardinality,
+  more interaction-heavy signal than the earlier race-relative edges.
+- **Real calibration note (same backtest):** Model 2's calibration curve
+  now extends further into high-confidence bins with more real data
+  (up to predicted 0.8-0.9), but shows some real overconfidence at the
+  top end (predicted 0.641 vs actual 0.541 at [0.6-0.7), n=196; predicted
+  0.817 vs actual 0.600 at [0.8-0.9), n=5 — too small a sample to trust
+  alone, flagged honestly rather than presented as solid).
+- **What this means honestly:** still short of the market (33.3% vs
+  23.2%) — this doesn't change RL-009's practical conclusion that
+  outright beating the market with free public data is unlikely. But it's
+  real, meaningful progress, and confirms the gap-analysis approach
+  (check what real, already-collected data is sitting unused before
+  building anything new) was the right one. Some of trainer/jockey's real
+  win-rate spread likely correlates with getting better-rated horses
+  (partially redundant with `rating_edge`) — the fact it still moved the
+  needle this much suggests real, additional signal beyond what rating
+  already captures.
+- **Status: TESTING — real, genuine, positive result. Kept in the active
+  feature set for both models** (unlike RL-001b's going-affinity, which
+  was reverted). Natural next step: the "GC" residual/miss-pattern
+  analysis Jonathan proposed next (RL-011) — look at where the model's
+  confident picks were real misses across these walk-forward folds for a
+  genuine, explainable common thread, then test any real candidate the
+  same walk-forward way, never just declared from the pattern-finding
+  step alone.
+
 ---
 
 *New entries go at the bottom, oldest first, so the log itself is chronological.*

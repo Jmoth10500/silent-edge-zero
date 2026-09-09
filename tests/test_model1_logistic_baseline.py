@@ -27,7 +27,8 @@ from src.models.model1_logistic_baseline import (
 )
 
 
-def _runner(horse_id, age=None, draw=None, weight_lbs=None, official_rating=None, recent_form=None):
+def _runner(horse_id, age=None, draw=None, weight_lbs=None, official_rating=None, recent_form=None,
+            trainer_id=None, jockey_id=None):
     return RunnerFeatureInput(
         horse_id=horse_id,
         age=age,
@@ -35,6 +36,8 @@ def _runner(horse_id, age=None, draw=None, weight_lbs=None, official_rating=None
         weight_lbs=weight_lbs,
         official_rating=official_rating,
         recent_form=recent_form,
+        trainer_id=trainer_id,
+        jockey_id=jockey_id,
     )
 
 
@@ -164,6 +167,25 @@ def test_build_race_features_going_affinity_edge_uses_table_when_given():
 
     feats_fast = build_race_features(runners, going_affinity_table=table, going="Firm")
     assert feats_fast[1]["going_affinity_edge"] == -0.3  # same specialist, fast ground -> negative
+
+
+def test_build_race_features_connections_edges_default_to_zero_without_tables():
+    runners = [_runner(1, official_rating=80, trainer_id=100), _runner(2, official_rating=70, trainer_id=200)]
+    feats = build_race_features(runners)  # no trainer_table/jockey_table given
+    assert feats[1]["trainer_edge"] == 0.0
+    assert feats[1]["jockey_edge"] == 0.0
+
+
+def test_build_race_features_connections_edges_use_tables_when_given():
+    trainer_table = {100: 0.30, 200: 0.10}
+    runners = [
+        _runner(1, official_rating=80, trainer_id=100),
+        _runner(2, official_rating=70, trainer_id=200),
+    ]
+    feats = build_race_features(runners, trainer_table=trainer_table)
+    # trainer mean = 0.20 -> edges +0.10 / -0.10
+    assert math.isclose(feats[1]["trainer_edge"], 0.10)
+    assert math.isclose(feats[2]["trainer_edge"], -0.10)
 
 
 def test_predict_with_default_weights_is_uniform():
@@ -369,6 +391,8 @@ if __name__ == "__main__":
         test_build_race_features_draw_bias_edge_uses_table_when_given,
         test_build_race_features_going_affinity_edge_defaults_to_zero_without_table,
         test_build_race_features_going_affinity_edge_uses_table_when_given,
+        test_build_race_features_connections_edges_default_to_zero_without_tables,
+        test_build_race_features_connections_edges_use_tables_when_given,
         test_predict_with_default_weights_is_uniform,
         test_predict_sums_to_one_with_nonzero_weights,
         test_predict_empty_race_raises,

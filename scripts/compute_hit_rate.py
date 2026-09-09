@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import psycopg2
 
-from scripts.train_model1 import build_split_draw_bias_table, load_races
+from scripts.train_model1 import build_split_connections_tables, build_split_draw_bias_table, load_races
 from src.models.model0_market_baseline import predict_race_probabilities as m0_predict
 from src.models.model1_logistic_baseline import DEFAULT_WEIGHTS
 from src.models.model1_logistic_baseline import TrainingRace as M1TrainingRace
@@ -67,30 +67,41 @@ def main():
         test_races = [usable[i] for i in split.test_indices]
 
         draw_bias_table = build_split_draw_bias_table(train_races)
+        trainer_table, jockey_table = build_split_connections_tables(train_races)
 
         m1_train = [M1TrainingRace(runners=r.runners, winner_horse_id=r.winner_horse_id,
                                     course_id=r.course_id, distance_yards=r.distance_yards)
                     for r in train_races]
-        m1_weights = fit_logistic_baseline(m1_train, iterations=max_iter, draw_bias_table=draw_bias_table) if m1_train else dict(DEFAULT_WEIGHTS)
+        m1_weights = (
+            fit_logistic_baseline(m1_train, iterations=max_iter, draw_bias_table=draw_bias_table,
+                                   trainer_table=trainer_table, jockey_table=jockey_table)
+            if m1_train else dict(DEFAULT_WEIGHTS)
+        )
 
         m2_train = [M2TrainingRace(runners=r.runners, winner_horse_id=r.winner_horse_id,
                                     course_id=r.course_id, distance_yards=r.distance_yards)
                     for r in train_races if len(r.runners) >= 2]
-        m2_model = fit_gradient_boosting(m2_train, max_iter=max_iter, draw_bias_table=draw_bias_table) if m2_train else None
+        m2_model = (
+            fit_gradient_boosting(m2_train, max_iter=max_iter, draw_bias_table=draw_bias_table,
+                                   trainer_table=trainer_table, jockey_table=jockey_table)
+            if m2_train else None
+        )
 
         for r in test_races:
             uniform_baseline_sum += 1.0 / len(r.runners)
             uniform_baseline_n += 1
 
             m1_probs = m1_predict(r.runners, weights=m1_weights, draw_bias_table=draw_bias_table,
-                                   course_id=r.course_id, distance_yards=r.distance_yards)
+                                   course_id=r.course_id, distance_yards=r.distance_yards,
+                                   trainer_table=trainer_table, jockey_table=jockey_table)
             m1_pick = max(m1_probs, key=m1_probs.get)
             m1_total += 1
             m1_hits += int(m1_pick == r.winner_horse_id)
 
             if m2_model is not None:
                 m2_probs = m2_predict(r.runners, m2_model, draw_bias_table=draw_bias_table,
-                                       course_id=r.course_id, distance_yards=r.distance_yards)
+                                       course_id=r.course_id, distance_yards=r.distance_yards,
+                                       trainer_table=trainer_table, jockey_table=jockey_table)
                 m2_pick = max(m2_probs, key=m2_probs.get)
                 m2_total += 1
                 m2_hits += int(m2_pick == r.winner_horse_id)

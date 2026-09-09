@@ -32,6 +32,18 @@ the first time this model no longer beats Model 1 (0.0875). Sanity-checked
 the feature was genuinely populated (not another silent-zero bug) before
 trusting this. See `docs/RESEARCH_LAB.md` RL-001b for the full story;
 worth reconsidering whether this feature belongs in Model 2's set at all.
+(That feature was later reverted from the active set — see
+`model1_logistic_baseline.py`'s `FEATURE_NAMES`.)
+
+**Update 2026-09-10 — real trainer/jockey strike-rate features (RL-010),
+the first genuine improvement found for this model:** pooled Brier
+0.0874->**0.0866**, real top-pick hit rate 21.7%->**23.2%** (the largest
+gain of any feature tried, out of a real gap analysis that checked what
+data was already collected but unused before building anything new).
+Model 1 barely moved on the same features — this model's tree structure
+appears better able to exploit a higher-cardinality signal like trainer/
+jockey identity. Still short of the market (33.3%). Full detail in
+`docs/RESEARCH_LAB.md` RL-010. Kept in the active feature set.
 
 **Why scikit-learn now, when Model 1 deliberately avoided numpy/scikit-learn:**
 Model 1's own docstring explains that a hand-rolled solver was reasonable
@@ -119,6 +131,8 @@ def fit_gradient_boosting(
     random_state: int = 0,
     draw_bias_table: Optional[DrawBiasTable] = None,
     going_affinity_table: Optional[dict[int, float]] = None,
+    trainer_table: Optional[dict[int, float]] = None,
+    jockey_table: Optional[dict[int, float]] = None,
 ) -> HistGradientBoostingClassifier:
     """Fit a per-runner win/lose binary classifier over the race-relative
     feature set. `random_state` is fixed by default so a given training set
@@ -144,7 +158,7 @@ def fit_gradient_boosting(
             )
         feats = build_race_features(
             race.runners, draw_bias_table, race.course_id, race.distance_yards,
-            going_affinity_table, race.going,
+            going_affinity_table, race.going, trainer_table, jockey_table,
         )
         for r in race.runners:
             X.append(_feature_row(feats[r.horse_id]))
@@ -198,12 +212,15 @@ def predict_race_probabilities(
     distance_yards: Optional[int] = None,
     going_affinity_table: Optional[dict[int, float]] = None,
     going: Optional[str] = None,
+    trainer_table: Optional[dict[int, float]] = None,
+    jockey_table: Optional[dict[int, float]] = None,
 ) -> dict[int, float]:
     """Model 2's prediction: the fitted classifier's per-runner P(win) raw
     score, renormalised to sum to 1.0 across the race. Raises ValueError for
     an empty race, matching Model 0/Model 1. `draw_bias_table`/`course_id`/
-    `distance_yards` and `going_affinity_table`/`going` are optional and
-    only feed `draw_bias_edge`/`going_affinity_edge` — see
+    `distance_yards`, `going_affinity_table`/`going`, and `trainer_table`/
+    `jockey_table` are optional and only feed `draw_bias_edge`/
+    `going_affinity_edge`/`trainer_edge`/`jockey_edge` — see
     `model1_logistic_baseline.build_race_features`.
     """
     if not runners:
@@ -211,6 +228,7 @@ def predict_race_probabilities(
 
     feats = build_race_features(
         runners, draw_bias_table, course_id, distance_yards, going_affinity_table, going,
+        trainer_table, jockey_table,
     )
     rows = [_feature_row(feats[r.horse_id]) for r in runners]
     # predict_proba's column order matches model.classes_; class 1 = winner.

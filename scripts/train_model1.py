@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import psycopg2
 
 from src.evaluation.calibration import brier_score, calibration_curve, log_loss
+from src.features.connections_strike_rate import HistoricalConnectionOutcome, build_win_rate_table
 from src.features.draw_bias_history import HistoricalRaceOutcome, build_draw_bias_table
 from src.features.going_affinity import HistoricalGoingRecord, build_going_affinity_table
 from src.features.runner_features import RunnerFeatureInput
@@ -66,6 +67,7 @@ def load_races(conn, start_date: str) -> list[RaceRow]:
         """
         SELECT r.id, r.race_date, r.course_id, r.distance_yards, r.going, rs.horse_id, rs.age,
                rs.draw, rs.weight_lbs, rs.official_rating, rs.recent_form,
+               rs.trainer_id, rs.jockey_id,
                rr.finishing_position, rr.starting_price, rr.result_note
         FROM race r
         JOIN runner_snapshot rs ON rs.race_id = r.id
@@ -79,7 +81,8 @@ def load_races(conn, start_date: str) -> list[RaceRow]:
     by_race: dict[int, dict] = {}
     order: list[int] = []
     for (race_id, race_date, course_id, distance_yards, going, horse_id, age, draw, weight_lbs,
-         official_rating, recent_form, finishing_position, starting_price, result_note) in cur:
+         official_rating, recent_form, trainer_id, jockey_id,
+         finishing_position, starting_price, result_note) in cur:
         note = (result_note or "").strip().upper()
         if finishing_position is None and note in _NON_RUNNER_NOTES:
             continue  # genuinely didn't run — not part of the field
@@ -95,6 +98,7 @@ def load_races(conn, start_date: str) -> list[RaceRow]:
         entry["runners"].append(RunnerFeatureInput(
             horse_id=horse_id, age=age, draw=draw, weight_lbs=weight_lbs,
             official_rating=official_rating, recent_form=recent_form,
+            trainer_id=trainer_id, jockey_id=jockey_id,
         ))
         if starting_price is not None and starting_price > 1.0:
             entry["odds"].append(RunnerOdds(horse_id=horse_id, decimal_odds=float(starting_price)))
@@ -154,6 +158,22 @@ def build_split_going_affinity_table(train_races: list[RaceRow]):
     return build_going_affinity_table(records)
 
 
+def build_split_connections_tables(train_races: list[RaceRow]):
+    """Leakage-safe by construction: only ever called with a walk-forward
+    split's TRAINING races (see main()), never the test races or the full
+    dataset — see src/features/connections_strike_rate.py's module
+    docstring. Returns (trainer_table, jockey_table)."""
+    trainer_outcomes, jockey_outcomes = [], []
+    for r in train_races:
+        for runner in r.runners:
+            won = runner.horse_id == r.winner_horse_id
+            if runner.trainer_id is not None:
+                trainer_outcomes.append(HistoricalConnectionOutcome(entity_id=runner.trainer_id, won=won))
+            if runner.jockey_id is not None:
+                jockey_outcomes.append(HistoricalConnectionOutcome(entity_id=runner.jockey_id, won=won))
+    return build_win_rate_table(trainer_outcomes), build_win_rate_table(jockey_outcomes)
+
+
 def main():
     start_date = sys.argv[1] if len(sys.argv) > 1 else "2023-01-01"
     min_train_days = int(sys.argv[2]) if len(sys.argv) > 2 else 180
@@ -200,6 +220,7 @@ def main():
 
         draw_bias_table = build_split_draw_bias_table(train_races)
         going_affinity_table = build_split_going_affinity_table(train_races)
+        trainer_table, jockey_table = build_split_connections_tables(train_races)
 
         train_set = [
             M1TrainingRace(
@@ -212,6 +233,7 @@ def main():
             fit_logistic_baseline(
                 train_set, iterations=iterations, draw_bias_table=draw_bias_table,
                 going_affinity_table=going_affinity_table,
+                trainer_table=trainer_table, jockey_table=jockey_table,
             )
             if train_set else dict(DEFAULT_WEIGHTS)
         )
@@ -224,6 +246,7 @@ def main():
                 r.runners, weights=weights, draw_bias_table=draw_bias_table,
                 course_id=r.course_id, distance_yards=r.distance_yards,
                 going_affinity_table=going_affinity_table, going=r.going,
+                trainer_table=trainer_table, jockey_table=jockey_table,
             )
             for horse_id, p in probs.items():
                 split_m1_probs.append(p)
