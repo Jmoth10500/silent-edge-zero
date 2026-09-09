@@ -5,3 +5,7 @@ data/kaggle_historical/
 .env
 *.log
 dashboard.html
+site/index.html
+
+# Local Netlify folder
+.netlify

@@ -201,11 +201,11 @@ def test_find_market_favourite_shortest_odds_wins():
 
 def test_real_calibration_confidence_grounds_in_real_bin():
     text = real_calibration_confidence(0.15)
-    assert "14.0%" in text  # the real bin's "actual" value formatted as a %
+    assert "14.1%" in text  # the real bin's "actual" value formatted as a %
 
 
 def test_real_calibration_confidence_flags_small_real_sample():
-    text = real_calibration_confidence(0.65)  # the n=28 bin, well under 150
+    text = real_calibration_confidence(0.85)  # the n=5 bin, well under 150
     assert "small real sample" in text.lower()
 
 
@@ -251,7 +251,7 @@ def test_render_html_includes_backtest_context():
     html = render_html(date(2026, 9, 9), [])
     assert "0.0795" in html  # Model 0's real committed Brier score
     assert "0.0875" in html  # Model 1's
-    assert "0.0874" in html  # Model 2's
+    assert "0.0866" in html  # Model 2's (RL-010, with trainer/jockey features)
 
 
 if __name__ == "__main__":

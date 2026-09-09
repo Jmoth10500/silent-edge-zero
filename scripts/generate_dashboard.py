@@ -57,28 +57,29 @@ OUTPUT_PATH = Path(__file__).parent.parent / "dashboard.html"
 # dashboard refresh).
 BACKTEST_CONTEXT = {
     "model0": {"label": "Market baseline", "brier": 0.0795, "logloss": 0.2738},
-    "model1": {"label": "Model 1 (statistical)", "brier": 0.0875, "logloss": 0.3097},
-    "model2": {"label": "Model 2 (gradient boosting) — shown below", "brier": 0.0874, "logloss": 0.3089},
+    "model1": {"label": "Model 1 (statistical)", "brier": 0.0875, "logloss": 0.3096},
+    "model2": {"label": "Model 2 (gradient boosting) — shown below", "brier": 0.0866, "logloss": 0.3051},
 }
 
-# Real, committed calibration curve (docs/RESEARCH_LAB.md / BUILD_LOG,
-# scripts/train_model2.py real output after the going_affinity revert —
-# the CURRENT active 6-feature model, 9 real walk-forward folds, ~487k
-# real predictions). Each bin's "actual" is the REAL observed win rate for
-# predictions that fell in that range — this is what "confidence" below
-# is grounded in: not a new invented score, the real historical accuracy
-# of a prediction this strong. A bin with n<150 is flagged as too small a
-# real sample to trust on its own.
+# Real, committed calibration curve (docs/RESEARCH_LAB.md RL-010,
+# scripts/train_model2.py real output with the current active 8-feature
+# model incl. real trainer/jockey strike rate, 9 real walk-forward folds,
+# ~487k real predictions, 2026-09-10). Each bin's "actual" is the REAL
+# observed win rate for predictions that fell in that range — this is
+# what "confidence" below is grounded in: not a new invented score, the
+# real historical accuracy of a prediction this strong. A bin with n<150
+# is flagged as too small a real sample to trust on its own.
 REAL_CALIBRATION_BINS = [
     # (low, high, predicted, actual, n)
-    (0.0, 0.1, 0.065, 0.060, 284209),
-    (0.1, 0.2, 0.135, 0.140, 173055),
-    (0.2, 0.3, 0.235, 0.251, 25029),
-    (0.3, 0.4, 0.337, 0.362, 4168),
-    (0.4, 0.5, 0.438, 0.459, 784),
-    (0.5, 0.6, 0.536, 0.587, 150),
-    (0.6, 0.7, 0.636, 0.786, 28),
-    (0.7, 0.8, 0.726, 1.000, 4),
+    (0.0, 0.1, 0.061, 0.059, 296317),
+    (0.1, 0.2, 0.137, 0.141, 150284),
+    (0.2, 0.3, 0.238, 0.239, 30474),
+    (0.3, 0.4, 0.339, 0.329, 7466),
+    (0.4, 0.5, 0.441, 0.423, 2069),
+    (0.5, 0.6, 0.540, 0.504, 569),
+    (0.6, 0.7, 0.641, 0.541, 196),
+    (0.7, 0.8, 0.739, 0.681, 47),
+    (0.8, 0.9, 0.817, 0.600, 5),
 ]
 
 
@@ -235,9 +236,11 @@ def render_overview_chart(races: list[dict]) -> str:
         <div class="overview-row" onclick="{onclick}">
           <span class="overview-time">{t}</span>
           <span class="overview-course">{race['course_name']}</span>
-          <div class="overview-bar-track"><div class="overview-bar-fill" style="width:{width}%"></div></div>
-          <span class="overview-horse">{top_horse}</span>
           <span class="overview-pct">{_pct(p)}</span>
+          <div class="overview-bar-wrap">
+            <div class="overview-bar-track"><div class="overview-bar-fill" style="width:{width}%"></div></div>
+            <span class="overview-horse">{top_horse}</span>
+          </div>
         </div>""")
     return f"""
     <div class="section-label">Today's confidence, at a glance — click a race to open it</div>
@@ -611,7 +614,7 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
     padding: 16px 18px; margin-bottom: 14px;
   }}
-  .race-header {{ display: flex; align-items: flex-start; gap: 14px; margin-bottom: 12px; }}
+  .race-header {{ display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 14px; margin-bottom: 12px; }}
   .race-time {{ font-size: 20px; font-weight: 700; color: var(--series-1); min-width: 52px; }}
   .race-title {{ flex: 1; }}
   .race-course {{ font-weight: 600; font-size: 15px; }}
@@ -700,19 +703,36 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
     padding: 6px 14px; margin-bottom: 8px;
   }}
+  /* Mobile-first: stacked two-line layout by default */
   .overview-row {{
-    display: grid; grid-template-columns: 46px 90px 1fr 120px 46px; align-items: center;
-    gap: 10px; padding: 7px 0; border-top: 1px solid var(--border); font-size: 12px;
+    display: grid;
+    grid-template-columns: 44px 1fr auto;
+    grid-template-areas: "time course pct" "bar bar bar";
+    align-items: center; column-gap: 8px; row-gap: 6px;
+    padding: 10px 8px; border-top: 1px solid var(--border); font-size: 12px;
+    cursor: pointer; border-radius: 6px;
   }}
   .overview-row:first-child {{ border-top: none; }}
-  .overview-time {{ color: var(--series-1); font-weight: 600; }}
-  .overview-course {{ color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-  .overview-bar-track {{ height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }}
+  .overview-row:hover, .overview-row:active {{ background: var(--surface-2); }}
+  .overview-time {{ grid-area: time; color: var(--series-1); font-weight: 600; }}
+  .overview-course {{ grid-area: course; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+  .overview-pct {{ grid-area: pct; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }}
+  .overview-bar-wrap {{ grid-area: bar; display: flex; align-items: center; gap: 8px; }}
+  .overview-bar-track {{ flex: 1; height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }}
   .overview-bar-fill {{ height: 100%; border-radius: 4px; background: var(--series-1); }}
-  .overview-horse {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-  .overview-pct {{ text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }}
-  .overview-row {{ cursor: pointer; border-radius: 6px; }}
-  .overview-row:hover {{ background: var(--surface-2); }}
+  .overview-horse {{ font-size: 11px; color: var(--text-muted); white-space: nowrap; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }}
+
+  /* Wider screens: collapse to one row */
+  @media (min-width: 480px) {{
+    .overview-row {{
+      grid-template-columns: 46px 90px 1fr 120px 46px;
+      grid-template-areas: "time course bar horse pct";
+      row-gap: 0;
+    }}
+    .overview-bar-wrap {{ display: contents; }}
+    .overview-bar-track {{ grid-area: bar; }}
+    .overview-horse {{ grid-area: horse; max-width: none; }}
+  }}
 
   dialog.race-card {{
     background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px;
@@ -784,8 +804,8 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     generation. This is deliberate: a template over real data can only ever say what the
     numbers actually show, with zero risk of inventing a claim. The confidence line is the
     REAL observed win rate for predictions this strong, from actual backtesting — not a new
-    made-up score. Both models have a genuine, tested ~21-22% chance of picking the actual
-    winner (vs. 33.4% for just backing the market favourite) — this analysis explains the
+    made-up score. Model 2 has a genuine, tested ~23% chance of picking the actual
+    winner (vs. 33.3% for just backing the market favourite) — this analysis explains the
     reasoning honestly, it doesn't make the underlying prediction better than that.</p>
   </dialog>
 
@@ -794,8 +814,8 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     model that has NOT beaten the market baseline in real backtesting (see stats below) —
     shown as research output, not betting advice. The probability shown is Model 2
     (gradient boosting, the better-backtested of the two models built) — Model 1's pick is
-    only flagged when it disagrees. Real hit rate (RL-009): picks the actual winner ~21-22%
-    of races, vs 11.8% for a random guess, vs 33.4% for the market favourite alone.
+    only flagged when it disagrees. Real hit rate (RL-010): picks the actual winner ~23.2%
+    of races, vs 11.8% for a random guess, vs 33.3% for the market favourite alone.
   </div>
 
   {render_summary(races)}
