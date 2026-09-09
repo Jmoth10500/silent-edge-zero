@@ -56,9 +56,21 @@ def test_stat_row_renders_known_real_fields():
     assert "C J Whiteley" in html
 
 
-def test_stat_row_empty_state_when_nothing_known():
+def test_stat_row_no_racecard_stats_still_shows_odds_pending_chip():
+    # the odds chip always renders (real data or an honest "pending"
+    # placeholder), so a runner with zero OTHER stats still gets one chip,
+    # not the "no stats at all" empty state.
     html = _stat_row({})
-    assert "No racecard stats" in html
+    assert "Odds: not yet available" in html
+    assert "No racecard stats" not in html
+
+
+def test_stat_row_real_odds_render_when_present():
+    html = _stat_row({"midprice": 4.2, "exchange_back": 4.0, "exchange_lay": 4.4})
+    assert "Odds 4.2" in html
+    assert "back 4.0" in html
+    assert "lay 4.4" in html
+    assert "not yet available" not in html
 
 
 def test_render_summary_computes_real_agreement_and_top_pick():
@@ -183,7 +195,8 @@ if __name__ == "__main__":
         test_bar_html_width_scales_with_probability_and_has_a_floor,
         test_render_html_with_no_races_shows_empty_state,
         test_stat_row_renders_known_real_fields,
-        test_stat_row_empty_state_when_nothing_known,
+        test_stat_row_no_racecard_stats_still_shows_odds_pending_chip,
+        test_stat_row_real_odds_render_when_present,
         test_render_summary_computes_real_agreement_and_top_pick,
         test_render_summary_empty_races_returns_empty_string,
         test_going_hint_real_thresholds,

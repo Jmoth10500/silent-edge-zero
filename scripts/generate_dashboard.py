@@ -61,7 +61,7 @@ def load_predictions(conn, race_date: date):
         """
         SELECT r.id, r.off_time, c.name, r.race_name, h.name, mv.name, p.model_probability,
                rs.age, rs.draw, rs.weight_lbs, rs.official_rating, rs.recent_form,
-               t.name, j.name
+               t.name, j.name, ms.exchange_back, ms.exchange_lay, ms.midprice
         FROM prediction p
         JOIN race r ON r.id = p.race_id
         JOIN course c ON c.id = r.course_id
@@ -70,6 +70,12 @@ def load_predictions(conn, race_date: date):
         LEFT JOIN runner_snapshot rs ON rs.race_id = r.id AND rs.horse_id = p.horse_id
         LEFT JOIN trainer t ON t.id = rs.trainer_id
         LEFT JOIN jockey j ON j.id = rs.jockey_id
+        LEFT JOIN LATERAL (
+            SELECT exchange_back, exchange_lay, midprice
+            FROM market_snapshot ms2
+            WHERE ms2.race_id = r.id AND ms2.horse_id = p.horse_id
+            ORDER BY ms2.observed_at DESC LIMIT 1
+        ) ms ON true
         WHERE r.race_date = %s AND p.locked_at IS NOT NULL
         ORDER BY r.off_time, r.id, mv.name, p.model_probability DESC
         """,
@@ -81,7 +87,8 @@ def load_predictions(conn, race_date: date):
     races: dict[int, dict] = {}
     order: list[int] = []
     for (race_id, off_time, course_name, race_name, horse_name, model_name, prob,
-         age, draw, weight_lbs, official_rating, recent_form, trainer_name, jockey_name) in rows:
+         age, draw, weight_lbs, official_rating, recent_form, trainer_name, jockey_name,
+         exchange_back, exchange_lay, midprice) in rows:
         if race_id not in races:
             races[race_id] = {
                 "race_id": race_id, "off_time": off_time, "course_name": course_name,
@@ -93,6 +100,9 @@ def load_predictions(conn, race_date: date):
         races[race_id]["stats"][horse_name] = {
             "age": age, "draw": draw, "weight_lbs": weight_lbs, "official_rating": official_rating,
             "recent_form": recent_form, "trainer": trainer_name, "jockey": jockey_name,
+            "exchange_back": float(exchange_back) if exchange_back is not None else None,
+            "exchange_lay": float(exchange_lay) if exchange_lay is not None else None,
+            "midprice": float(midprice) if midprice is not None else None,
         }
 
     return [races[rid] for rid in order]
@@ -232,12 +242,29 @@ def _stat_row(stats: dict) -> str:
         parts.append(f'<span class="stat-chip">Trainer: {stats["trainer"]}</span>')
     if stats.get("jockey"):
         parts.append(f'<span class="stat-chip">Jockey: {stats["jockey"]}</span>')
+    odds = _odds_chip(stats)
+    if odds:
+        parts.append(odds)
     if not parts:
         return '<div class="stat-empty">No racecard stats collected for this runner yet.</div>'
     return f'<div class="stat-chips">{"".join(parts)}</div>'
 
 
-def render_race(race: dict) -> str:
+def _odds_chip(stats: dict) -> str:
+    """Real market odds (Smarkets, when a snapshot has been collected for
+    this runner — see scripts/collect_smarkets_prices.py) or an honest
+    'not yet available' chip. Never fabricated: a race with no real
+    snapshot yet says so plainly rather than showing a blank or a guess."""
+    mid = stats.get("midprice")
+    back = stats.get("exchange_back")
+    lay = stats.get("exchange_lay")
+    if mid is not None:
+        return f'<span class="stat-chip odds-chip">Odds {mid:.1f} (back {back:.1f} / lay {lay:.1f})</span>'
+    return '<span class="stat-chip odds-chip odds-pending">Odds: not yet available</span>'
+
+
+def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> str:
+    course_weather = course_weather or {}
     m1, m2, stats = race["model1"], race["model2"], race["stats"]
     horses = sorted(set(m1) | set(m2), key=lambda h: -m2.get(h, m1.get(h, 0.0)))
 
@@ -270,6 +297,15 @@ def render_race(race: dict) -> str:
 
     agree_badge = '<span class="agree-badge agree">MODELS AGREE</span>' if agree else '<span class="agree-badge disagree">MODELS DISAGREE</span>'
 
+    w = course_weather.get(race["course_name"])
+    weather_html = ""
+    if w:
+        weather_html = f"""
+        <div class="race-weather">
+          {w['precip_mm']:.1f}mm rain ({w['precip_prob']:.0f}%) · {w['temp_min']:.0f}-{w['temp_max']:.0f}°C ·
+          {w['wind_kmh']:.0f} km/h wind · <strong>{_going_hint(w)}</strong>
+        </div>"""
+
     return f"""
     <dialog class="race-card" id="race-{race['race_id']}">
       <div class="race-header">
@@ -281,6 +317,7 @@ def render_race(race: dict) -> str:
         {agree_badge}
         <button class="close-btn" onclick="this.closest('dialog').close()" aria-label="Close">✕</button>
       </div>
+      {weather_html}
       <div class="runner-list">
         {''.join(rows_html)}
       </div>
@@ -350,9 +387,9 @@ def render_summary(races: list[dict]) -> str:
 
 
 def render_html(race_date: date, races: list[dict], course_weather: dict[str, dict] | None = None) -> str:
-    race_dialogs = "".join(render_race(r) for r in races)
-    empty_message = '' if races else '<p class="empty">No predictions locked for this date yet.</p>'
     course_weather = course_weather or {}
+    race_dialogs = "".join(render_race(r, course_weather) for r in races)
+    empty_message = '' if races else '<p class="empty">No predictions locked for this date yet.</p>'
 
     return f"""<!doctype html>
 <html lang="en">
@@ -464,12 +501,31 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
   footer {{ margin-top: 32px; font-size: 11px; color: var(--text-muted); }}
 
   .top-bar {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }}
+  .top-bar-buttons {{ display: flex; gap: 8px; flex-wrap: wrap; }}
   .theme-toggle {{
     background: var(--surface-1); border: 1px solid var(--border); color: var(--text-secondary);
     border-radius: 20px; padding: 6px 14px; font-size: 12px; cursor: pointer;
     display: flex; align-items: center; gap: 6px; white-space: nowrap;
   }}
   .theme-toggle:hover {{ border-color: var(--series-1); color: var(--text-primary); }}
+
+  dialog.help-dialog {{
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px;
+    padding: 24px 26px; margin: auto; max-width: 520px; width: calc(100% - 48px);
+    color: var(--text-primary); box-shadow: 0 20px 60px rgba(0,0,0,0.35); position: relative;
+  }}
+  dialog.help-dialog::backdrop {{ background: rgba(0,0,0,0.55); backdrop-filter: blur(2px); }}
+  dialog.help-dialog h2 {{ font-size: 17px; margin: 0 0 12px; }}
+  dialog.help-dialog h3 {{ font-size: 13px; margin: 16px 0 6px; color: var(--series-1); }}
+  dialog.help-dialog p, dialog.help-dialog li {{ font-size: 13px; color: var(--text-secondary); line-height: 1.5; }}
+  dialog.help-dialog ul {{ margin: 6px 0; padding-left: 18px; }}
+
+  .race-weather {{
+    font-size: 11px; color: var(--text-secondary); background: var(--surface-2);
+    border-radius: 8px; padding: 8px 12px; margin-bottom: 12px;
+  }}
+  .odds-chip {{ color: var(--good); font-weight: 600; }}
+  .odds-chip.odds-pending {{ color: var(--text-muted); font-weight: 400; font-style: italic; }}
 
   .section-label {{
     font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
@@ -522,8 +578,39 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
       <h1>Silent Edge Zero</h1>
       <div class="subtitle">Live predictions — {race_date.strftime('%A %-d %B %Y')}</div>
     </div>
-    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">🌓 Toggle theme</button>
+    <div class="top-bar-buttons">
+      <button class="theme-toggle" onclick="document.getElementById('help-dialog').showModal()">❓ What do OR / Form mean?</button>
+      <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">🌓 Toggle theme</button>
+    </div>
   </div>
+
+  <dialog class="help-dialog" id="help-dialog">
+    <button class="close-btn" onclick="this.closest('dialog').close()" aria-label="Close">✕</button>
+    <h2>Reading the stats</h2>
+    <h3>OR — Official Rating</h3>
+    <p>A number the British Horseracing Authority assigns to every horse based on its past
+    performances — the official measure of how good it is, and what handicap races use to
+    decide how much weight each horse carries. <strong>Higher OR = a faster/better-rated horse.</strong>
+    A horse with no OR yet (often a first-time-out debutant) shows no OR chip at all — never
+    guessed.</p>
+    <h3>Form — recent finishing positions</h3>
+    <p>Read <strong>left to right, oldest race first</strong> — so the <strong>last character
+    is the horse's most recent run</strong>. Each character is one race:</p>
+    <ul>
+      <li><strong>1-9</strong> — the finishing position (1st, 2nd, 3rd...)</li>
+      <li><strong>0</strong> — finished 10th or worse</li>
+      <li><strong>-</strong> — a break between seasons</li>
+      <li><strong>F / P / U / O / R / S / B</strong> — did not complete: Fell, Pulled up,
+        Unseated rider, refused (O), Ran out, Slipped up, Brought down</li>
+    </ul>
+    <p>Example: <strong>"3-4333"</strong> → 3rd, <em>(season break)</em>, 4th, 3rd, 3rd, 3rd
+    — the horse's LAST run (right-most) was a 3rd.</p>
+    <h3>Odds</h3>
+    <p>Real live back/lay prices from the Smarkets exchange, when a snapshot has been
+    collected for that runner (see docs — this is forward-collecting only, so early races
+    or races before the collector started running may show "not yet available", never a
+    guessed number).</p>
+  </dialog>
 
   <div class="disclaimer">
     Not a tipster service. These are research predictions from a walk-forward-validated
@@ -566,7 +653,7 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     var saved = localStorage.getItem('sez-theme');
     if (saved) applyTheme(saved);
   }} catch (e) {{}}
-  document.querySelectorAll('dialog.race-card').forEach(function(d) {{
+  document.querySelectorAll('dialog.race-card, dialog.help-dialog').forEach(function(d) {{
     d.addEventListener('click', function(e) {{ if (e.target === d) d.close(); }});
   }});
 </script>
