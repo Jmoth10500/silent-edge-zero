@@ -156,6 +156,44 @@ def test_fit_recovers_rating_signal():
     assert probs[30] == max(probs.values())
 
 
+def test_fit_and_predict_thread_draw_bias_table_and_race_context():
+    """Not a benchmark — just confirms the draw_bias_table/course_id/
+    distance_yards plumbing added for RL-008's real feature actually
+    reaches build_race_features on both the fit and predict paths (i.e.
+    TrainingRace's course_id/distance_yards fields are used, not ignored).
+    A strong, sample-size-clearing table entry should be enough to move
+    the fitted model's prediction even when every other feature is tied."""
+    table = {(1, 1320, "LOW"): 0.9, (1, 1320, "HIGH"): 0.01}
+    races = []
+    for i in range(30):
+        runners = [
+            _runner(10, official_rating=75, draw=1, weight_lbs=120, recent_form="3322"),
+            _runner(20, official_rating=75, draw=8, weight_lbs=120, recent_form="3322"),
+        ]
+        # winner determined ONLY by the (course, distance, draw-tercile)
+        # signal in `table`, alternating slightly so both classes appear
+        winner = 10 if i % 5 != 0 else 20
+        races.append(TrainingRace(
+            runners=runners, winner_horse_id=winner, course_id=1, distance_yards=1400,
+        ))
+
+    model = fit_gradient_boosting(races, max_iter=50, draw_bias_table=table)
+
+    held_out = [
+        _runner(10, official_rating=75, draw=1, weight_lbs=120, recent_form="3322"),
+        _runner(20, official_rating=75, draw=8, weight_lbs=120, recent_form="3322"),
+    ]
+    probs_with_table = predict_race_probabilities(
+        held_out, model, draw_bias_table=table, course_id=1, distance_yards=1400,
+    )
+
+    assert probs_with_table[10] > probs_with_table[20], (
+        "the LOW-draw runner (table win rate 0.9) should be rated above the "
+        "HIGH-draw runner (table win rate 0.01) when the table/context is supplied "
+        "on both the fit and predict paths"
+    )
+
+
 def test_predict_empty_race_raises():
     races = [
         TrainingRace(
@@ -181,6 +219,7 @@ if __name__ == "__main__":
         test_fit_raises_when_every_race_has_a_single_runner,
         test_predict_sums_to_one_and_stays_in_range,
         test_fit_recovers_rating_signal,
+        test_fit_and_predict_thread_draw_bias_table_and_race_context,
         test_predict_empty_race_raises,
     ]
     passed = 0

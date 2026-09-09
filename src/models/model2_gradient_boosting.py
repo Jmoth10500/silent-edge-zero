@@ -17,6 +17,14 @@ RL-008. As with Model 1, this module's own tests only ever proved the
 plumbing works on synthetic fixtures; the real predictive claim lives in
 the training script's real output, not here.
 
+**Update, same day — the real course/distance `draw_bias_edge` 6th
+feature** (RL-004, `src/features/draw_bias_history.py`) was added to the
+shared `build_race_features()` this module reuses and re-tested for real:
+barely moved the pooled Brier score (0.0874, was 0.0873). A genuine null
+result, not a bug — see RL-004 for the real data gap (`race.distance_yards`
+was NULL for every Kaggle-loaded race) that was found and fixed before
+trusting the first, suspiciously-unchanged run.
+
 **Why scikit-learn now, when Model 1 deliberately avoided numpy/scikit-learn:**
 Model 1's own docstring explains that a hand-rolled solver was reasonable
 for a 4-5 parameter logistic regression. A boosted-tree ensemble is a
@@ -58,8 +66,9 @@ from typing import Optional, Sequence
 
 from sklearn.ensemble import HistGradientBoostingClassifier
 
-from src.models.model1_logistic_baseline import FEATURE_NAMES, build_race_features
+from src.features.draw_bias_history import DrawBiasTable
 from src.features.runner_features import RunnerFeatureInput
+from src.models.model1_logistic_baseline import FEATURE_NAMES, build_race_features
 
 # Kept modest on purpose: the feature set is only 5 columns, all already
 # heavily aggregated (race-relative edges, not raw per-row noise) — a deep,
@@ -88,6 +97,8 @@ class TrainingRace:
 
     runners: Sequence[RunnerFeatureInput]
     winner_horse_id: int
+    course_id: Optional[int] = None
+    distance_yards: Optional[int] = None
 
 
 def fit_gradient_boosting(
@@ -97,6 +108,7 @@ def fit_gradient_boosting(
     learning_rate: float = DEFAULT_LEARNING_RATE,
     l2_regularization: float = DEFAULT_L2_REGULARIZATION,
     random_state: int = 0,
+    draw_bias_table: Optional[DrawBiasTable] = None,
 ) -> HistGradientBoostingClassifier:
     """Fit a per-runner win/lose binary classifier over the race-relative
     feature set. `random_state` is fixed by default so a given training set
@@ -120,7 +132,7 @@ def fit_gradient_boosting(
                 f"winner_horse_id={race.winner_horse_id} is not among this "
                 f"race's own runners {sorted(horse_ids)}"
             )
-        feats = build_race_features(race.runners)
+        feats = build_race_features(race.runners, draw_bias_table, race.course_id, race.distance_yards)
         for r in race.runners:
             X.append(_feature_row(feats[r.horse_id]))
             y.append(1 if r.horse_id == race.winner_horse_id else 0)
@@ -168,15 +180,20 @@ def _renormalise_race(raw_probs: dict[int, float]) -> dict[int, float]:
 def predict_race_probabilities(
     runners: Sequence[RunnerFeatureInput],
     model: HistGradientBoostingClassifier,
+    draw_bias_table: Optional[DrawBiasTable] = None,
+    course_id: Optional[int] = None,
+    distance_yards: Optional[int] = None,
 ) -> dict[int, float]:
     """Model 2's prediction: the fitted classifier's per-runner P(win) raw
     score, renormalised to sum to 1.0 across the race. Raises ValueError for
-    an empty race, matching Model 0/Model 1.
+    an empty race, matching Model 0/Model 1. `draw_bias_table`/`course_id`/
+    `distance_yards` are optional and only feed `draw_bias_edge` — see
+    `model1_logistic_baseline.build_race_features`.
     """
     if not runners:
         raise ValueError("cannot predict an empty race")
 
-    feats = build_race_features(runners)
+    feats = build_race_features(runners, draw_bias_table, course_id, distance_yards)
     rows = [_feature_row(feats[r.horse_id]) for r in runners]
     # predict_proba's column order matches model.classes_; class 1 = winner.
     win_col = list(model.classes_).index(1)

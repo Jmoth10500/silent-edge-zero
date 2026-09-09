@@ -45,6 +45,14 @@ positional fact, not a bias claim) one level up: the feature is neutral AND
 the weight that would turn it into a claim only gets set by `fit`, which
 this repo has never run on real outcomes.
 
+**Update 2026-09-09 — a real 6th feature, `draw_bias_edge` (RL-004), was
+added and re-tested against the same real data:** pooled Brier barely
+moved (0.0875, unchanged). A genuine null result — see RL-004 in
+`docs/RESEARCH_LAB.md` for the real `race.distance_yards` data bug found
+and fixed along the way (the feature was silently getting zero real data
+on the first attempt, which is why that first run looked unchanged for
+the wrong reason).
+
 Session 5's RL-006 entry flagged one simplification explicitly for review:
 a runner missing `official_rating` got `rating_edge=0.0`, the same value as
 a genuinely average-rated runner — "no evidence" and "average" were
@@ -68,6 +76,7 @@ import math
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
+from src.features.draw_bias_history import DrawBiasTable, draw_bias_edge as _draw_bias_edge
 from src.features.runner_features import (
     RunnerFeatureInput,
     draw_bias_features,
@@ -76,7 +85,10 @@ from src.features.runner_features import (
     relative_weight,
 )
 
-FEATURE_NAMES = ("rating_edge", "draw_edge", "form_edge", "weight_edge", "no_rating_flag")
+FEATURE_NAMES = (
+    "rating_edge", "draw_edge", "form_edge", "weight_edge", "no_rating_flag",
+    "draw_bias_edge",
+)
 
 # Untrained default: every weight at 0.0 means every runner's score is 0.0
 # regardless of its features, so predict_race_probabilities falls back to a
@@ -86,7 +98,12 @@ FEATURE_NAMES = ("rating_edge", "draw_edge", "form_edge", "weight_edge", "no_rat
 DEFAULT_WEIGHTS: dict[str, float] = {name: 0.0 for name in FEATURE_NAMES}
 
 
-def build_race_features(runners: Sequence[RunnerFeatureInput]) -> dict[int, dict[str, float]]:
+def build_race_features(
+    runners: Sequence[RunnerFeatureInput],
+    draw_bias_table: Optional[DrawBiasTable] = None,
+    course_id: Optional[int] = None,
+    distance_yards: Optional[int] = None,
+) -> dict[int, dict[str, float]]:
     """Race-relative, zero-centered feature vector per horse_id — Model 1's
     input row.
 
@@ -109,6 +126,16 @@ def build_race_features(runners: Sequence[RunnerFeatureInput]) -> dict[int, dict
     it's known), so a debutant-shaped runner is distinguishable from a
     genuinely average-rated one — see the module docstring and RL-006.
 
+    `draw_bias_edge` (RL-004/RL-008) is this runner's historical
+    course+distance draw-tercile win rate vs. the naive uniform
+    expectation, looked up from `draw_bias_table` (built by the caller
+    from ONLY strictly-earlier real outcomes — see
+    `src/features/draw_bias_history.py` for the leakage discipline this
+    relies on). Defaults to 0.0 ("no evidence") whenever `draw_bias_table`
+    is None, `course_id`/`distance_yards` aren't given, or the specific
+    bucket has insufficient real sample size — same convention as every
+    other feature here.
+
     Returns {} for an empty `runners` sequence.
     """
     if not runners:
@@ -130,12 +157,16 @@ def build_race_features(runners: Sequence[RunnerFeatureInput]) -> dict[int, dict
         fs = form_scores.get(r.horse_id)
         form_edge = (fs - mean_form) if (fs is not None and mean_form is not None) else 0.0
         no_rating_flag = 0.0 if r.horse_id in rating else 1.0
+        db_edge = _draw_bias_edge(
+            draw_bias_table or {}, course_id, distance_yards, r.draw, len(runners),
+        )
         out[r.horse_id] = {
             "rating_edge": rating_edge,
             "draw_edge": draw_edge,
             "form_edge": form_edge,
             "weight_edge": weight_edge,
             "no_rating_flag": no_rating_flag,
+            "draw_bias_edge": db_edge,
         }
     return out
 
@@ -157,6 +188,9 @@ def _softmax(scores: dict[int, float]) -> dict[int, float]:
 def predict_race_probabilities(
     runners: Sequence[RunnerFeatureInput],
     weights: Optional[dict[str, float]] = None,
+    draw_bias_table: Optional[DrawBiasTable] = None,
+    course_id: Optional[int] = None,
+    distance_yards: Optional[int] = None,
 ) -> dict[int, float]:
     """Model 1's prediction: softmax over the linear score of each runner's
     race-relative feature vector, keyed by horse_id. Sums to 1.0 (up to
@@ -164,11 +198,13 @@ def predict_race_probabilities(
     DEFAULT_WEIGHTS — i.e. an untrained model, which is provably uniform
     (see `test_predict_with_default_weights_is_uniform`). Raises ValueError
     for an empty race, matching `model0_market_baseline.predict_race_probabilities`.
+    `draw_bias_table`/`course_id`/`distance_yards` are optional and only
+    feed `draw_bias_edge` — see `build_race_features`.
     """
     if not runners:
         raise ValueError("cannot predict an empty race")
     weights = weights if weights is not None else DEFAULT_WEIGHTS
-    feats = build_race_features(runners)
+    feats = build_race_features(runners, draw_bias_table, course_id, distance_yards)
     scores = {hid: _linear_score(f, weights) for hid, f in feats.items()}
     return _softmax(scores)
 
@@ -184,6 +220,8 @@ class TrainingRace:
 
     runners: Sequence[RunnerFeatureInput]
     winner_horse_id: int
+    course_id: Optional[int] = None
+    distance_yards: Optional[int] = None
 
 
 def fit_logistic_baseline(
@@ -192,6 +230,7 @@ def fit_logistic_baseline(
     iterations: int = 500,
     l2: float = 0.01,
     initial_weights: Optional[dict[str, float]] = None,
+    draw_bias_table: Optional[DrawBiasTable] = None,
 ) -> dict[str, float]:
     """Batch gradient ASCENT on the multinomial-logit log-likelihood of the
     observed winners (equivalently: descent on cross-entropy loss). Pure
@@ -223,7 +262,10 @@ def fit_logistic_baseline(
                 f"winner_horse_id={race.winner_horse_id} is not among this "
                 f"race's own runners {sorted(horse_ids)}"
             )
-        race_features.append((build_race_features(race.runners), race.winner_horse_id))
+        race_features.append((
+            build_race_features(race.runners, draw_bias_table, race.course_id, race.distance_yards),
+            race.winner_horse_id,
+        ))
 
     n_races = len(race_features)
     for _ in range(iterations):

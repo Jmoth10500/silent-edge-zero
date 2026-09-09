@@ -465,3 +465,38 @@ tests — 81/81 tests pass via `python3 -m pytest tests/ -v`, up from 80):**
 - Do not create accounts on Jonathan's behalf (Betfair)
 - Do not present Model 2's result as anything other than what it is: beats Model 1 narrowly, still loses to the market
 - Do not skip re-running the full test suite before committing — all 89 tests must actually pass, not just the new ones
+
+---
+
+## 2026-09-09 — Session 10 continued (interactive, Jonathan's own machine): real draw-bias feature, and a real bug found+fixed along the way
+
+**Built RL-004's real course/distance draw-bias feature, per Session 10's own standing next-step recommendation, and found a genuine pre-existing data bug while testing it honestly rather than trusting a suspiciously flat result.**
+
+**What's genuinely done and verified:**
+- `src/features/draw_bias_history.py` — new module, real (course, distance-band, draw-tercile) → historical win-rate table (`build_draw_bias_table`) with a `min_sample_size=30` floor per bucket, and `draw_bias_edge()` (tercile win rate vs. naive uniform expectation, 0.0 "no evidence" for anything below the sample floor or with missing inputs). `tests/test_draw_bias_history.py` — 11 tests.
+- Wired as a 6th feature (`draw_bias_edge`) into the SHARED `build_race_features()` in `src/models/model1_logistic_baseline.py` (used by both Model 1 and Model 2), leakage-safe by construction: `scripts/train_model1.py::build_split_draw_bias_table()` rebuilds the table fresh from each walk-forward split's TRAINING races only, threaded through `fit_logistic_baseline`/`fit_gradient_boosting`/both `predict_race_probabilities` functions via new optional `draw_bias_table`/`course_id`/`distance_yards` params (all backward-compatible — every existing call site with no new args still behaves exactly as before). 3 new tests across `tests/test_model1_logistic_baseline.py` and `tests/test_model2_gradient_boosting.py`.
+- **Real bug found and fixed:** the first real training run with the new feature came back with the pooled Brier score essentially IDENTICAL to before the feature existed (Model 1 0.0875, Model 2 0.0873, to 4 decimal places) — suspicious enough on its own that a genuinely new, real feature moved nothing, so it was sanity-checked before being written up as a null result. `build_split_draw_bias_table()` on a real training fold returned **0 table entries**. Root cause: `race.distance_yards IS NULL` for **all 57,267** Kaggle-loaded races — `scripts/load_kaggle_historical.py` (Session 6) never parsed the CSV's `dist` column (e.g. `'2m3½f'`, `'6f'`) into it at all, a genuine silent gap, same shape as RL-007's missing form column.
+- **`scripts/backfill_race_distance.py`** — new, real, one-shot backfill. Parses the CSV's `dist` strings (miles/furlongs/half-furlongs) to whole yards, joins back to `race.external_ref` (which stores the CSV's own `race_id`). `tests/test_backfill_race_distance.py` — 6 unit tests on the parser, plus verified against **all 63 real distinct `dist` values actually in the CSV** (zero unparsed) before running for real. **Ran for real: 57,267 of 57,267 races backfilled with a real distance, 0 left NULL.** Re-verified the draw-bias table now genuinely populates: 438 real buckets on the first fold alone (was 0).
+- **Real result, feature now genuinely working (`scripts/train_model2.py`, same 9 real walk-forward folds, 2023-06 to 2026-06, ~487k predictions):** pooled Brier still barely moved — Model 1 0.0875 (unchanged), Model 2 0.0874 (was 0.0873, a noise-level move in the wrong direction). **This is now a genuine, trustworthy null result** — the bug is confirmed fixed and the feature confirmed populated (438+ real buckets, not 0), not silently inert. Course/distance draw bias, as implemented (220-yard bands, draw-tercile buckets, min 30 real samples), does not currently help either model. Full detail in `docs/RESEARCH_LAB.md` RL-004 and RL-008's update.
+- `docs/RESEARCH_LAB.md` — RL-004 rewritten with the real implementation, the bug, the fix, and the real (null) result; RL-008 updated with the same numbers.
+- Full test suite re-run and green throughout: **109/109 pass** (was 89 at the start of this continuation: +11 draw_bias_history, +2 model1, +1 model2, +6 backfill parser = 109).
+
+**What this means honestly:** two "richer feature" attempts now (real form derivation, RL-007/RL-006; real course/distance draw bias, RL-004) have both been genuinely tested against real data and both made only marginal-to-zero difference. This is real, useful negative evidence — it's not that "adding real features" is inherently the fix; the two most obvious candidates from the build brief's own feature list are largely exhausted. The process lesson matters as much as the modelling one: a real feature that changes nothing is worth a sanity check before being written up, exactly the discipline that caught this bug — trust a suspiciously-unchanged result enough to verify it, not enough to accept it.
+
+**What's still blocked (unchanged):**
+1. Betfair Delayed App Key — real market prices (Phase 4)
+2. Racing API's own results — still needs their Basic tier; not pursuing, Kaggle covers this need
+
+**What the next session should do, in priority order:**
+1. Check for new credentials as always.
+2. **Weather (RL-001) or genuine price-movement features remain the only untried "richer feature" candidates** — `weather_snapshot` has live Open-Meteo data only since 2026-09-08, so historical coverage for backtesting is thin; check real coverage before assuming it's usable against the 2023-2026 Kaggle set. Price movement (`src/market/movement.py`, already built and tested) needs real historical odds time series, not just a single starting price — the Kaggle data only has one SP per horse, not a movement history, so this may itself be blocked pending Betfair.
+3. Consider whether finer draw-bias bucketing (exact distance instead of 220-yard bands, or splitting by going/surface) is worth a quick re-test before concluding RL-004 is fully exhausted — flagged as a real possibility in RL-004's own write-up, not done this session, low priority given the pattern of gains being small even when features work correctly.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. **Always run a long script unbuffered and backgrounded to a real log file**, never `| tee` in the foreground.
+6. Keep this file updated at the end of every session.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result data, or any model's training data, to "demo" anything
+- Do not create accounts on Jonathan's behalf (Betfair)
+- Do not present the draw-bias null result as if the feature is broken (it is now confirmed correctly implemented and populated) or as if course/distance draw bias definitely doesn't exist in reality — only that this particular implementation, honestly tested, didn't help these two models
+- Do not skip re-running the full test suite before committing — all 109 tests must actually pass

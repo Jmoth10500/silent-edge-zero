@@ -35,9 +35,12 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
 
 - **Hypothesis:** a raw draw_percentile (0 = rail, 1 = widest, based only on the field present) is a weaker feature than a track+distance-specific historical draw bias, but is a reasonable and honest placeholder until real per-course historical data exists.
 - **Why it might work / why it's a placeholder:** genuine draw bias is course- and distance-specific (e.g. a low draw can be a major advantage at one course/distance and irrelevant at another) — that requires historical results grouped by course+distance, which doesn't exist yet.
-- **Implementation:** `src/features/runner_features.py::draw_bias_features()` — deliberately does NOT claim any bias direction, just the neutral positional fact.
-- **Training/validation period:** TBD — needs real historical results per course+distance (Phase 5+, once The Racing API or Kaggle data lands).
-- **Status: IDEA** — flagged so the next session doesn't mistake the neutral placeholder for a validated bias model.
+- **Implementation:** `src/features/runner_features.py::draw_bias_features()` — deliberately does NOT claim any bias direction, just the neutral positional fact. The real, biased-on-purpose version is `src/features/draw_bias_history.py` (built 2026-09-09, see below) — a SEPARATE feature, not a replacement.
+- **Real implementation (2026-09-09, Session 10):** `src/features/draw_bias_history.py::build_draw_bias_table()`/`draw_bias_edge()` — course+distance-banded (220-yard/1-furlong bands), draw-tercile (LOW/MID/HIGH third of field) historical win rate vs. the naive uniform expectation, with a `min_sample_size=30` floor per bucket (below that, returns 0.0 "no evidence", never a low-confidence guess). Wired as a 6th feature (`draw_bias_edge`) into both Model 1 and Model 2's shared `build_race_features()`, leakage-safe by construction: the table is rebuilt fresh from each walk-forward split's TRAINING races only (`scripts/train_model1.py::build_split_draw_bias_table`), never the test fold or full dataset.
+- **Real bug found and fixed along the way:** the first real run of this feature came back with the pooled Brier score essentially unchanged from before the feature existed — suspicious enough to sanity-check rather than accept. `build_split_draw_bias_table()` was returning ZERO table entries: `race.distance_yards` was NULL for all 57,267 Kaggle-loaded races, because `scripts/load_kaggle_historical.py` (Session 6) never parsed the CSV's `dist` column (e.g. `'2m3½f'`) into it — a real, silent data-engineering gap, same shape as RL-007's missing form column. Fixed with `scripts/backfill_race_distance.py` — a real parser (6 unit tests, verified against all 63 real distinct `dist` strings in the CSV, zero unparsed) that backfilled all 57,267 races with real distances. Confirmed fixed by re-checking the table: 438 real (course, distance, tercile) buckets populated on the first fold alone, not 0.
+- **Real result, feature genuinely working this time (2026-09-09, `scripts/train_model2.py`, same 9 real walk-forward folds, 2023-06 to 2026-06, ~487k predictions):** pooled Brier virtually unchanged — Model 1: 0.0875 (same as without the feature), Model 2: 0.0874 (was 0.0873 without it, a noise-level difference in the wrong direction). **The draw-bias feature, correctly computed against real data, did NOT meaningfully improve either model.** This is now a genuine, trustworthy null result (the bug is confirmed fixed and the feature confirmed populated, not silently inert) rather than the false null the buggy first run produced.
+- **What this means honestly:** either genuine course/distance draw bias is weaker in this real dataset than expected, the 220-yard-band/tercile bucketing is too coarse to capture it, or five/six race-relative features generally aren't the bottleneck this repo hoped (consistent with RL-008's own conclusion). Worth one more look with finer buckets (e.g. by exact distance rather than banded, or by going/surface too) before concluding draw bias itself is a dead end here — but not a priority next step given how small the earlier feature-completeness gains (RL-006/RL-007's form fix) already were relative to the market gap.
+- **Status: TESTING — clean, complete, genuinely tested result** (after fixing the distance_yards bug that produced a false null first). Real course+distance draw bias, as implemented, does not currently move the needle for Model 1 or Model 2.
 
 ## RL-005: Market baseline (Model 0) as the bar every real model must clear
 
@@ -195,6 +198,16 @@ Status values: IDEA / TESTING / FAILED / PROMISING / VALIDATED / PRODUCTION
   narrowly, both still lose clearly to Model 0. Not pursuing model-class
   tuning (hyperparameter sweep) further against this same feature set — see
   reasoning above.
+- **Update 2026-09-09, same session — re-run with the new `draw_bias_edge`
+  6th feature (RL-004) once its real distance_yards bug was fixed:** pooled
+  Brier barely moved — Model 1 0.0875 (unchanged), Model 2 0.0874 (was
+  0.0873, noise-level). See RL-004 for the full story (a real bug briefly
+  produced a false null before the fix). This reinforces RL-008's original
+  conclusion: the bottleneck is genuinely the feature set/its current
+  shape, not model class, and the two most obvious "richer feature"
+  candidates tried so far (real form, RL-007; real draw bias, RL-004) both
+  made only marginal-to-zero difference once genuinely tested. Weather
+  (RL-001) and price-movement features remain untried.
 
 ---
 

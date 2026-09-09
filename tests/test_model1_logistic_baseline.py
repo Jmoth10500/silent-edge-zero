@@ -111,6 +111,36 @@ def test_build_race_features_empty_runners_returns_empty_dict():
     assert build_race_features([]) == {}
 
 
+def test_build_race_features_draw_bias_edge_defaults_to_zero_without_table():
+    runners = [
+        _runner(1, draw=1, official_rating=80),
+        _runner(2, draw=8, official_rating=70),
+    ]
+    feats = build_race_features(runners)  # no draw_bias_table/course_id/distance_yards given
+    assert feats[1]["draw_bias_edge"] == 0.0
+    assert feats[2]["draw_bias_edge"] == 0.0
+
+
+def test_build_race_features_draw_bias_edge_uses_table_when_given():
+    # 8 real runners -> field_size=8 -> uniform expectation 1/8=0.125.
+    # Table says LOW draw tercile wins 0.3 of the time, HIGH wins 0.05, at
+    # (course_id=1, distance_band=1320).
+    table = {(1, 1320, "LOW"): 0.3, (1, 1320, "HIGH"): 0.05}
+    runners = [
+        _runner(1, draw=1, official_rating=80),   # draw 1/8 -> percentile 0.0 -> LOW
+        _runner(2, draw=8, official_rating=70),   # draw 8/8 -> percentile 1.0 -> HIGH
+        _runner(3, draw=2, official_rating=75),
+        _runner(4, draw=3, official_rating=72),
+        _runner(5, draw=4, official_rating=68),
+        _runner(6, draw=5, official_rating=65),
+        _runner(7, draw=6, official_rating=60),
+        _runner(8, draw=7, official_rating=58),
+    ]
+    feats = build_race_features(runners, draw_bias_table=table, course_id=1, distance_yards=1400)
+    assert math.isclose(feats[1]["draw_bias_edge"], 0.3 - 0.125)
+    assert math.isclose(feats[2]["draw_bias_edge"], 0.05 - 0.125)
+
+
 # ---------------------------------------------------------------------------
 # predict_race_probabilities
 # ---------------------------------------------------------------------------
@@ -314,6 +344,8 @@ if __name__ == "__main__":
         test_build_race_features_centers_on_field_mean,
         test_build_race_features_missing_fields_default_to_zero,
         test_build_race_features_empty_runners_returns_empty_dict,
+        test_build_race_features_draw_bias_edge_defaults_to_zero_without_table,
+        test_build_race_features_draw_bias_edge_uses_table_when_given,
         test_predict_with_default_weights_is_uniform,
         test_predict_sums_to_one_with_nonzero_weights,
         test_predict_empty_race_raises,
