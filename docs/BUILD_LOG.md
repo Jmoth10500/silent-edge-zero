@@ -830,5 +830,13 @@ Full suite: **241/241 pass.**
 - Do not fabricate racecard/odds/result/price data, or any model's training data, to "demo" anything
 - Do not create accounts on Jonathan's behalf
 - Do not assume a persistently-zero real collector result is "just waiting for data" without checking — verify the matching logic actually works
-- Do not skip re-running the full test suite before committing — all 241 tests must actually pass
+- Do not skip re-running the full test suite before committing — all 245 tests must actually pass
 - Do not treat a single real day's hit rate/P&L as a track record — state the sample size every time it's shown
+
+**Same session, immediately after — click-through on "Days tracked":** Jonathan asked for the "Days tracked" stat tile to pop up a list of real tracked dates, each linking to that day's race card showing predictions with Win/Loss and Placed shown separately. Built as two more native `<dialog>` popups (no JS framework, same pattern as the race cards and the OR/Form help popup):
+- `load_race_history()` — one query across every real tracked date, returning each race's real top pick (gbm_v1, same definition as generate_eod_report.py), its real model probability, and its real settled outcome, classified WIN / PLACED (within that race's real each-way place terms) / LOSS / PENDING.
+- `render_days_tracked_dialog()` — the date list, click a date to open that day's dialog.
+- `render_day_history_dialog()` — one real day's races, each showing time, course, race name, horse, model probability, real finishing position (or the real result_note for a non-finish like PU), and a colour-coded status badge (green WIN / amber PLACED / red LOSS / grey PENDING).
+- Each day-row in the existing track-record bar chart is now also directly clickable to the same per-day dialog (bonus, reusing the same popup).
+- Visually verified end-to-end in a real browser: tile click -> date list -> date click -> real race-by-race breakdown with correct badges, matching the 30 real settled races from Day 1.
+- 4 new tests. Full suite: **245/245 pass.**

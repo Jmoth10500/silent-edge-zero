@@ -40,6 +40,7 @@ import psycopg2
 import requests
 
 from data.gb_racecourse_coordinates import GB_RACECOURSE_COORDINATES, normalise_course_name
+from scripts.generate_eod_report import ew_terms_for_field_size
 from src.features.runner_features import (
     RunnerFeatureInput,
     draw_bias_features,
@@ -164,6 +165,62 @@ def load_daily_summaries(conn) -> list[dict]:
             "favourite_wins": favourite_wins,
             "win_stake_total": float(win_stake_total), "win_profit": float(win_profit),
             "ew_stake_total": float(ew_stake_total), "ew_profit": float(ew_profit),
+        })
+    return out
+
+
+def load_race_history(conn, race_dates: list[date]) -> dict[date, list[dict]]:
+    """Real per-race top-pick + real settled outcome, for every real
+    tracked day (see daily_summary) — feeds the "Days tracked" popup so
+    Jonathan can click through to a specific day's race-by-race
+    breakdown. Restricted to gbm_v1's locked top pick per race, same
+    definition scripts/generate_eod_report.py already uses (never a
+    second, different notion of "the pick" invented here)."""
+    if not race_dates:
+        return {}
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT r.race_date, r.id, r.off_time, c.name, r.race_name, h.name, p.model_probability,
+               rr.finishing_position, rr.result_note,
+               (SELECT COUNT(*) FROM prediction p2
+                JOIN model_version mv2 ON mv2.id = p2.model_version_id
+                WHERE p2.race_id = r.id AND mv2.name = 'gbm_v1' AND p2.locked_at IS NOT NULL) AS field_size
+        FROM prediction p
+        JOIN race r ON r.id = p.race_id
+        JOIN course c ON c.id = r.course_id
+        JOIN horse h ON h.id = p.horse_id
+        JOIN model_version mv ON mv.id = p.model_version_id
+        LEFT JOIN runner_result rr ON rr.race_id = r.id AND rr.horse_id = p.horse_id
+        WHERE mv.name = 'gbm_v1' AND p.locked_at IS NOT NULL AND r.race_date = ANY(%s)
+        ORDER BY r.race_date, r.off_time, r.id, p.model_probability DESC
+        """,
+        (race_dates,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+
+    out: dict[date, list[dict]] = {}
+    seen_races: set[int] = set()
+    for (race_date_, race_id, off_time, course_name, race_name, horse_name, prob,
+         position, result_note, field_size) in rows:
+        if race_id in seen_races:
+            continue  # rows are ordered by probability desc — first row per race is the real top pick
+        seen_races.add(race_id)
+        _, _, n_places = ew_terms_for_field_size(field_size)
+        if position is None:
+            status = "PENDING"
+        elif position == 1:
+            status = "WIN"
+        elif n_places and position <= n_places:
+            status = "PLACED"
+        else:
+            status = "LOSS"
+        out.setdefault(race_date_, []).append({
+            "off_time": off_time, "course_name": course_name, "race_name": race_name,
+            "horse_name": horse_name, "model_probability": float(prob),
+            "finishing_position": position, "result_note": result_note,
+            "field_size": field_size, "status": status,
         })
     return out
 
@@ -572,12 +629,71 @@ def render_backtest_context() -> str:
     return "".join(cards)
 
 
-def render_track_record(summaries: list[dict]) -> str:
+def render_days_tracked_dialog(dates: list[date]) -> str:
+    """Popup listing every real tracked day — click a date to open that
+    day's real race-by-race breakdown (render_day_history_dialog)."""
+    if not dates:
+        return ""
+    rows = []
+    for d in sorted(dates, reverse=True):
+        dom_id = f"day-{d.isoformat()}"
+        rows.append(f"""
+        <button class="days-list-row" onclick="document.getElementById('days-tracked-dialog').close();
+          document.getElementById('{dom_id}').showModal()">
+          <span>{d.strftime('%A %d %B %Y')}</span>
+          <span class="days-list-arrow">›</span>
+        </button>""")
+    return f"""
+    <dialog class="help-dialog" id="days-tracked-dialog">
+      <button class="close-btn" onclick="this.closest('dialog').close()" aria-label="Close">✕</button>
+      <h2>Tracked days</h2>
+      <div class="days-list">{''.join(rows)}</div>
+    </dialog>"""
+
+
+def render_day_history_dialog(day: date, races: list[dict]) -> str:
+    """One real day's race-by-race breakdown: the real top pick, its
+    real model probability, and its real settled outcome — WIN, PLACED
+    (within that race's real each-way terms), LOSS, or PENDING if no
+    real result has been collected yet. Never a guessed outcome."""
+    badge_class = {"WIN": "win", "PLACED": "placed", "LOSS": "loss", "PENDING": "pending"}
+    rows = []
+    for r in sorted(races, key=lambda x: x["off_time"]):
+        t = r["off_time"].strftime("%H:%M") if hasattr(r["off_time"], "strftime") else r["off_time"]
+        status = r["status"]
+        if r["finishing_position"] is not None:
+            pos_text = f"finished {r['finishing_position']}"
+        elif r["result_note"]:
+            pos_text = r["result_note"]
+        else:
+            pos_text = "result pending"
+        rows.append(f"""
+        <div class="dayhist-row">
+          <span class="dayhist-time">{t}</span>
+          <div class="dayhist-main">
+            <span class="dayhist-course">{r['course_name']} — {r['race_name']}</span>
+            <span class="dayhist-horse">{r['horse_name']} · model p={_pct(r['model_probability'])} · {pos_text}</span>
+          </div>
+          <span class="dayhist-badge dayhist-badge-{badge_class[status]}">{status}</span>
+        </div>""")
+    dom_id = f"day-{day.isoformat()}"
+    return f"""
+    <dialog class="help-dialog dayhist-dialog" id="{dom_id}">
+      <button class="close-btn" onclick="this.closest('dialog').close()" aria-label="Close">✕</button>
+      <h2>{day.strftime('%A %d %B %Y')}</h2>
+      <div class="dayhist-list">{''.join(rows)}</div>
+    </dialog>"""
+
+
+def render_track_record(summaries: list[dict], race_history: dict[date, list[dict]] | None = None) -> str:
     """Real, persisted day-by-day track record — cumulative hit rate and
     P&L across every real settled day, plus a per-day breakdown, built
     from `daily_summary` (see scripts/generate_daily_summary.py). Empty
     entirely (never a placeholder chart) until at least one day has real
-    settled results."""
+    settled results. `race_history` (see load_race_history) feeds the
+    per-day click-through popups — omitted, those dialogs are simply
+    not rendered rather than showing a broken link."""
+    race_history = race_history or {}
     if not summaries:
         return """
     <div class="section-label">Track record</div>
@@ -602,10 +718,10 @@ def render_track_record(summaries: list[dict]) -> str:
 
     tiles = f"""
     <div class="stats-row">
-      <div class="stat-tile">
+      <div class="stat-tile stat-tile-clickable" onclick="document.getElementById('days-tracked-dialog').showModal()">
         <div class="stat-label">Days tracked</div>
         <div class="stat-value">{days}</div>
-        <div class="stat-sub">{races_settled} real settled races</div>
+        <div class="stat-sub">{races_settled} real settled races — tap to view by day</div>
       </div>
       <div class="stat-tile">
         <div class="stat-label">Top-pick hit rate (real)</div>
@@ -636,8 +752,9 @@ def render_track_record(summaries: list[dict]) -> str:
         width = max(2, round(d_hit * 100))
         pnl = s["win_profit"]
         pnl_color = "var(--good)" if pnl >= 0 else "var(--bad)"
+        day_dom_id = f"day-{s['race_date'].isoformat()}"
         day_rows.append(f"""
-        <div class="trackrow">
+        <div class="trackrow" onclick="document.getElementById('{day_dom_id}').showModal()">
           <span class="trackrow-date">{s['race_date'].strftime('%d %b')}</span>
           <span class="trackrow-pct">{_pct(d_hit)}</span>
           <div class="trackrow-bar-wrap">
@@ -646,11 +763,17 @@ def render_track_record(summaries: list[dict]) -> str:
           </div>
         </div>""")
 
+    dates = [s["race_date"] for s in summaries]
+    day_dialogs = "".join(
+        render_day_history_dialog(d, race_history[d]) for d in dates if d in race_history
+    )
     return f"""
     <div class="section-label">Track record — real settled results, day by day</div>
     {tiles}
     {caveat}
-    <div class="track-record-chart">{''.join(day_rows)}</div>"""
+    <div class="track-record-chart">{''.join(day_rows)}</div>
+    {render_days_tracked_dialog(dates)}
+    {day_dialogs}"""
 
 
 def render_summary(races: list[dict]) -> str:
@@ -704,9 +827,11 @@ def render_summary(races: list[dict]) -> str:
 
 
 def render_html(race_date: date, races: list[dict], course_weather: dict[str, dict] | None = None,
-                 daily_summaries: list[dict] | None = None) -> str:
+                 daily_summaries: list[dict] | None = None,
+                 race_history: dict[date, list[dict]] | None = None) -> str:
     course_weather = course_weather or {}
     daily_summaries = daily_summaries or []
+    race_history = race_history or {}
     race_dialogs = "".join(render_race(r, course_weather) for r in races)
     empty_message = '' if races else '<p class="empty">No predictions locked for this date yet.</p>'
 
@@ -781,6 +906,8 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
   .stat-label {{ font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; }}
   .stat-value {{ font-size: 24px; font-weight: 600; margin-top: 2px; }}
   .stat-sub {{ font-size: 11px; color: var(--text-muted); margin-top: 2px; }}
+  .stat-tile-clickable {{ cursor: pointer; }}
+  .stat-tile-clickable:hover {{ border-color: var(--series-1); }}
   .race-card {{
     background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
     padding: 16px 18px; margin-bottom: 14px;
@@ -874,6 +1001,38 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
   dialog.help-dialog p, dialog.help-dialog li {{ font-size: 13px; color: var(--text-secondary); line-height: 1.5; }}
   dialog.help-dialog ul {{ margin: 6px 0; padding-left: 18px; }}
 
+  .days-list {{ display: flex; flex-direction: column; }}
+  .days-list-row {{
+    display: flex; justify-content: space-between; align-items: center;
+    width: 100%; text-align: left; background: none; border: none;
+    border-top: 1px solid var(--border); padding: 12px 4px; font-size: 13px;
+    color: var(--text-primary); cursor: pointer; font-family: inherit;
+  }}
+  .days-list-row:first-child {{ border-top: none; }}
+  .days-list-row:hover, .days-list-row:active {{ color: var(--series-1); }}
+  .days-list-arrow {{ color: var(--text-muted); font-size: 16px; }}
+
+  dialog.dayhist-dialog {{ max-width: 600px; }}
+  .dayhist-list {{ display: flex; flex-direction: column; }}
+  .dayhist-row {{
+    display: grid; grid-template-columns: 44px 1fr auto;
+    align-items: center; column-gap: 10px;
+    padding: 10px 4px; border-top: 1px solid var(--border); font-size: 12px;
+  }}
+  .dayhist-row:first-child {{ border-top: none; }}
+  .dayhist-time {{ color: var(--series-1); font-weight: 600; }}
+  .dayhist-main {{ display: flex; flex-direction: column; gap: 2px; overflow: hidden; }}
+  .dayhist-course {{ color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+  .dayhist-horse {{ color: var(--text-muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+  .dayhist-badge {{
+    font-size: 10px; font-weight: 700; letter-spacing: .03em; padding: 4px 8px;
+    border-radius: 20px; white-space: nowrap;
+  }}
+  .dayhist-badge-win {{ background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }}
+  .dayhist-badge-placed {{ background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }}
+  .dayhist-badge-loss {{ background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }}
+  .dayhist-badge-pending {{ background: var(--surface-2); color: var(--text-muted); }}
+
   .race-weather {{
     font-size: 11px; color: var(--text-secondary); background: var(--surface-2);
     border-radius: 8px; padding: 8px 12px; margin-bottom: 12px;
@@ -955,8 +1114,10 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     grid-template-areas: "date pct" "bar bar";
     align-items: center; column-gap: 8px; row-gap: 6px;
     padding: 10px 8px; border-top: 1px solid var(--border); font-size: 12px;
+    cursor: pointer; border-radius: 6px;
   }}
   .trackrow:first-child {{ border-top: none; }}
+  .trackrow:hover, .trackrow:active {{ background: var(--surface-2); }}
   .trackrow-date {{ grid-area: date; color: var(--text-secondary); font-weight: 600; }}
   .trackrow-pct {{ grid-area: pct; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }}
   .trackrow-bar-wrap {{ grid-area: bar; display: flex; align-items: center; gap: 8px; }}
@@ -1065,7 +1226,7 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     {render_backtest_context()}
   </div>
 
-  {render_track_record(daily_summaries)}
+  {render_track_record(daily_summaries, race_history)}
 
   {render_weather(course_weather)}
 
@@ -1140,12 +1301,13 @@ def main():
     conn = psycopg2.connect(dbname="silent_edge_zero")
     races = load_predictions(conn, race_date)
     daily_summaries = load_daily_summaries(conn)
+    race_history = load_race_history(conn, [s["race_date"] for s in daily_summaries])
     conn.close()
 
     course_names = {r["course_name"] for r in races}
     course_weather = fetch_course_weather(course_names, race_date)
 
-    html = render_html(race_date, races, course_weather, daily_summaries)
+    html = render_html(race_date, races, course_weather, daily_summaries, race_history)
     OUTPUT_PATH.write_text(html, encoding="utf-8")
     print(f"Dashboard written to {OUTPUT_PATH} ({len(races)} races).")
 

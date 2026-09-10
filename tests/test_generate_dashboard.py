@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from datetime import date
+from datetime import date, time
 
 from scripts.generate_dashboard import (
     _bar_html,
@@ -24,6 +24,8 @@ from scripts.generate_dashboard import (
     render_html,
     render_overview_chart,
     render_summary,
+    render_day_history_dialog,
+    render_days_tracked_dialog,
     render_track_record,
     render_weather,
 )
@@ -310,6 +312,52 @@ def test_render_track_record_shows_small_sample_caveat_under_20_days():
     assert "£-1.00" in html  # a real loss renders with the minus sign, not hidden
 
 
+def test_render_days_tracked_dialog_empty_when_no_dates():
+    assert render_days_tracked_dialog([]) == ""
+
+
+def test_render_days_tracked_dialog_lists_real_dates_newest_first():
+    html = render_days_tracked_dialog([date(2026, 9, 8), date(2026, 9, 10), date(2026, 9, 9)])
+    i10 = html.index("10 September 2026")
+    i9 = html.index("09 September 2026")
+    i8 = html.index("08 September 2026")
+    assert i10 < i9 < i8  # newest first
+    assert "day-2026-09-10" in html  # onclick target matches the per-day dialog's dom id
+
+
+def test_render_day_history_dialog_shows_win_loss_placed_badges():
+    races = [
+        {"off_time": time(13, 15), "course_name": "Doncaster", "race_name": "Race A",
+         "horse_name": "Winner Horse", "model_probability": 0.3, "finishing_position": 1,
+         "result_note": None, "field_size": 9, "status": "WIN"},
+        {"off_time": time(13, 50), "course_name": "Doncaster", "race_name": "Race B",
+         "horse_name": "Placed Horse", "model_probability": 0.2, "finishing_position": 3,
+         "result_note": None, "field_size": 9, "status": "PLACED"},
+        {"off_time": time(14, 0), "course_name": "Epsom", "race_name": "Race C",
+         "horse_name": "Loser Horse", "model_probability": 0.25, "finishing_position": 6,
+         "result_note": None, "field_size": 9, "status": "LOSS"},
+        {"off_time": time(14, 10), "course_name": "Epsom", "race_name": "Race D",
+         "horse_name": "Pending Horse", "model_probability": 0.18, "finishing_position": None,
+         "result_note": None, "field_size": 9, "status": "PENDING"},
+    ]
+    html = render_day_history_dialog(date(2026, 9, 10), races)
+    assert 'id="day-2026-09-10"' in html
+    assert "dayhist-badge-win\">WIN" in html
+    assert "dayhist-badge-placed\">PLACED" in html
+    assert "dayhist-badge-loss\">LOSS" in html
+    assert "dayhist-badge-pending\">PENDING" in html
+    assert "Winner Horse" in html and "finished 1" in html
+    assert "result pending" in html  # pending race has no finishing_position or result_note
+
+
+def test_render_day_history_dialog_shows_result_note_for_non_finishes():
+    races = [{"off_time": time(13, 15), "course_name": "Doncaster", "race_name": "Race A",
+              "horse_name": "Pulled Up Horse", "model_probability": 0.3, "finishing_position": None,
+              "result_note": "PU", "field_size": 9, "status": "LOSS"}]
+    html = render_day_history_dialog(date(2026, 9, 10), races)
+    assert "PU" in html
+
+
 def test_render_track_record_no_caveat_at_20_plus_days():
     summaries = [{
         "race_date": date(2026, 9, 1 + i % 28), "races_total": 3, "races_settled": 3,
@@ -355,6 +403,10 @@ if __name__ == "__main__":
         test_render_track_record_real_cumulative_stats,
         test_render_track_record_shows_small_sample_caveat_under_20_days,
         test_render_track_record_no_caveat_at_20_plus_days,
+        test_render_days_tracked_dialog_empty_when_no_dates,
+        test_render_days_tracked_dialog_lists_real_dates_newest_first,
+        test_render_day_history_dialog_shows_win_loss_placed_badges,
+        test_render_day_history_dialog_shows_result_note_for_non_finishes,
     ]
     passed = 0
     for t in tests:
