@@ -840,3 +840,22 @@ Full suite: **241/241 pass.**
 - Each day-row in the existing track-record bar chart is now also directly clickable to the same per-day dialog (bonus, reusing the same popup).
 - Visually verified end-to-end in a real browser: tile click -> date list -> date click -> real race-by-race breakdown with correct badges, matching the 30 real settled races from Day 1.
 - 4 new tests. Full suite: **245/245 pass.**
+
+**Same session, win/placed/loss tally added to the day-history popup** per Jonathan's follow-up ("the only thing that is missing... a tally of how many wins, losses and placed"). Colour-coded chip row (N wins / N placed / N losses / N pending) above the race list. 1 new test. Full suite: **246/246 pass.**
+
+---
+
+## 2026-09-11 — RL-012: top-pick calibration, real validated overconfidence above ~40%
+
+Jonathan's question looking at a real 21.6% top pick: is there a "sweet spot" probability band worth watching — could a 31% pick be overconfident, could a 20.5% pick be undervalued? Real, worthwhile question — built `scripts/analyze_top_pick_calibration.py` to answer it properly with the existing walk-forward apparatus and RL-011's discovery/validation discipline (first 7 folds discovery, remainder validation, never touched during discovery) rather than eyeballing REAL_CALIBRATION_BINS (which pools every runner, not just top picks).
+
+**Real bug caught before trusting the result:** first draft defaulted to `test_window_days=60` (copied from `train_model2.py`), which produces 19 folds — the wrong boundary for RL-011's established 7-discovery/N-validation convention. Fixed to 120 (matching `compute_hit_rate.py`) before running for real.
+
+**Real, validated result** (39,518 discovery + 10,207 validation real top-pick predictions; full table in docs/RESEARCH_LAB.md RL-012): Jonathan's specific guess (a ~20% pick undervalued) did NOT hold — that range is well-calibrated on both discovery and validation. But a real pattern in the opposite direction DID validate: top picks above ~40% confidence are consistently overconfident (actual win rate 4-9pp below stated probability), same direction on data discovery never touched — a genuine finding, unlike RL-011's rejected field-size idea. **Status: VALIDATED, not yet wired into anything** — no live pipeline/model/dashboard change made; a deliberate decision on whether to apply a calibration correction is still open.
+
+Full suite: **250/250 pass** (4 new tests for `analyze_top_pick_calibration.py`'s pure bucket/summarise functions).
+
+**What the next session should do, if Jonathan wants to act on RL-012:**
+1. Decide whether to apply a targeted calibration correction (temperature scaling above the ~40% threshold specifically, same real technique already built in `src/evaluation/temperature_scaling.py` for RL-011) — this is a genuine open decision, not yet made.
+2. Consider building a LIVE version of this table on the dashboard, now that `daily_summary`/`runner_result` are accumulating real results daily — would let the validated backtest finding be checked against real live outcomes over time, same way Day 1's real hit rate already tracked closely with the backtested ~23%.
+3. Any live-tracked "sweet spot" needs the same discipline: don't act on a short live run alone — treat it as a slowly-accumulating confirmation of the backtest finding, not a new independent discovery.

@@ -470,4 +470,71 @@ honesty note on why)
 
 ---
 
+## RL-012: Top-pick-only calibration — real, validated overconfidence above ~40%
+
+- **The ask:** Jonathan, looking at a real 21.6% top pick on the
+  dashboard (2026-09-10): "If we were to find an average percentage of
+  the winners and monitor if there is a sweet spot to act on... a score
+  of 31% could end up being too confident and a 20.5% horse statistically
+  is more than likely to win. Does this make sense?"
+- **Why this needed its own analysis, not just REAL_CALIBRATION_BINS:**
+  the existing bins (`generate_dashboard.py`) pool every runner's
+  probability in every race — mostly low-probability non-picks, diluting
+  any effect specific to the actual TOP pick. `scripts/analyze_top_pick_
+  calibration.py` buckets only the single highest-probability runner per
+  race, same real walk-forward folds, same discovery/validation
+  discipline as RL-011 (first 7 folds discovery, remainder validation,
+  never touched during discovery).
+- **Real bug caught before trusting the split:** the script's first
+  draft defaulted `test_window_days=60` (matching `train_model2.py`),
+  which produces 19 folds — a different boundary than RL-011's
+  established 7-discovery/N-validation convention.
+  `compute_hit_rate.py`/`validate_field_size_calibration.py` use 120,
+  which reproduces the canonical fold structure. Fixed before running
+  for real.
+- **Real result (2026-09-11, 39,518 discovery + 10,207 validation real
+  top-pick predictions; fold count grew from RL-011's 9 to 10 since more
+  live data has accumulated since 2026-09-09):**
+
+  | Range | Predicted | Actual (discovery) | Actual (validation) |
+  |---|---|---|---|
+  | 0–15% | 13.0% | 12.9% | 14.1% |
+  | 15–20% | 17.5% | 17.2% | 18.4% |
+  | 20–25% | 22.4% | 21.5% | 21.3% |
+  | 25–30% | 27.3% | 26.1% | 27.5% |
+  | 30–35% | 32.3% | 29.9% | 29.8% |
+  | 35–40% | 37.3% | 35.0% | 35.7% |
+  | 40–45% | 42.3% | 38.3% | 39.4% |
+  | 45–50% | 47.3% | 41.4% | 45.0% |
+  | 50%+ | 58.7–59.2% | 52.2% | 50.4% |
+
+- **Jonathan's specific hypothesis (a ~20% pick is undervalued) did NOT
+  hold** — the 15–40% range is well-calibrated on both discovery and
+  validation, gaps within ~1–2.5pp, consistent with noise. No hidden
+  value there.
+- **A real, validated pattern in the OPPOSITE part of the range DID
+  hold:** top picks above ~40% are consistently overconfident, on data
+  the discovery step never touched — actual win rate runs 4–9 percentage
+  points below the model's own stated probability, in the same direction
+  at both 40–45%, 45–50%, and 50%+. This clears the bar RL-011's
+  field-size idea failed to clear (same direction + meaningful gap on
+  genuinely fresh validation data).
+- **What this means practically:** no exploitable "underdog value" band
+  exists in this model's output. But a pick shown at 45%+ should be
+  trusted somewhat less than its face value — a real, small, validated
+  discount, not proof of a profitable betting rule on its own (this
+  measures calibration, not ROI — a well-calibrated-but-shifted
+  probability doesn't automatically imply positive expected value once
+  real market odds are factored in).
+- **Status: VALIDATED, not yet wired into anything.** Nothing has been
+  changed in the live pipeline, the models, or the dashboard's shown
+  probabilities — this is a real, held-up finding sitting on the shelf
+  until a deliberate decision is made about whether/how to apply a
+  calibration correction (e.g. temperature scaling specifically above
+  the ~40% threshold, same real technique as `src/evaluation/
+  temperature_scaling.py`, just targeted at a different real trigger
+  than RL-011's rejected field-size one).
+
+---
+
 *New entries go at the bottom, oldest first, so the log itself is chronological.*
