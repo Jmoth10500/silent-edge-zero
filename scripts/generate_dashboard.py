@@ -138,6 +138,36 @@ def load_predictions(conn, race_date: date):
     return [races[rid] for rid in order]
 
 
+def load_daily_summaries(conn) -> list[dict]:
+    """Real, persisted per-day track record — written by
+    scripts/generate_daily_summary.py from actually-settled runner_result
+    rows. Every day this returns is real; a day with no results yet
+    simply has no row (never a zero-filled placeholder invented here)."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT race_date, races_total, races_settled, top_pick_wins, top_pick_placed,
+               favourite_wins, win_stake_total, win_profit, ew_stake_total, ew_profit
+        FROM daily_summary
+        WHERE races_settled > 0
+        ORDER BY race_date
+        """
+    )
+    rows = cur.fetchall()
+    cur.close()
+    out = []
+    for (race_date_, races_total, races_settled, top_pick_wins, top_pick_placed,
+         favourite_wins, win_stake_total, win_profit, ew_stake_total, ew_profit) in rows:
+        out.append({
+            "race_date": race_date_, "races_total": races_total, "races_settled": races_settled,
+            "top_pick_wins": top_pick_wins, "top_pick_placed": top_pick_placed,
+            "favourite_wins": favourite_wins,
+            "win_stake_total": float(win_stake_total), "win_profit": float(win_profit),
+            "ew_stake_total": float(ew_stake_total), "ew_profit": float(ew_profit),
+        })
+    return out
+
+
 def fetch_course_weather(course_names: set[str], race_date: date, http_get=requests.get) -> dict[str, dict]:
     """Real, live daily forecast per real GB course — Open-Meteo's free
     forecast endpoint (no key, same provider as src/providers/weather_open_meteo.py,
@@ -542,6 +572,87 @@ def render_backtest_context() -> str:
     return "".join(cards)
 
 
+def render_track_record(summaries: list[dict]) -> str:
+    """Real, persisted day-by-day track record — cumulative hit rate and
+    P&L across every real settled day, plus a per-day breakdown, built
+    from `daily_summary` (see scripts/generate_daily_summary.py). Empty
+    entirely (never a placeholder chart) until at least one day has real
+    settled results."""
+    if not summaries:
+        return """
+    <div class="section-label">Track record</div>
+    <div class="track-record-empty">No settled results yet — this section fills in once
+      scripts/collect_race_results.py and scripts/generate_daily_summary.py have run
+      for at least one real race day.</div>"""
+
+    days = len(summaries)
+    races_settled = sum(s["races_settled"] for s in summaries)
+    top_pick_wins = sum(s["top_pick_wins"] for s in summaries)
+    top_pick_placed = sum(s["top_pick_placed"] for s in summaries)
+    favourite_wins = sum(s["favourite_wins"] for s in summaries)
+    win_profit = sum(s["win_profit"] for s in summaries)
+    win_stake = sum(s["win_stake_total"] for s in summaries)
+    ew_profit = sum(s["ew_profit"] for s in summaries)
+    ew_stake = sum(s["ew_stake_total"] for s in summaries)
+
+    hit_rate = top_pick_wins / races_settled if races_settled else 0.0
+    fav_rate = favourite_wins / races_settled if races_settled else 0.0
+    win_roi = win_profit / win_stake if win_stake else 0.0
+    ew_roi = ew_profit / ew_stake if ew_stake else 0.0
+
+    tiles = f"""
+    <div class="stats-row">
+      <div class="stat-tile">
+        <div class="stat-label">Days tracked</div>
+        <div class="stat-value">{days}</div>
+        <div class="stat-sub">{races_settled} real settled races</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Top-pick hit rate (real)</div>
+        <div class="stat-value">{_pct(hit_rate)}</div>
+        <div class="stat-sub">vs {_pct(fav_rate)} for the market favourite, this period</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">£1 win P&amp;L</div>
+        <div class="stat-value" style="color:{'var(--good)' if win_profit >= 0 else 'var(--bad)'}">£{win_profit:+.2f}</div>
+        <div class="stat-sub">{_pct(win_roi)} ROI on £{win_stake:.0f} staked</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">£2 each-way P&amp;L</div>
+        <div class="stat-value" style="color:{'var(--good)' if ew_profit >= 0 else 'var(--bad)'}">£{ew_profit:+.2f}</div>
+        <div class="stat-sub">{_pct(ew_roi)} ROI on £{ew_stake:.0f} staked</div>
+      </div>
+    </div>"""
+
+    caveat = ""
+    if days < 20:
+        caveat = (f'<div class="track-record-caveat">Only {days} real day(s) of live results so far — '
+                  f'far too small a sample to judge against the {_pct(0.232)} real backtested hit rate or the '
+                  f'{_pct(0.333)} market-favourite rate. Shown as-is, not smoothed or projected.</div>')
+
+    day_rows = []
+    for s in summaries:
+        d_hit = s["top_pick_wins"] / s["races_settled"] if s["races_settled"] else 0.0
+        width = max(2, round(d_hit * 100))
+        pnl = s["win_profit"]
+        pnl_color = "var(--good)" if pnl >= 0 else "var(--bad)"
+        day_rows.append(f"""
+        <div class="trackrow">
+          <span class="trackrow-date">{s['race_date'].strftime('%d %b')}</span>
+          <span class="trackrow-pct">{_pct(d_hit)}</span>
+          <div class="trackrow-bar-wrap">
+            <div class="trackrow-bar-track"><div class="trackrow-bar-fill" style="width:{width}%"></div></div>
+            <span class="trackrow-pnl" style="color:{pnl_color}">£{pnl:+.2f}</span>
+          </div>
+        </div>""")
+
+    return f"""
+    <div class="section-label">Track record — real settled results, day by day</div>
+    {tiles}
+    {caveat}
+    <div class="track-record-chart">{''.join(day_rows)}</div>"""
+
+
 def render_summary(races: list[dict]) -> str:
     """Day-level summary: race count, agreement rate, most confident pick
     of the day across every race — real numbers computed from the same
@@ -592,8 +703,10 @@ def render_summary(races: list[dict]) -> str:
     </div>"""
 
 
-def render_html(race_date: date, races: list[dict], course_weather: dict[str, dict] | None = None) -> str:
+def render_html(race_date: date, races: list[dict], course_weather: dict[str, dict] | None = None,
+                 daily_summaries: list[dict] | None = None) -> str:
     course_weather = course_weather or {}
+    daily_summaries = daily_summaries or []
     race_dialogs = "".join(render_race(r, course_weather) for r in races)
     empty_message = '' if races else '<p class="empty">No predictions locked for this date yet.</p>'
 
@@ -616,6 +729,7 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     --series-1: #2a78d6;
     --good: #1baf7a;
     --warn: #eda100;
+    --bad: #d64545;
   }}
   @media (prefers-color-scheme: dark) {{
     :root:not([data-theme="light"]) {{
@@ -630,6 +744,7 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
       --series-1: #3987e5;
       --good: #199e70;
       --warn: #c98500;
+      --bad: #e5636b;
     }}
   }}
   :root[data-theme="dark"] {{
@@ -644,6 +759,7 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     --series-1: #3987e5;
     --good: #199e70;
     --warn: #c98500;
+    --bad: #e5636b;
   }}
   * {{ box-sizing: border-box; }}
   body {{
@@ -821,6 +937,44 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     .overview-horse {{ grid-area: horse; max-width: none; }}
   }}
 
+  .track-record-empty {{
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px; margin-bottom: 20px; font-size: 12px; color: var(--text-muted);
+  }}
+  .track-record-caveat {{
+    font-size: 11px; color: var(--text-muted); margin: 4px 0 10px;
+  }}
+  .track-record-chart {{
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+    padding: 6px 14px; margin-bottom: 20px;
+  }}
+  /* Mobile-first: stacked two-line layout, same pattern as .overview-row */
+  .trackrow {{
+    display: grid;
+    grid-template-columns: 52px 1fr;
+    grid-template-areas: "date pct" "bar bar";
+    align-items: center; column-gap: 8px; row-gap: 6px;
+    padding: 10px 8px; border-top: 1px solid var(--border); font-size: 12px;
+  }}
+  .trackrow:first-child {{ border-top: none; }}
+  .trackrow-date {{ grid-area: date; color: var(--text-secondary); font-weight: 600; }}
+  .trackrow-pct {{ grid-area: pct; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }}
+  .trackrow-bar-wrap {{ grid-area: bar; display: flex; align-items: center; gap: 8px; }}
+  .trackrow-bar-track {{ flex: 1; height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }}
+  .trackrow-bar-fill {{ height: 100%; border-radius: 4px; background: var(--series-1); }}
+  .trackrow-pnl {{ font-size: 11px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }}
+
+  @media (min-width: 480px) {{
+    .trackrow {{
+      grid-template-columns: 60px 1fr 80px 70px;
+      grid-template-areas: "date bar pnl pct";
+      row-gap: 0;
+    }}
+    .trackrow-bar-wrap {{ display: contents; }}
+    .trackrow-bar-track {{ grid-area: bar; }}
+    .trackrow-pnl {{ grid-area: pnl; text-align: right; }}
+  }}
+
   dialog.race-card {{
     background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px;
     padding: 20px 22px; margin: auto; max-width: 640px; width: calc(100% - 48px);
@@ -911,6 +1065,8 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     {render_backtest_context()}
   </div>
 
+  {render_track_record(daily_summaries)}
+
   {render_weather(course_weather)}
 
   {render_overview_chart(races)}
@@ -983,12 +1139,13 @@ def main():
 
     conn = psycopg2.connect(dbname="silent_edge_zero")
     races = load_predictions(conn, race_date)
+    daily_summaries = load_daily_summaries(conn)
     conn.close()
 
     course_names = {r["course_name"] for r in races}
     course_weather = fetch_course_weather(course_names, race_date)
 
-    html = render_html(race_date, races, course_weather)
+    html = render_html(race_date, races, course_weather, daily_summaries)
     OUTPUT_PATH.write_text(html, encoding="utf-8")
     print(f"Dashboard written to {OUTPUT_PATH} ({len(races)} races).")
 

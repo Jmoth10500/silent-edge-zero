@@ -8,6 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from datetime import date
+
 from scripts.generate_dashboard import (
     _bar_html,
     _bet_calculator_html,
@@ -22,6 +24,7 @@ from scripts.generate_dashboard import (
     render_html,
     render_overview_chart,
     render_summary,
+    render_track_record,
     render_weather,
 )
 
@@ -276,6 +279,48 @@ def test_render_html_includes_backtest_context():
     assert "0.0866" in html  # Model 2's (RL-010, with trainer/jockey features)
 
 
+def test_render_track_record_empty_when_no_real_summaries():
+    html = render_track_record([])
+    assert "No settled results yet" in html
+
+
+def test_render_track_record_real_cumulative_stats():
+    summaries = [{
+        "race_date": date(2026, 9, 10), "races_total": 31, "races_settled": 30,
+        "top_pick_wins": 7, "top_pick_placed": 16, "favourite_wins": 9,
+        "win_stake_total": 30.0, "win_profit": 24.24,
+        "ew_stake_total": 60.0, "ew_profit": 27.73,
+    }]
+    html = render_track_record(summaries)
+    assert "23.3%" in html  # top-pick hit rate: 7/30
+    assert "£+24.24" in html
+    assert "£+27.73" in html
+    assert "30.0%" in html  # favourite rate: 9/30
+
+
+def test_render_track_record_shows_small_sample_caveat_under_20_days():
+    summaries = [{
+        "race_date": date(2026, 9, 10), "races_total": 5, "races_settled": 5,
+        "top_pick_wins": 1, "top_pick_placed": 2, "favourite_wins": 1,
+        "win_stake_total": 5.0, "win_profit": -1.0,
+        "ew_stake_total": 10.0, "ew_profit": -2.0,
+    }]
+    html = render_track_record(summaries)
+    assert "far too small a sample" in html
+    assert "£-1.00" in html  # a real loss renders with the minus sign, not hidden
+
+
+def test_render_track_record_no_caveat_at_20_plus_days():
+    summaries = [{
+        "race_date": date(2026, 9, 1 + i % 28), "races_total": 3, "races_settled": 3,
+        "top_pick_wins": 1, "top_pick_placed": 1, "favourite_wins": 1,
+        "win_stake_total": 3.0, "win_profit": 1.0,
+        "ew_stake_total": 6.0, "ew_profit": 1.0,
+    } for i in range(20)]
+    html = render_track_record(summaries)
+    assert "far too small a sample" not in html
+
+
 if __name__ == "__main__":
     tests = [
         test_pct_formats_probability_as_percentage,
@@ -306,6 +351,10 @@ if __name__ == "__main__":
         test_bet_calculator_html_empty_without_real_odds,
         test_bet_calculator_html_renders_with_real_odds,
         test_render_html_includes_backtest_context,
+        test_render_track_record_empty_when_no_real_summaries,
+        test_render_track_record_real_cumulative_stats,
+        test_render_track_record_shows_small_sample_caveat_under_20_days,
+        test_render_track_record_no_caveat_at_20_plus_days,
     ]
     passed = 0
     for t in tests:

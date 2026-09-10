@@ -791,3 +791,44 @@ Full suite: **199/199 pass** (was 195, +1 date-check regression, +3 bet-calculat
 - Do not skip re-running the full test suite before committing — all 199 tests must actually pass
 
 **`scripts/generate_eod_report.py`:** already exists (built earlier the same day, answering Jonathan's earlier question about £1 win / £2 EW on each top pick, plus who the favourite was). Ran it for real this session: it correctly prints all of today's races with the real top pick (highest `gbm_v1` probability), the real market favourite (lowest real Smarkets `exchange_back`), and the real EW terms for that field size — and honestly marks every win/EW settlement as **PENDING**, since `runner_result` has zero real rows for today (same root cause as above: no results pipeline yet). Added 11 real unit tests for its pure settlement math (`ew_terms_for_field_size`, `settle_win`, `settle_each_way` — win/loss/pending/void-place-stake-on-win-only-fields all covered) in `tests/test_generate_eod_report.py`. Full suite now **210/210 pass**.
+
+---
+
+## 2026-09-10 — Session 10 continued: real real-results pipeline (Racing Post), track record dashboard section, Day 1 hit rate confirmed live
+
+**Jonathan's idea that unblocked this:** "won't a websearch find the results? ... why don't we create an agent to gather the results after the event to log a win or loss?" Tested this live rather than assuming: Racing Post keeps real permanent result pages (unlike Smarkets' forward-only rolling listing) with the full finishing order embedded as real structured JSON in the page's own `__NEXT_DATA__` script tag (`props.pageProps.initialState.raceResult.data.runners`) — real finishing position, SP, and distance beaten, not scraped text and not an LLM's reading of the page.
+
+**Real, confirmed constraints:**
+- Plain scripted HTTP requests to racingpost.com are bot-blocked (403/406) — a real headless browser is required. `playwright` was already installed in this venv; confirmed it gets through cleanly for a specific race's result page.
+- Racing Post's bare index/listing pages (`/results/`, `/racecards/<course>/<date>` with no trailing slash) are blocked even via headless Playwright.
+- But the real per-course, per-day *meeting* page — `/racecards/<course_id>/<course_slug>/<date>/`, **with a trailing slash** — loads cleanly and embeds every race at that meeting (real Racing Post `raceId`, `startTime`, and an `isResult` flag) as structured JSON. This means every race's Racing Post ID is discoverable directly, for free, with **no search step at runtime at all** — just a course_id + date fetch. The same numeric `raceId` works in both the racecard and result URL for a race.
+- Scripted search engines (DuckDuckGo HTML, Bing — both via `requests` and via headless Playwright) were tested live and either got bot-blocked or hadn't indexed the same-day deep-linked result page yet — a real dead end for automatic discovery, not needed once the meeting-page trick was found.
+
+**Built:** `scripts/collect_race_results.py` — fully automated, no manual URL list needed. For each of our courses (mapped to a real Racing Post course_id/slug in the new `data/racingpost_course_ids.py` — deliberately incomplete, grows as new courses are seen, never guessed), fetches the real meeting page, matches each of our races by off_time (±5 min tolerance), fetches the real result page for any race whose `isResult` flag is true, parses real finishing position / SP / beaten-distance out of the structured JSON, matches horses via the same country-suffix-stripping convention as `collect_smarkets_prices.py`, and UPSERTs into `runner_result`. 18 new unit tests for the pure parsing/matching functions in `tests/test_collect_race_results.py`.
+
+**Real, honest gotcha caught before it caused a bug:** `data.gb_racecourse_coordinates.normalise_course_name` collapses `'Lingfield'` and `'Lingfield (AW)'` to the same `'lingfield'` key — correct for Smarkets (one exchange market either way) but WRONG here, since turf Lingfield (course id 31) and the all-weather track (course id 393) are genuinely different Racing Post courses with different race calendars. `data/racingpost_course_ids.py` is keyed on our own raw `course.name` instead, not the normalised name.
+
+**Ran it for real against Day 1 (2026-09-10):** 31/31 races matched, **292 real result rows recorded, 0 unmatched horses.** This is a genuinely complete real result set for the day — first time this project has had real settled outcomes for a live day.
+
+**Real Day 1 answer, finally:** top pick won **7/30 settled races (23.3%)** — remarkably close to the real backtested hit rate of ~23.2% (RL-010), on a sample of exactly one day, so treat that closeness as a nice sign, not proof of anything. Top pick placed 16/30 (53.3%). Market favourite won 9/30 (30.0%), close to the real ~33.3% backtested market rate. £1-win P&L across all top picks: **+£24.24** on £30 staked; £2-EW P&L: **+£27.73** on £60 staked — one day, small sample, not a track record yet, stated as such everywhere it's shown.
+
+**Built the persisted round-up, per Jonathan's request** ("there needs to be a round up of the day with a report using graphs and data that is stored so it can be used to build an overall success report"):
+- New `daily_summary` table (one real UPSERT-able row per race_date: races settled, top-pick wins/places, favourite wins, win/EW stake+profit) — added to `db/schema.sql`, applied to the local DB.
+- `scripts/generate_daily_summary.py` computes it from real `runner_result` data, reusing `generate_eod_report.py`'s own top-pick/favourite loading and settlement math rather than re-deriving it. A race whose top pick has no settled result yet is excluded from that day's counts, exactly as the EOD report already treats it — never counted as a loss. Safe to re-run (UPSERT) as more results land. 9 new unit tests in `tests/test_generate_daily_summary.py`.
+- Dashboard: new "Track record" section (`render_track_record` in `generate_dashboard.py`) — real cumulative stat tiles (days tracked, hit rate vs favourite rate, £1-win and £2-EW cumulative P&L with ROI) plus a real day-by-day bar chart (hit rate bar + P&L per day), mobile-first, same `<20%>`-of-data-as-caveat discipline as everywhere else: shows an explicit "too small a sample" note below 20 real tracked days, never hidden. New `--bad` (red) CSS token added alongside the existing `--good`/`--warn` for signed P&L. Visually checked in both light and dark mode via a real local browser render before committing. 4 new unit tests.
+- New evening pipeline `scripts/run_collect_results.sh` (collect results -> generate daily summary -> regenerate dashboard -> Netlify deploy) and LaunchAgent `com.silentedgezero.collect-results.plist`, scheduled 21:30 daily (after evening AW racing genuinely finishes) — loaded and confirmed running via `launchctl list`.
+
+Full suite: **241/241 pass.**
+
+**What the next session should do, in priority order (supersedes the prior list):**
+1. Watch the 21:30 evening LaunchAgent run for real over the next few days — confirm `collect_race_results.py`'s meeting-page + result-page fetches keep working unattended (Racing Post's bot-detection behaviour could change).
+2. Once several real days have accumulated in `daily_summary`, revisit whether the ~23% top-pick hit rate is holding up — one day is not evidence either way.
+3. Expand `data/racingpost_course_ids.py` as new courses appear in real race data (a course fixture we haven't seen yet is skipped and reported, never guessed — check the evening log for "no Racing Post course id mapped" lines).
+4. The Smarkets-based `scripts/check_todays_results.py` is now superseded by the Racing Post pipeline for actual results collection — kept only as a same-day sanity-check tool, not scheduled.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result/price data, or any model's training data, to "demo" anything
+- Do not create accounts on Jonathan's behalf
+- Do not assume a persistently-zero real collector result is "just waiting for data" without checking — verify the matching logic actually works
+- Do not skip re-running the full test suite before committing — all 241 tests must actually pass
+- Do not treat a single real day's hit rate/P&L as a track record — state the sample size every time it's shown

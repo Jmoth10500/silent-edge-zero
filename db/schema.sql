@@ -120,6 +120,28 @@ CREATE TABLE IF NOT EXISTS runner_result (
     UNIQUE (race_id, horse_id)
 );
 
+-- One real row per race_date, computed by scripts/generate_daily_summary.py
+-- once runner_result has real settled outcomes for that day. Re-runnable
+-- (UPSERT) as more results land through the day/evening — never a
+-- fabricated or estimated row; races still pending are simply excluded
+-- from that day's counts, not guessed. This is the persisted history that
+-- backs the dashboard's "track record" chart, so a single day's numbers
+-- survive past that day and accumulate into a real long-run answer to
+-- "how good is this app, really".
+CREATE TABLE IF NOT EXISTS daily_summary (
+    race_date              DATE PRIMARY KEY,
+    races_total             INT NOT NULL,
+    races_settled            INT NOT NULL,
+    top_pick_wins             INT NOT NULL,
+    top_pick_placed            INT NOT NULL,   -- within real EW place terms for that race's field size
+    favourite_wins             INT NOT NULL,   -- real market favourite (lowest exchange_back), for comparison
+    win_stake_total            NUMERIC NOT NULL,   -- total real £1-per-race stake actually settled
+    win_profit                 NUMERIC NOT NULL,
+    ew_stake_total              NUMERIC NOT NULL,  -- total real £2-per-race stake actually settled
+    ew_profit                   NUMERIC NOT NULL,
+    computed_at                 TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Market snapshots — captured at whatever cadence is actually achievable on
 -- free access (Section 15 lists an ideal T-60/T-30/... schedule; free tiers
 -- may not support all of it — store whatever we legitimately get).
