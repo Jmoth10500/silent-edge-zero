@@ -26,6 +26,7 @@ from scripts.generate_dashboard import (
     render_summary,
     render_day_history_dialog,
     render_days_tracked_dialog,
+    render_live_calibration,
     render_track_record,
     render_weather,
 )
@@ -380,6 +381,47 @@ def test_render_day_history_dialog_shows_result_note_for_non_finishes():
     assert "PU" in html
 
 
+def test_render_live_calibration_empty_when_no_settled_races():
+    race_history = {date(2026, 9, 10): [
+        {"off_time": time(13, 15), "course_name": "Doncaster", "race_name": "Race A",
+         "horse_name": "Pending Horse", "model_probability": 0.3, "finishing_position": None,
+         "result_note": None, "field_size": 9, "status": "PENDING"},
+    ]}
+    assert render_live_calibration(race_history) == ""
+
+
+def test_render_live_calibration_empty_with_no_history():
+    assert render_live_calibration({}) == ""
+
+
+def test_render_live_calibration_buckets_real_settled_races_and_excludes_pending():
+    race_history = {date(2026, 9, 10): [
+        {"off_time": time(13, 15), "course_name": "Doncaster", "race_name": "Race A",
+         "horse_name": "Winner", "model_probability": 0.22, "finishing_position": 1,
+         "result_note": None, "field_size": 9, "status": "WIN"},
+        {"off_time": time(13, 50), "course_name": "Doncaster", "race_name": "Race B",
+         "horse_name": "Loser", "model_probability": 0.24, "finishing_position": 4,
+         "result_note": None, "field_size": 9, "status": "LOSS"},
+        {"off_time": time(14, 0), "course_name": "Epsom", "race_name": "Race C",
+         "horse_name": "Pending", "model_probability": 0.30, "finishing_position": None,
+         "result_note": None, "field_size": 9, "status": "PENDING"},
+    ]}
+    html = render_live_calibration(race_history)
+    assert "20" in html and "25" in html  # the 20-25% bucket both real settled races fall in
+    assert "n=2" in html  # only the 2 settled races counted, PENDING excluded
+    assert "50.0%" in html  # 1 win of 2 in that bucket
+
+
+def test_render_live_calibration_flags_small_sample():
+    race_history = {date(2026, 9, 10): [
+        {"off_time": time(13, 15), "course_name": "Doncaster", "race_name": "Race A",
+         "horse_name": "Winner", "model_probability": 0.22, "finishing_position": 1,
+         "result_note": None, "field_size": 9, "status": "WIN"},
+    ]}
+    html = render_live_calibration(race_history)
+    assert "small live sample" in html
+
+
 def test_render_track_record_no_caveat_at_20_plus_days():
     summaries = [{
         "race_date": date(2026, 9, 1 + i % 28), "races_total": 3, "races_settled": 3,
@@ -430,6 +472,10 @@ if __name__ == "__main__":
         test_render_day_history_dialog_shows_win_loss_placed_badges,
         test_render_day_history_dialog_shows_tally_of_win_placed_loss,
         test_render_day_history_dialog_shows_result_note_for_non_finishes,
+        test_render_live_calibration_empty_when_no_settled_races,
+        test_render_live_calibration_empty_with_no_history,
+        test_render_live_calibration_buckets_real_settled_races_and_excludes_pending,
+        test_render_live_calibration_flags_small_sample,
     ]
     passed = 0
     for t in tests:

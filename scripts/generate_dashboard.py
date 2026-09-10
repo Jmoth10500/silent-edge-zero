@@ -40,6 +40,7 @@ import psycopg2
 import requests
 
 from data.gb_racecourse_coordinates import GB_RACECOURSE_COORDINATES, normalise_course_name
+from scripts.analyze_top_pick_calibration import summarise as summarise_calibration_bins
 from scripts.generate_eod_report import ew_terms_for_field_size
 from src.features.runner_features import (
     RunnerFeatureInput,
@@ -789,6 +790,70 @@ def render_track_record(summaries: list[dict], race_history: dict[date, list[dic
     {day_dialogs}"""
 
 
+# Real backtested validation-fold numbers from RL-012 (docs/RESEARCH_LAB.md,
+# 2026-09-11) — the top pick's own probability, bucketed, actual win rate on
+# 10,207 real validation races never touched during discovery. Shown here as
+# a fixed reference alongside the live numbers below, NOT recomputed here.
+RL012_BACKTEST_VALIDATION = [
+    (0.0, 0.15, 0.141, 1509),
+    (0.15, 0.20, 0.184, 2570),
+    (0.20, 0.25, 0.213, 2204),
+    (0.25, 0.30, 0.275, 1488),
+    (0.30, 0.35, 0.298, 995),
+    (0.35, 0.40, 0.357, 589),
+    (0.40, 0.45, 0.394, 376),
+    (0.45, 0.50, 0.450, 202),
+    (0.50, 1.01, 0.504, 274),
+]
+
+
+def render_live_calibration(race_history: dict[date, list[dict]]) -> str:
+    """Real, live version of RL-012's top-pick calibration analysis —
+    buckets every real settled top pick's own model probability (across
+    every tracked day, same bucket edges as
+    scripts/analyze_top_pick_calibration.py) and shows it next to the
+    real backtested validation numbers (RL012_BACKTEST_VALIDATION) for
+    comparison. PENDING races are excluded — never counted as a loss.
+    Empty entirely until at least one real settled result exists.
+    RL-012's own correction attempt did NOT survive validation (tested
+    and rejected — see docs/RESEARCH_LAB.md), so this is purely
+    observational: nothing here changes any displayed or used
+    probability."""
+    records = []
+    for races in race_history.values():
+        for r in races:
+            if r["status"] == "PENDING":
+                continue
+            records.append((r["model_probability"], r["status"] == "WIN"))
+    if not records:
+        return ""
+
+    live_bins = summarise_calibration_bins(records)
+    backtest_by_range = {(round(low, 2), round(high, 2)): actual for low, high, actual, _n in RL012_BACKTEST_VALIDATION}
+
+    rows = []
+    for b in live_bins:
+        key = (round(b["low"], 2), round(b["high"], 2))
+        bt_actual = backtest_by_range.get(key)
+        small_note = '<span class="calib-flag">small live sample</span>' if b["n"] < 30 else ""
+        rows.append(f"""
+        <div class="calib-row">
+          <span class="calib-range">{b['low']*100:.0f}–{b['high']*100:.0f}%</span>
+          <span class="calib-live">{_pct(b['actual'])} live (n={b['n']})</span>
+          <span class="calib-backtest">{_pct(bt_actual) if bt_actual is not None else '—'} backtested</span>
+          {small_note}
+        </div>""")
+
+    return f"""
+    <div class="section-label">Confidence calibration — live vs real backtest (RL-012)</div>
+    <div class="calib-note">Watching whether real live results confirm the real backtested
+      pattern (a top pick shown above ~40% tends to overstate its real chances) — live sample
+      sizes are still tiny, so treat every row here as an early read, not a conclusion, until
+      many more real days accumulate. Purely observational: nothing here changes any
+      probability shown elsewhere on this page.</div>
+    <div class="calib-chart">{''.join(rows)}</div>"""
+
+
 def render_summary(races: list[dict]) -> str:
     """Day-level summary: race count, agreement rate, most confident pick
     of the day across every race — real numbers computed from the same
@@ -1154,6 +1219,27 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     .trackrow-pnl {{ grid-area: pnl; text-align: right; }}
   }}
 
+  .calib-note {{
+    font-size: 11px; color: var(--text-muted); margin-bottom: 10px; line-height: 1.5;
+  }}
+  .calib-chart {{
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+    padding: 6px 14px; margin-bottom: 20px;
+  }}
+  .calib-row {{
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+    padding: 10px 8px; border-top: 1px solid var(--border); font-size: 12px;
+  }}
+  .calib-row:first-child {{ border-top: none; }}
+  .calib-range {{ color: var(--text-secondary); font-weight: 600; min-width: 70px; }}
+  .calib-live {{ color: var(--series-1); font-variant-numeric: tabular-nums; }}
+  .calib-backtest {{ color: var(--text-muted); font-variant-numeric: tabular-nums; }}
+  .calib-flag {{
+    font-size: 10px; font-weight: 700; color: var(--warn);
+    background: color-mix(in srgb, var(--warn) 18%, transparent);
+    padding: 3px 8px; border-radius: 20px;
+  }}
+
   dialog.race-card {{
     background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px;
     padding: 20px 22px; margin: auto; max-width: 640px; width: calc(100% - 48px);
@@ -1245,6 +1331,8 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
   </div>
 
   {render_track_record(daily_summaries, race_history)}
+
+  {render_live_calibration(race_history)}
 
   {render_weather(course_weather)}
 
