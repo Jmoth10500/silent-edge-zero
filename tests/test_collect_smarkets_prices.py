@@ -34,7 +34,7 @@ def test_match_race_converts_real_utc_to_uk_local_during_bst():
         event_id="e1", venue_name="Epsom Downs",
         start_datetime=datetime(2026, 9, 10, 15, 52, tzinfo=timezone.utc),
     )
-    assert match_race(our_races, smk_event) == 101
+    assert match_race(our_races, smk_event, date(2026, 9, 10)) == 101
 
 
 def test_match_race_does_not_false_match_the_naive_utc_reading():
@@ -49,7 +49,26 @@ def test_match_race_does_not_false_match_the_naive_utc_reading():
         event_id="e1", venue_name="Epsom Downs",
         start_datetime=datetime(2026, 9, 10, 15, 52, tzinfo=timezone.utc),
     )
-    assert match_race(our_races, smk_event) is None
+    assert match_race(our_races, smk_event, date(2026, 9, 10)) is None
+
+
+def test_match_race_rejects_wrong_real_calendar_date():
+    # Real bug found and fixed 2026-09-10 (same day, second bug): the
+    # function used to borrow the Smarkets event's own date when building
+    # the comparison, so the date was never actually checked — only
+    # course+time-of-day were compared. Found live: by evening, Smarkets
+    # had rolled over to TOMORROW's races, and a tomorrow Doncaster race
+    # nearly false-matched today's Doncaster race purely on time-of-day.
+    # This is that exact real scenario: same course, same time-of-day,
+    # genuinely different real calendar date — must NOT match.
+    our_races = {
+        103: {"off_time": time(16, 52), "course_name": "Doncaster", "runners": {}},
+    }
+    smk_event = SmarketsEvent(
+        event_id="e1", venue_name="Doncaster",
+        start_datetime=datetime(2026, 9, 11, 15, 52, tzinfo=timezone.utc),  # tomorrow, same time-of-day
+    )
+    assert match_race(our_races, smk_event, date(2026, 9, 10)) is None
 
 
 def test_match_race_finds_same_course_within_tolerance():
@@ -61,7 +80,7 @@ def test_match_race_finds_same_course_within_tolerance():
         event_id="e1", venue_name="Epsom Downs",
         start_datetime=datetime(2026, 9, 10, 15, 55, tzinfo=timezone.utc),  # 3 real min off, within tolerance
     )
-    assert match_race(our_races, smk_event) == 101
+    assert match_race(our_races, smk_event, date(2026, 9, 10)) == 101
 
 
 def test_match_race_rejects_time_outside_tolerance():
@@ -72,7 +91,7 @@ def test_match_race_rejects_time_outside_tolerance():
         event_id="e1", venue_name="Epsom Downs",
         start_datetime=datetime(2026, 9, 10, 16, 30, tzinfo=timezone.utc),  # 38 real min off (17:30 local)
     )
-    assert match_race(our_races, smk_event) is None
+    assert match_race(our_races, smk_event, date(2026, 9, 10)) is None
 
 
 def test_match_race_rejects_wrong_course():
@@ -83,7 +102,7 @@ def test_match_race_rejects_wrong_course():
         event_id="e1", venue_name="Worcester",
         start_datetime=datetime(2026, 9, 10, 15, 52, tzinfo=timezone.utc),
     )
-    assert match_race(our_races, smk_event) is None
+    assert match_race(our_races, smk_event, date(2026, 9, 10)) is None
 
 
 def test_match_race_picks_closest_time_among_same_course_candidates():
@@ -96,7 +115,7 @@ def test_match_race_picks_closest_time_among_same_course_candidates():
         event_id="e1", venue_name="Epsom Downs",
         start_datetime=datetime(2026, 9, 10, 13, 6, tzinfo=timezone.utc),  # 14:06 local
     )
-    assert match_race(our_races, smk_event) == 102
+    assert match_race(our_races, smk_event, date(2026, 9, 10)) == 102
 
 
 def test_match_race_handles_gmt_winter_dates_with_no_offset():
@@ -109,7 +128,7 @@ def test_match_race_handles_gmt_winter_dates_with_no_offset():
         event_id="e1", venue_name="Epsom Downs",
         start_datetime=datetime(2026, 1, 10, 14, 0, tzinfo=timezone.utc),  # January -> GMT
     )
-    assert match_race(our_races, smk_event) == 101
+    assert match_race(our_races, smk_event, date(2026, 1, 10)) == 101
 
 
 if __name__ == "__main__":
@@ -117,6 +136,7 @@ if __name__ == "__main__":
         test_strip_country_suffix_real_formats,
         test_match_race_converts_real_utc_to_uk_local_during_bst,
         test_match_race_does_not_false_match_the_naive_utc_reading,
+        test_match_race_rejects_wrong_real_calendar_date,
         test_match_race_finds_same_course_within_tolerance,
         test_match_race_rejects_time_outside_tolerance,
         test_match_race_rejects_wrong_course,

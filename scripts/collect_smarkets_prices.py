@@ -98,35 +98,49 @@ def load_our_races(conn, race_date: date):
     return by_race
 
 
-def match_race(our_races: dict, smk_event) -> int | None:
+def match_race(our_races: dict, smk_event, race_date: date) -> int | None:
     """Returns our race_id matching this Smarkets event, or None. Course
-    must normalise to the same real GB course, and off_time must be
-    within TIME_TOLERANCE_MINUTES of Smarkets' scheduled start.
+    must normalise to the same real GB course, the event's real LOCAL
+    calendar date must equal `race_date`, and off_time must be within
+    TIME_TOLERANCE_MINUTES of Smarkets' scheduled start.
 
-    **Real bug found and fixed 2026-09-10:** Smarkets' `start_datetime` is
-    real UTC; our `race.off_time` is real UK LOCAL wall-clock time (see
-    `src/providers/racecard_theracingapi.py` — derived from the API's own
-    `off_dt`, which carries a real timezone offset, e.g. '+01:00' during
-    BST). Comparing them as if both were UTC silently matched every race
-    to the wrong one during BST (currently UTC+1) — confirmed live: a
-    Smarkets 'Epsom 15:52' event was matching our race at local off_time
-    15:42 (a coincidental 10-minute gap inside the old tolerance) when the
-    REAL same race was at local off_time 16:52 (a full hour later — the
-    real BST offset). Fixed by converting Smarkets' UTC time to
-    Europe/London local time (`zoneinfo`, stdlib, handles BST/GMT
-    automatically) before comparing to our local off_time.
+    **Real bug found and fixed 2026-09-10 (timezone):** Smarkets'
+    `start_datetime` is real UTC; our `race.off_time` is real UK LOCAL
+    wall-clock time (see `src/providers/racecard_theracingapi.py` —
+    derived from the API's own `off_dt`, which carries a real timezone
+    offset, e.g. '+01:00' during BST). Comparing them as if both were UTC
+    silently matched every race to the wrong one during BST (currently
+    UTC+1) — confirmed live: a Smarkets 'Epsom 15:52' event was matching
+    our race at local off_time 15:42 (a coincidental 10-minute gap inside
+    the old tolerance) when the REAL same race was at local off_time
+    16:52 (a full hour later — the real BST offset). Fixed by converting
+    Smarkets' UTC time to Europe/London local time (`zoneinfo`, stdlib,
+    handles BST/GMT automatically) before comparing to our local off_time.
+
+    **Real bug found and fixed the same day (missing date check):** the
+    function never actually verified the Smarkets event's real calendar
+    date matched `race_date` — it built the comparison datetime by
+    borrowing the Smarkets event's OWN date, so the date check was a
+    silent no-op; only course+time-of-day were ever really compared.
+    Found live: by evening, Smarkets had already rolled its listing over
+    to tomorrow's races, and a tomorrow Doncaster race nearly false-matched
+    today's Doncaster race purely because their time-of-day happened to be
+    close. Fixed by requiring the event's real local date to equal
+    `race_date` before any time comparison happens at all.
     """
     from data.gb_racecourse_coordinates import normalise_course_name
     from zoneinfo import ZoneInfo
 
     smk_course = normalise_course_name(smk_event.venue_name)
     smk_time_local = smk_event.start_datetime.astimezone(ZoneInfo("Europe/London"))
+    if smk_time_local.date() != race_date:
+        return None
 
     best_race_id, best_diff = None, None
     for race_id, info in our_races.items():
         if normalise_course_name(info["course_name"]) != smk_course:
             continue
-        our_dt = datetime.combine(smk_time_local.date(), info["off_time"], tzinfo=smk_time_local.tzinfo)
+        our_dt = datetime.combine(race_date, info["off_time"], tzinfo=smk_time_local.tzinfo)
         diff = abs((our_dt - smk_time_local).total_seconds()) / 60
         if diff <= TIME_TOLERANCE_MINUTES and (best_diff is None or diff < best_diff):
             best_race_id, best_diff = race_id, diff
@@ -173,7 +187,7 @@ def main():
 
     n_races_matched, n_snapshots, n_errors = 0, 0, 0
     for event in gb_events:
-        race_id = match_race(our_races, event)
+        race_id = match_race(our_races, event, race_date)
         if race_id is None:
             continue
 

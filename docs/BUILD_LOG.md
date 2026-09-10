@@ -754,3 +754,40 @@ tests — 81/81 tests pass via `python3 -m pytest tests/ -v`, up from 80):**
 - Do not retry the Betfair login endpoint without a concrete reason to think the account status changed
 - Do not assume a persistently-zero real collector result is "just waiting for data" without checking — verify the matching logic actually works
 - Do not skip re-running the full test suite before committing — all 195 tests must actually pass
+
+---
+
+## 2026-09-10 — Session 10 continued: added a bet calculator, tried to check Day 1 results, found a second real match_race bug
+
+**Bet calculator:** per Jonathan's request, added a real, pure-client-side win/each-way calculator to every horse with real odds — collapsed by default, verified live (math checked by hand against real odds, interactive update confirmed via a real DOM event). See `scripts/generate_dashboard.py`'s `_bet_calculator_html`/`_ew_defaults`/`calcBet`.
+
+**"How did this do on its first day?"** Tried to answer with real data. Found that Smarkets contracts carry a real `state_or_outcome` field ('winner'/'loser') once a market settles — a genuine, free way to check real results without needing Racing API's paid tier. Built `scripts/check_todays_results.py` to use it. But by the time this was tried (23:00+), Smarkets had already rolled its live listing over to TOMORROW's races — today's races, even ones that finished hours ago, were gone from the listing entirely. So this real approach can answer "how did today go" only if run WHILE races are still listed as upcoming/live on Smarkets (i.e., same-day, probably within an hour or so of the last race), not the following evening. **Could not answer Jonathan's question with real data this session** — told him so plainly rather than guessing.
+
+**Real bonus bug found and fixed while investigating:** `match_race()` never actually verified the Smarkets event's real calendar date matched the date being collected for — it built its comparison datetime by borrowing the Smarkets event's OWN date, so the date check was a silent no-op the whole time; only course+time-of-day were ever really compared. Found live: by evening, a TOMORROW Doncaster race nearly false-matched TODAY's Doncaster race purely because their time-of-day happened to fall close together. Fixed by requiring the event's real local date to equal the target `race_date` before any time comparison happens. 1 new regression test reproducing the exact scenario (same course, same time-of-day, genuinely different date).
+
+Full suite: **199/199 pass** (was 195, +1 date-check regression, +3 bet-calculator tests already counted in the 198 from the prior commit).
+
+**What this means for actually checking results:** the real, reliable way to do this going forward is either (a) run `scripts/check_todays_results.py` same-day, shortly after racing finishes, before Smarkets rolls its listing over, or (b) persist each matched race's real `market_id` at collection time (currently NOT stored — `market_snapshot` only keeps prices, not the market_id that produced them) so a later results check can query that specific market directly instead of re-deriving it via a fresh (and by then stale) event listing. Neither is built yet.
+
+**What's still blocked (unchanged):**
+1. Betfair — still SUSPENDED as of last check
+2. Racing API's own results — still needs their Basic tier
+3. **New, real, concrete gap:** no persistent results-collection pipeline exists. `scripts/check_todays_results.py` is a same-day-only, best-effort, read-only check — not a permanent pipeline. Persisting `market_id` per matched race (see above) is the real fix.
+
+**What the next session should do, in priority order:**
+1. Add `market_id` as a real column on (or alongside) `market_snapshot`, populated at collection time, so results can be checked later without depending on Smarkets' listing still containing the race.
+2. Schedule `scripts/check_todays_results.py` (or a DB-writing version of it once market_id is persisted) to run same-day, shortly after the last race, so "how did today go" can actually be answered without racing the clock against Smarkets' listing rollover.
+3. Check whether real Smarkets price-MOVEMENT data (multiple snapshots per horse over time, not just single matches) is genuinely accumulating now that both real match_race bugs are fixed.
+4. Check whether Betfair's account status has cleared, only if there's a concrete reason to think so.
+5. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+6. **Always run a long script unbuffered and backgrounded to a real log file**, never `| tee` in the foreground.
+7. Keep this file updated at the end of every session.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result/price data, or any model's training data, to "demo" anything
+- Do not create accounts on Jonathan's behalf
+- Do not retry the Betfair login endpoint without a concrete reason to think the account status changed
+- Do not assume a persistently-zero real collector result is "just waiting for data" without checking — verify the matching logic actually works
+- Do not skip re-running the full test suite before committing — all 199 tests must actually pass
+
+**`scripts/generate_eod_report.py`:** already exists (built earlier the same day, answering Jonathan's earlier question about £1 win / £2 EW on each top pick, plus who the favourite was). Ran it for real this session: it correctly prints all of today's races with the real top pick (highest `gbm_v1` probability), the real market favourite (lowest real Smarkets `exchange_back`), and the real EW terms for that field size — and honestly marks every win/EW settlement as **PENDING**, since `runner_result` has zero real rows for today (same root cause as above: no results pipeline yet). Added 11 real unit tests for its pure settlement math (`ew_terms_for_field_size`, `settle_win`, `settle_each_way` — win/loss/pending/void-place-stake-on-win-only-fields all covered) in `tests/test_generate_eod_report.py`. Full suite now **210/210 pass**.
