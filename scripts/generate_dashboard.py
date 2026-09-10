@@ -32,6 +32,7 @@ permanent record).
 import sys
 from datetime import date
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -411,6 +412,53 @@ def build_race_analysis(race: dict) -> str:
     return f'<p>{explanation}</p><p class="analysis-confidence">{confidence}</p>'
 
 
+def _ew_defaults(field_size: int) -> tuple[str, int]:
+    """A real, commonly-used default UK each-way term for a given field
+    size — NOT a universal rule (terms genuinely vary by bookmaker and by
+    handicap vs non-handicap), which is why the calculator lets you change
+    both values. Returns (fraction_str, places)."""
+    if field_size >= 12:
+        return "1/4", 4
+    if field_size >= 8:
+        return "1/5", 3
+    if field_size >= 5:
+        return "1/4", 2
+    return "1/4", 1  # small fields — many bookmakers won't offer each-way at all; calc still works
+
+
+def _bet_calculator_html(dom_id: str, odds: Optional[float], field_size: int) -> str:
+    """A real, pure-arithmetic bet calculator — no server round-trip, just
+    vanilla JS reading the stake/terms the viewer enters against the real
+    odds already on the page. Only rendered when a real odds figure
+    exists (never calculated against a guessed number)."""
+    if odds is None:
+        return ""
+    frac_default, places_default = _ew_defaults(field_size)
+    return f"""
+        <details class="bet-calc" data-odds="{odds}" data-domid="{dom_id}">
+          <summary>🧮 Bet calculator</summary>
+          <div class="bet-calc-body">
+            <label>Stake (£)
+              <input type="number" class="bc-stake" id="{dom_id}-stake" value="10" min="0" step="1" oninput="calcBet('{dom_id}')">
+            </label>
+            <div class="bet-calc-result" id="{dom_id}-win-result"></div>
+            <div class="bet-calc-ew">
+              <span class="bet-calc-ew-label">Each-way terms:</span>
+              <select id="{dom_id}-frac" onchange="calcBet('{dom_id}')">
+                <option value="0.25" {"selected" if frac_default == "1/4" else ""}>1/4 odds</option>
+                <option value="0.2" {"selected" if frac_default == "1/5" else ""}>1/5 odds</option>
+              </select>
+              <select id="{dom_id}-places" onchange="calcBet('{dom_id}')">
+                {"".join(f'<option value="{p}" {"selected" if p == places_default else ""}>{p} place{"s" if p != 1 else ""}</option>' for p in (1, 2, 3, 4))}
+              </select>
+            </div>
+            <div class="bet-calc-result" id="{dom_id}-ew-result"></div>
+            <div class="bet-calc-note">Standard terms vary by bookmaker/race type — adjust if needed.
+            Each-way stake is per side (£10 each-way = £20 total outlay).</div>
+          </div>
+        </details>"""
+
+
 def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> str:
     course_weather = course_weather or {}
     m1, m2, stats = race["model1"], race["model2"], race["stats"]
@@ -420,6 +468,7 @@ def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> st
     m2_top = max(m2, key=m2.get) if m2 else None
     agree = m1_top is not None and m1_top == m2_top
 
+    field_size = len(horses)
     rows_html = []
     for h in horses:
         p2 = m2.get(h, 0.0)
@@ -429,6 +478,11 @@ def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> st
         m1_note = ""
         if not agree and h == m1_top:
             m1_note = f'<span class="m1-note">M1 prefers this one ({_pct(m1.get(h, 0.0))})</span>'
+
+        h_stats = stats.get(h, {})
+        horse_id = h_stats.get("horse_id")
+        dom_id = f"bc-{race['race_id']}-{horse_id}" if horse_id is not None else None
+        bet_calc_html = _bet_calculator_html(dom_id, h_stats.get("exchange_back"), field_size) if dom_id else ""
 
         rows_html.append(f"""
         <div class="{row_class}">
@@ -440,7 +494,8 @@ def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> st
               <span class="prob-value">{_pct(p2)}</span>
             </span>
           </div>
-          {_stat_row(stats.get(h, {}))}
+          {_stat_row(h_stats)}
+          {bet_calc_html}
         </div>""")
 
     agree_badge = '<span class="agree-badge agree">MODELS AGREE</span>' if agree else '<span class="agree-badge disagree">MODELS DISAGREE</span>'
@@ -648,6 +703,38 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     border-radius: 6px; padding: 3px 8px;
   }}
   .stat-empty {{ font-size: 11px; color: var(--text-muted); padding: 4px 6px 12px; }}
+
+  .bet-calc {{
+    margin: 0 6px 12px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface-2);
+  }}
+  .bet-calc summary {{
+    padding: 8px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+    list-style: none; color: var(--text-secondary);
+  }}
+  .bet-calc summary::-webkit-details-marker {{ display: none; }}
+  .bet-calc-body {{ padding: 4px 12px 12px; }}
+  .bet-calc-body label {{
+    display: flex; align-items: center; gap: 8px; font-size: 12px;
+    color: var(--text-secondary); margin-bottom: 8px;
+  }}
+  .bet-calc-body input[type="number"] {{
+    width: 80px; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface-1); color: var(--text-primary); font-size: 13px;
+  }}
+  .bet-calc-result {{
+    font-size: 12px; color: var(--text-primary); background: var(--surface-1);
+    border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; line-height: 1.6;
+  }}
+  .bet-calc-result .bc-row {{ display: flex; justify-content: space-between; }}
+  .bet-calc-result .bc-label {{ color: var(--text-muted); }}
+  .bet-calc-ew {{ display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 8px; flex-wrap: wrap; }}
+  .bet-calc-ew-label {{ color: var(--text-muted); }}
+  .bet-calc-body select {{
+    padding: 5px 6px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface-1); color: var(--text-primary); font-size: 12px;
+  }}
+  .bet-calc-note {{ font-size: 10.5px; color: var(--text-muted); line-height: 1.4; }}
   .empty {{ color: var(--text-muted); }}
   footer {{ margin-top: 32px; font-size: 11px; color: var(--text-muted); }}
 
@@ -852,6 +939,38 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
   }} catch (e) {{}}
   document.querySelectorAll('dialog.race-card, dialog.help-dialog').forEach(function(d) {{
     d.addEventListener('click', function(e) {{ if (e.target === d) d.close(); }});
+  }});
+
+  // Real bet calculator — pure client-side arithmetic on the real odds
+  // already rendered on the page. No server round-trip, no external data.
+  function calcBet(domId) {{
+    var container = document.getElementById(domId + '-stake').closest('.bet-calc');
+    var odds = parseFloat(container.dataset.odds);
+    var stake = parseFloat(document.getElementById(domId + '-stake').value) || 0;
+    var frac = parseFloat(document.getElementById(domId + '-frac').value);
+
+    var winResult = document.getElementById(domId + '-win-result');
+    var ewResult = document.getElementById(domId + '-ew-result');
+
+    var winReturn = stake * odds;
+    var winProfit = winReturn - stake;
+    winResult.innerHTML =
+      '<div class="bc-row"><span class="bc-label">Win bet, £' + stake.toFixed(2) + ' stake</span>' +
+      '<span>Returns £' + winReturn.toFixed(2) + ' (profit £' + winProfit.toFixed(2) + ')</span></div>';
+
+    var placeOdds = 1 + (odds - 1) * frac;
+    var placeReturn = stake * placeOdds;
+    var totalOutlay = stake * 2;
+    var ifWins = winReturn + placeReturn;
+    var ifPlaces = placeReturn;
+    ewResult.innerHTML =
+      '<div class="bc-row"><span class="bc-label">Each-way, £' + stake.toFixed(2) + ' each side (£' + totalOutlay.toFixed(2) + ' total)</span></div>' +
+      '<div class="bc-row"><span class="bc-label">If it wins</span><span>Returns £' + ifWins.toFixed(2) + ' (profit £' + (ifWins - totalOutlay).toFixed(2) + ')</span></div>' +
+      '<div class="bc-row"><span class="bc-label">If it places only</span><span>Returns £' + ifPlaces.toFixed(2) + ' (profit £' + (ifPlaces - totalOutlay).toFixed(2) + ')</span></div>' +
+      '<div class="bc-row"><span class="bc-label">If it neither wins nor places</span><span>Returns £0.00 (loses £' + totalOutlay.toFixed(2) + ')</span></div>';
+  }}
+  document.querySelectorAll('.bet-calc').forEach(function(el) {{
+    calcBet(el.dataset.domid);
   }});
 </script>
 </body>

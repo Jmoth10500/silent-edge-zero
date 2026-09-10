@@ -10,6 +10,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.generate_dashboard import (
     _bar_html,
+    _bet_calculator_html,
+    _ew_defaults,
     _going_hint,
     _pct,
     _stat_row,
@@ -246,6 +248,26 @@ def test_build_race_analysis_debutant_top_pick_reads_grammatically():
     assert "No Rating Horse is a likely debutant" in html
 
 
+def test_ew_defaults_real_field_size_bands():
+    assert _ew_defaults(3) == ("1/4", 1)
+    assert _ew_defaults(6) == ("1/4", 2)
+    assert _ew_defaults(9) == ("1/5", 3)
+    assert _ew_defaults(14) == ("1/4", 4)
+
+
+def test_bet_calculator_html_empty_without_real_odds():
+    assert _bet_calculator_html("bc-1-1", None, 8) == ""
+
+
+def test_bet_calculator_html_renders_with_real_odds():
+    html = _bet_calculator_html("bc-1-1", 5.5, 9)
+    assert 'data-odds="5.5"' in html
+    assert 'data-domid="bc-1-1"' in html
+    assert "bc-1-1-stake" in html
+    assert "1/5 odds" in html  # real default for a 9-runner field
+    assert 'selected>1/5 odds' in html  # actually selected, not just present
+
+
 def test_render_html_includes_backtest_context():
     from datetime import date
     html = render_html(date(2026, 9, 9), [])
@@ -280,6 +302,9 @@ if __name__ == "__main__":
         test_build_race_analysis_empty_when_no_model2_predictions,
         test_build_race_analysis_real_features_and_market_comparison,
         test_build_race_analysis_debutant_top_pick_reads_grammatically,
+        test_ew_defaults_real_field_size_bands,
+        test_bet_calculator_html_empty_without_real_odds,
+        test_bet_calculator_html_renders_with_real_odds,
         test_render_html_includes_backtest_context,
     ]
     passed = 0
