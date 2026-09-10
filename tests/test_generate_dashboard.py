@@ -274,6 +274,29 @@ def test_bet_calculator_html_renders_with_real_odds():
     assert 'selected>1/5 odds' in html  # actually selected, not just present
 
 
+def test_render_html_emits_no_tracking_script_when_site_code_blank():
+    import scripts.generate_dashboard as dashboard_module
+    original = dashboard_module.GOATCOUNTER_SITE_CODE
+    try:
+        dashboard_module.GOATCOUNTER_SITE_CODE = ""
+        html = dashboard_module.render_html(date(2026, 9, 9), [])
+        assert "goatcounter" not in html
+    finally:
+        dashboard_module.GOATCOUNTER_SITE_CODE = original
+
+
+def test_render_html_emits_real_tracking_script_when_site_code_set():
+    import scripts.generate_dashboard as dashboard_module
+    original = dashboard_module.GOATCOUNTER_SITE_CODE
+    try:
+        dashboard_module.GOATCOUNTER_SITE_CODE = "silent-edge-zero"
+        html = dashboard_module.render_html(date(2026, 9, 9), [])
+        assert 'data-goatcounter="https://silent-edge-zero.goatcounter.com/count"' in html
+        assert 'src="//gc.zgo.at/count.js"' in html
+    finally:
+        dashboard_module.GOATCOUNTER_SITE_CODE = original
+
+
 def test_render_html_includes_backtest_context():
     from datetime import date
     html = render_html(date(2026, 9, 9), [])
@@ -476,6 +499,8 @@ if __name__ == "__main__":
         test_render_live_calibration_empty_with_no_history,
         test_render_live_calibration_buckets_real_settled_races_and_excludes_pending,
         test_render_live_calibration_flags_small_sample,
+        test_render_html_emits_no_tracking_script_when_site_code_blank,
+        test_render_html_emits_real_tracking_script_when_site_code_set,
     ]
     passed = 0
     for t in tests:

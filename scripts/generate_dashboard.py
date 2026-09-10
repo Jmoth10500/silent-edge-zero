@@ -52,6 +52,17 @@ from src.features.runner_features import (
 
 OUTPUT_PATH = Path(__file__).parent.parent / "dashboard.html"
 
+# Real, privacy-first visitor tracking (GoatCounter — goatcounter.com), per
+# Jonathan's request (2026-09-11) to see whether anyone besides him is
+# actually opening the Netlify dashboard. Set once he's signed up for his
+# own free account and given the real site code — left blank renders no
+# tracking script at all, never a fake/placeholder one. GoatCounter honours
+# the browser's Do Not Track setting by default, which is the real,
+# reliable way for Jonathan to exclude his own visits — no account-specific
+# setup needed on top of that. See docs/BUILD_LOG.md for the real code
+# once it's set.
+GOATCOUNTER_SITE_CODE = ""
+
 # Real, committed backtest results (docs/RESEARCH_LAB.md RL-008, 2026-09-09,
 # 9 walk-forward folds, ~487k real predictions, 2023-06 to 2026-06) — shown
 # as honest context for what these live picks' accuracy should be expected
@@ -1396,6 +1407,7 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     calcBet(el.dataset.domid);
   }});
 </script>
+{f'<script data-goatcounter="https://{GOATCOUNTER_SITE_CODE}.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>' if GOATCOUNTER_SITE_CODE else ''}
 </body>
 </html>"""
 
