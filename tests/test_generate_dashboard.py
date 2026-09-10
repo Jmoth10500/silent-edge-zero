@@ -350,6 +350,28 @@ def test_render_day_history_dialog_shows_win_loss_placed_badges():
     assert "result pending" in html  # pending race has no finishing_position or result_note
 
 
+def test_render_day_history_dialog_shows_tally_of_win_placed_loss():
+    races = [
+        {"off_time": time(13, 15), "course_name": "Doncaster", "race_name": "Race A",
+         "horse_name": "Winner Horse", "model_probability": 0.3, "finishing_position": 1,
+         "result_note": None, "field_size": 9, "status": "WIN"},
+        {"off_time": time(13, 20), "course_name": "Doncaster", "race_name": "Race A2",
+         "horse_name": "Winner Horse 2", "model_probability": 0.3, "finishing_position": 1,
+         "result_note": None, "field_size": 9, "status": "WIN"},
+        {"off_time": time(13, 50), "course_name": "Doncaster", "race_name": "Race B",
+         "horse_name": "Placed Horse", "model_probability": 0.2, "finishing_position": 3,
+         "result_note": None, "field_size": 9, "status": "PLACED"},
+        {"off_time": time(14, 0), "course_name": "Epsom", "race_name": "Race C",
+         "horse_name": "Loser Horse", "model_probability": 0.25, "finishing_position": 6,
+         "result_note": None, "field_size": 9, "status": "LOSS"},
+    ]
+    html = render_day_history_dialog(date(2026, 9, 10), races)
+    assert "2 wins" in html
+    assert "1 placed" in html
+    assert "1 loss" in html
+    assert "dayhist-tally-item dayhist-badge-pending" not in html  # no pending chip when count is 0
+
+
 def test_render_day_history_dialog_shows_result_note_for_non_finishes():
     races = [{"off_time": time(13, 15), "course_name": "Doncaster", "race_name": "Race A",
               "horse_name": "Pulled Up Horse", "model_probability": 0.3, "finishing_position": None,
@@ -406,6 +428,7 @@ if __name__ == "__main__":
         test_render_days_tracked_dialog_empty_when_no_dates,
         test_render_days_tracked_dialog_lists_real_dates_newest_first,
         test_render_day_history_dialog_shows_win_loss_placed_badges,
+        test_render_day_history_dialog_shows_tally_of_win_placed_loss,
         test_render_day_history_dialog_shows_result_note_for_non_finishes,
     ]
     passed = 0

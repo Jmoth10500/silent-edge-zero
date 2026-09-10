@@ -657,6 +657,18 @@ def render_day_history_dialog(day: date, races: list[dict]) -> str:
     (within that race's real each-way terms), LOSS, or PENDING if no
     real result has been collected yet. Never a guessed outcome."""
     badge_class = {"WIN": "win", "PLACED": "placed", "LOSS": "loss", "PENDING": "pending"}
+
+    tally = {"WIN": 0, "PLACED": 0, "LOSS": 0, "PENDING": 0}
+    for r in races:
+        tally[r["status"]] += 1
+    tally_html = f"""
+    <div class="dayhist-tally">
+      <span class="dayhist-tally-item dayhist-badge-win">{tally['WIN']} win{'s' if tally['WIN'] != 1 else ''}</span>
+      <span class="dayhist-tally-item dayhist-badge-placed">{tally['PLACED']} placed</span>
+      <span class="dayhist-tally-item dayhist-badge-loss">{tally['LOSS']} loss{'es' if tally['LOSS'] != 1 else ''}</span>
+      {f'<span class="dayhist-tally-item dayhist-badge-pending">{tally["PENDING"]} pending</span>' if tally['PENDING'] else ''}
+    </div>"""
+
     rows = []
     for r in sorted(races, key=lambda x: x["off_time"]):
         t = r["off_time"].strftime("%H:%M") if hasattr(r["off_time"], "strftime") else r["off_time"]
@@ -681,6 +693,7 @@ def render_day_history_dialog(day: date, races: list[dict]) -> str:
     <dialog class="help-dialog dayhist-dialog" id="{dom_id}">
       <button class="close-btn" onclick="this.closest('dialog').close()" aria-label="Close">✕</button>
       <h2>{day.strftime('%A %d %B %Y')}</h2>
+      {tally_html}
       <div class="dayhist-list">{''.join(rows)}</div>
     </dialog>"""
 
@@ -1032,6 +1045,11 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
   .dayhist-badge-placed {{ background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }}
   .dayhist-badge-loss {{ background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }}
   .dayhist-badge-pending {{ background: var(--surface-2); color: var(--text-muted); }}
+
+  .dayhist-tally {{ display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }}
+  .dayhist-tally-item {{
+    font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 20px;
+  }}
 
   .race-weather {{
     font-size: 11px; color: var(--text-secondary); background: var(--surface-2);
