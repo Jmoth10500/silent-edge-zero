@@ -95,7 +95,7 @@ Last verified: 2026-09-08 (live checks run this session, see notes per source)
 - **Reliability:** confirmed live 2026-09-09 (real GB events pulled: Doncaster, Epsom Downs, Lingfield, Warwick, Worcester)
 - **Real limitation, confirmed live, same shape as Open-Meteo's forecast endpoint (RL-001):** only exposes UPCOMING markets — no historical/retroactive endpoint. Cannot backfill the 2023-2026 backtest window; can only build a real price-movement dataset going forward from whenever polling starts (`scripts/collect_smarkets_prices.py`, LaunchAgent every 20 min).
 - **Replacement if unavailable:** none needed right now — this itself is the replacement for Betfair while that account is blocked.
-- **Status: LIVE and in use, forward-only.** `src/providers/odds_smarkets.py` + `scripts/collect_smarkets_prices.py`, real tests against real captured fixtures, real LaunchAgent running.
+- **Status: LIVE and genuinely matching real races (fixed 2026-09-10).** A real timezone bug (Smarkets UTC vs. our local off_time, silent during BST) meant every match attempt was wrong from when this was first built until fixed — see `docs/BUILD_LOG.md` for the full story. Confirmed real after the fix: 188 real price snapshots across 20 real matched races in one run. `src/providers/odds_smarkets.py` + `scripts/collect_smarkets_prices.py`, real tests (incl. real BST/GMT regression fixtures), real LaunchAgent running.
 
 ---
 

@@ -715,3 +715,42 @@ tests — 81/81 tests pass via `python3 -m pytest tests/ -v`, up from 80):**
 - Do not retry the Betfair login endpoint without a concrete reason to think the account status changed
 - Do not revisit the field-size calibration idea without new real validation data — the current real result against it stands
 - Do not skip re-running the full test suite before committing — all 192 tests must actually pass
+
+---
+
+## 2026-09-10 — Session 10 continued: Netlify PATH fix, then a real Smarkets timezone bug found and fixed
+
+**Two real bugs found and fixed, both from Jonathan noticing something was off on the live dashboard.**
+
+**Bug 1 — Netlify deploy silently failing under launchd.** Predictions and dashboard generation succeeded at 07:15, but `netlify` (a `#!/usr/bin/env node` script) failed with `env: node: No such file or directory` — launchd's minimal PATH doesn't include nvm's node install. Fixed by exporting nvm's bin directory onto PATH in `scripts/run_predict_todays_races.sh`, verified via a real launchd-triggered run (not just a manual shell test, which already has the right PATH and wouldn't have caught this).
+
+**Bug 2 — Smarkets price collection was matching every race to the wrong one, silently, since the collector was built.** Jonathan asked why odds weren't showing. Real investigation: `market_snapshot` had 0 rows for today despite the collector running every 20 minutes without errors. Traced it to `scripts/collect_smarkets_prices.py::match_race()` comparing Smarkets' real UTC `start_datetime` directly against our `race.off_time` (real UK LOCAL wall-clock time, confirmed by reading `racecard_theracingapi.py`'s off_time derivation) as if both were the same timezone. During BST (currently in effect, UTC+1) this is a full hour out — confirmed live: a Smarkets "Epsom 15:52" event was falsely matching our local-15:42 race (10 real minutes apart, inside the old tolerance) when the REAL same race was at local 16:52. Every match this bug DID produce was wrong, which is why every race failed the runner-name check and got skipped — the collector wasn't broken by an exception, it just never found a correct real match.
+
+**Fixed with a real UTC->Europe/London conversion** (`zoneinfo`, stdlib, handles BST/GMT automatically) before comparing to our local off_time. Also found and fixed a second real issue while testing the recovery: a single Smarkets 429 (rate limit) used to crash the ENTIRE collection run via an unhandled exception, losing every other race's real data for that trigger too — wrapped per-race fetching in a real try/except (log + skip + back off 1s, matching the best-effort discipline already used in `fetch_course_weather`), plus a small 0.3s delay between races to reduce how often the rate limit gets hit at all.
+
+**Real result after both fixes, verified live:** `market_snapshot` went from 0 real rows for today to **188 real price snapshots across 20 real correctly-matched races** in one run (the remaining 17 hit real 429s this run — resilient now, not fatal, they'll be picked up on a later run within the day). Dashboard regenerated and redeployed — confirmed live on `https://silent-edge-zero.netlify.app` showing real odds (e.g. "Odds 10.4", "Odds 3.8") for the first time.
+
+**New regression tests added** (`tests/test_collect_smarkets_prices.py`) specifically reproduce the real bug: a BST-date fixture where naive UTC comparison would false-match a wrong race, and a GMT-date fixture confirming the fix doesn't break the (common, no-offset) winter case. Full suite: **195/195 pass** (was 192, +3).
+
+**What this means:** the Smarkets integration has been silently non-functional since it was built earlier this session — a real, humbling reminder that "ran without errors" and "collector count = 0 every time" together should have been investigated sooner rather than assumed to be "just waiting for real data to accumulate." Worth remembering for future integrations: a persistent zero-match rate over multiple real runs is itself a signal worth checking, not just patience.
+
+**What's still blocked (unchanged):**
+1. Betfair — still SUSPENDED as of last check
+2. Racing API's own results — still needs their Basic tier
+3. Smarkets rate limiting — mitigated (no longer fatal), not eliminated; consider a longer per-race delay or fewer duplicate-event calls if 429s remain frequent
+
+**What the next session should do, in priority order:**
+1. Check `market_snapshot` accumulation across a full race day now that matching actually works — confirm price MOVEMENT (multiple snapshots per horse over time) is genuinely building, not just one-off matches.
+2. Once real movement data exists across a race, build the real price-movement feature (`src/market/movement.py` already exists, tested against synthetic data only).
+3. Investigate the duplicate market_id calls seen in this run's log (same race appearing to be fetched twice with different market_ids) — may reduce real API load and rate-limit frequency.
+4. Check whether Betfair's account status has cleared, only if there's a concrete reason to think so.
+5. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+6. **Always run a long script unbuffered and backgrounded to a real log file**, never `| tee` in the foreground.
+7. Keep this file updated at the end of every session.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result/price data, or any model's training data, to "demo" anything
+- Do not create accounts on Jonathan's behalf
+- Do not retry the Betfair login endpoint without a concrete reason to think the account status changed
+- Do not assume a persistently-zero real collector result is "just waiting for data" without checking — verify the matching logic actually works
+- Do not skip re-running the full test suite before committing — all 195 tests must actually pass

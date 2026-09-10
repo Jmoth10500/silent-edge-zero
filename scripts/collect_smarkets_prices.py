@@ -39,6 +39,7 @@ immutable prediction ledger; see db/schema.sql's own comment on it).
 """
 import re
 import sys
+import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -100,18 +101,33 @@ def load_our_races(conn, race_date: date):
 def match_race(our_races: dict, smk_event) -> int | None:
     """Returns our race_id matching this Smarkets event, or None. Course
     must normalise to the same real GB course, and off_time must be
-    within TIME_TOLERANCE_MINUTES of Smarkets' scheduled start."""
+    within TIME_TOLERANCE_MINUTES of Smarkets' scheduled start.
+
+    **Real bug found and fixed 2026-09-10:** Smarkets' `start_datetime` is
+    real UTC; our `race.off_time` is real UK LOCAL wall-clock time (see
+    `src/providers/racecard_theracingapi.py` — derived from the API's own
+    `off_dt`, which carries a real timezone offset, e.g. '+01:00' during
+    BST). Comparing them as if both were UTC silently matched every race
+    to the wrong one during BST (currently UTC+1) — confirmed live: a
+    Smarkets 'Epsom 15:52' event was matching our race at local off_time
+    15:42 (a coincidental 10-minute gap inside the old tolerance) when the
+    REAL same race was at local off_time 16:52 (a full hour later — the
+    real BST offset). Fixed by converting Smarkets' UTC time to
+    Europe/London local time (`zoneinfo`, stdlib, handles BST/GMT
+    automatically) before comparing to our local off_time.
+    """
     from data.gb_racecourse_coordinates import normalise_course_name
+    from zoneinfo import ZoneInfo
 
     smk_course = normalise_course_name(smk_event.venue_name)
-    smk_time = smk_event.start_datetime
+    smk_time_local = smk_event.start_datetime.astimezone(ZoneInfo("Europe/London"))
 
     best_race_id, best_diff = None, None
     for race_id, info in our_races.items():
         if normalise_course_name(info["course_name"]) != smk_course:
             continue
-        our_dt = datetime.combine(smk_time.date(), info["off_time"], tzinfo=timezone.utc)
-        diff = abs((our_dt - smk_time).total_seconds()) / 60
+        our_dt = datetime.combine(smk_time_local.date(), info["off_time"], tzinfo=smk_time_local.tzinfo)
+        diff = abs((our_dt - smk_time_local).total_seconds()) / 60
         if diff <= TIME_TOLERANCE_MINUTES and (best_diff is None or diff < best_diff):
             best_race_id, best_diff = race_id, diff
     return best_race_id
@@ -155,16 +171,31 @@ def main():
     print(f"{len(gb_events)} real GB events currently listed on Smarkets (any date — "
           f"Smarkets' own date filter is loose, matching is done against our real races).")
 
-    n_races_matched, n_snapshots = 0, 0
+    n_races_matched, n_snapshots, n_errors = 0, 0, 0
     for event in gb_events:
         race_id = match_race(our_races, event)
         if race_id is None:
             continue
 
-        market_id = get_win_market_id(event.event_id)
-        if market_id is None:
+        # Real bug found and fixed 2026-09-10: an unhandled error fetching
+        # ONE race's real Smarkets prices (e.g. a 429 rate-limit response)
+        # used to crash the whole run, losing every other race's real data
+        # for this trigger too. Best-effort per race instead — log and
+        # move on, same discipline as fetch_course_weather in
+        # generate_dashboard.py.
+        try:
+            market_id = get_win_market_id(event.event_id)
+            if market_id is None:
+                continue
+            prices = get_runner_prices(market_id)
+        except Exception as e:
+            n_errors += 1
+            print(f"  Race {race_id} ({event.venue_name} {event.start_datetime.strftime('%H:%M')}): "
+                  f"real Smarkets fetch failed ({e}), skipping this race this run.")
+            time.sleep(1.0)  # back off before the next race, in case it's a rate limit
             continue
-        prices = get_runner_prices(market_id)
+
+        time.sleep(0.3)  # a small real delay between races — polite to Smarkets, reduces 429 risk
 
         our_runners = our_races[race_id]["runners"]
         matched = []
@@ -189,7 +220,8 @@ def main():
         print(f"  Race {race_id} ({event.venue_name} {event.start_datetime.strftime('%H:%M')}): "
               f"{n} real price snapshots recorded.")
 
-    print(f"\n{n_races_matched} races matched and recorded, {n_snapshots} total real price snapshots.")
+    print(f"\n{n_races_matched} races matched and recorded, {n_snapshots} total real price snapshots, "
+          f"{n_errors} races skipped this run due to a real fetch error (e.g. rate limit).")
     conn.close()
 
 
