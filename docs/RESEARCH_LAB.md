@@ -526,14 +526,47 @@ honesty note on why)
   measures calibration, not ROI — a well-calibrated-but-shifted
   probability doesn't automatically imply positive expected value once
   real market odds are factored in).
-- **Status: VALIDATED, not yet wired into anything.** Nothing has been
+- **Status: the CALIBRATION FINDING itself is VALIDATED** (see the
+  real, consistent 4-9pp gap on untouched validation data above) — but
+  see the immediate follow-up below: turning it into an actual
+  correction does NOT survive fresh validation. Nothing has been
   changed in the live pipeline, the models, or the dashboard's shown
-  probabilities — this is a real, held-up finding sitting on the shelf
-  until a deliberate decision is made about whether/how to apply a
-  calibration correction (e.g. temperature scaling specifically above
-  the ~40% threshold, same real technique as `src/evaluation/
-  temperature_scaling.py`, just targeted at a different real trigger
-  than RL-011's rejected field-size one).
+  probabilities.
+
+**Immediate follow-up (same session, 2026-09-11) — does a real correction
+help? Tested it properly rather than assuming yes:**
+`scripts/validate_top_pick_overconfidence_scaling.py` — same walk-forward
+folds, same 7-discovery/N-validation split. Fits a single best
+temperature (`src/evaluation/temperature_scaling.py::fit_best_temperature`,
+the exact real technique RL-011 already built) using ONLY the discovery
+races whose top pick is >=40%, then applies that fixed temperature to
+the untouched validation folds' >=40% races and scores it honestly
+against no adjustment — both on the full validation set (diluted, since
+only ~5% of races are ever touched) AND, the real test, isolated to just
+the affected subset.
+
+- Fitted temperature: **T=1.15** (a mild flatten, consistent with the
+  overconfidence direction found).
+- Real validation result, isolated to the 557 real validation races the
+  correction actually touches:
+
+  | | Brier | LogLoss | Hit rate |
+  |---|---|---|---|
+  | No adjustment | 0.146386 | 0.4522 | 45.1% |
+  | Top-pick scaled | 0.146178 | 0.4522 | 45.1% |
+
+  Brier moves by 0.0002 (0.14% relative) — noise-level. LogLoss and hit
+  rate are unchanged at the precision shown.
+- **Status: TESTED AND REJECTED**, same disposition and same real
+  reason as RL-011's field-size idea — a genuinely real discovery-phase
+  finding (the calibration gap itself is real and validated) that does
+  not translate into a usable correction once actually tested on fresh
+  data. Not wired into the live pipeline, either model, or the
+  dashboard's shown probabilities. Reinforces the same conclusion a
+  second time this session: RL-010 (trainer/jockey) remains the one
+  genuine model-improving gain found in this whole line of investigation
+  — calibration tweaks on top of the existing model keep looking
+  promising in discovery and keep failing to hold up in validation.
 
 ---
 
