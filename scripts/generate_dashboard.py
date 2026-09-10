@@ -61,7 +61,7 @@ OUTPUT_PATH = Path(__file__).parent.parent / "dashboard.html"
 # reliable way for Jonathan to exclude his own visits — no account-specific
 # setup needed on top of that. See docs/BUILD_LOG.md for the real code
 # once it's set.
-GOATCOUNTER_SITE_CODE = ""
+GOATCOUNTER_SITE_CODE = "sez"
 
 # Real, committed backtest results (docs/RESEARCH_LAB.md RL-008, 2026-09-09,
 # 9 walk-forward folds, ~487k real predictions, 2023-06 to 2026-06) — shown
