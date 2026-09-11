@@ -30,7 +30,7 @@ each run — the HTML file itself carries no history, the DB is the
 permanent record).
 """
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -311,7 +311,7 @@ def render_weather(course_weather: dict[str, dict]) -> str:
           <div class="weather-going">{_going_hint(w)}</div>
         </div>""")
     return f"""
-    <div class="section-label">Today's course conditions (live forecast)</div>
+    <div class="section-label">Course conditions (live forecast)</div>
     <div class="weather-row">{''.join(cards)}</div>"""
 
 
@@ -343,7 +343,7 @@ def render_overview_chart(races: list[dict]) -> str:
           </div>
         </div>""")
     return f"""
-    <div class="section-label">Today's confidence, at a glance — click a race to open it</div>
+    <div class="section-label">Confidence, at a glance — click a race to open it</div>
     <div class="overview-chart">{''.join(rows)}</div>"""
 
 
@@ -1108,14 +1108,54 @@ def render_summary(races: list[dict]) -> str:
     </div>"""
 
 
+def render_day_panel(dom_id: str, races: list[dict], course_weather: dict[str, dict]) -> str:
+    """One real day's weather + overview chart + empty-state, as a single
+    reusable block — used for both the today-only layout and each tab
+    panel in render_day_tabs."""
+    empty_message = '' if races else '<p class="empty">No predictions locked for this date yet.</p>'
+    return f"""
+    {render_weather(course_weather)}
+    {render_overview_chart(races)}
+    {empty_message}"""
+
+
+def render_day_tabs(today_date: date, today_races: list[dict], today_weather: dict[str, dict],
+                     tomorrow_date: date | None, tomorrow_races: list[dict],
+                     tomorrow_weather: dict[str, dict]) -> str:
+    """Real Today/Tomorrow toggle, per Jonathan's request (2026-09-11)
+    "how do I see tomorrow's races?" — tomorrow's real racecard, with the
+    exact same real predictions treatment as today, shown as a second tab
+    rather than a separate page. Falls back to the plain single-day
+    layout (no tab UI at all) when there's no real tomorrow data yet —
+    never shows an empty/broken tomorrow tab."""
+    if not tomorrow_date or not tomorrow_races:
+        return f'<div id="races">{render_day_panel("today", today_races, today_weather)}</div>'
+
+    today_label = f"Today — {today_date.strftime('%a %d %b')}"
+    tomorrow_label = f"Tomorrow — {tomorrow_date.strftime('%a %d %b')}"
+    return f"""
+    <div id="races">
+      <div class="day-tabs">
+        <button class="day-tab active" id="day-tab-today" onclick="showDay('today')">{today_label}</button>
+        <button class="day-tab" id="day-tab-tomorrow" onclick="showDay('tomorrow')">{tomorrow_label}</button>
+      </div>
+      <div class="day-panel" id="day-panel-today">{render_day_panel("today", today_races, today_weather)}</div>
+      <div class="day-panel" id="day-panel-tomorrow" hidden>{render_day_panel("tomorrow", tomorrow_races, tomorrow_weather)}</div>
+    </div>"""
+
+
 def render_html(race_date: date, races: list[dict], course_weather: dict[str, dict] | None = None,
                  daily_summaries: list[dict] | None = None,
-                 race_history: dict[date, list[dict]] | None = None) -> str:
+                 race_history: dict[date, list[dict]] | None = None,
+                 tomorrow_date: date | None = None, tomorrow_races: list[dict] | None = None,
+                 tomorrow_weather: dict[str, dict] | None = None) -> str:
     course_weather = course_weather or {}
     daily_summaries = daily_summaries or []
     race_history = race_history or {}
+    tomorrow_races = tomorrow_races or []
+    tomorrow_weather = tomorrow_weather or {}
     race_dialogs = "".join(render_race(r, course_weather) for r in races)
-    empty_message = '' if races else '<p class="empty">No predictions locked for this date yet.</p>'
+    race_dialogs += "".join(render_race(r, tomorrow_weather) for r in tomorrow_races)
 
     return f"""<!doctype html>
 <html lang="en">
@@ -1467,6 +1507,14 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
   }}
   .edge-jump:hover {{ text-decoration: underline; }}
 
+  .day-tabs {{ display: flex; gap: 8px; margin-bottom: 12px; }}
+  .day-tab {{
+    background: var(--surface-1); border: 1px solid var(--border); color: var(--text-secondary);
+    border-radius: 20px; padding: 7px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }}
+  .day-tab.active {{ border-color: var(--series-1); color: var(--series-1); background: color-mix(in srgb, var(--series-1) 10%, var(--surface-1)); }}
+  .day-tab:hover {{ border-color: var(--series-1); }}
+
   .bank-tracker {{
     background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
     padding: 16px; margin-bottom: 24px;
@@ -1579,12 +1627,7 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
 
   {render_bank_tracker(daily_summaries)}
 
-  {render_weather(course_weather)}
-
-  <div id="races">
-    {render_overview_chart(races)}
-    {empty_message}
-  </div>
+  {render_day_tabs(race_date, races, course_weather, tomorrow_date, tomorrow_races, tomorrow_weather)}
 
   {render_track_record(daily_summaries, race_history)}
 
@@ -1636,6 +1679,16 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     banner.textContent = todayDayName + "'s predictions are being prepared. " + pageDayName + "'s verified results are available below.";
     banner.hidden = false;
   }})();
+
+  function showDay(which) {{
+    ['today', 'tomorrow'].forEach(function (d) {{
+      var panel = document.getElementById('day-panel-' + d);
+      var tab = document.getElementById('day-tab-' + d);
+      if (!panel || !tab) return;
+      panel.hidden = (d !== which);
+      tab.classList.toggle('active', d === which);
+    }});
+  }}
 
   function applyTheme(theme) {{
     if (theme) {{ document.documentElement.setAttribute('data-theme', theme); }}
@@ -1697,19 +1750,24 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
 def main():
     race_date_str = sys.argv[1] if len(sys.argv) > 1 else date.today().isoformat()
     race_date = date.fromisoformat(race_date_str)
+    tomorrow_date = race_date + timedelta(days=1)
 
     conn = psycopg2.connect(dbname="silent_edge_zero")
     races = load_predictions(conn, race_date)
+    tomorrow_races = load_predictions(conn, tomorrow_date)
     daily_summaries = load_daily_summaries(conn)
     race_history = load_race_history(conn, [s["race_date"] for s in daily_summaries])
     conn.close()
 
     course_names = {r["course_name"] for r in races}
     course_weather = fetch_course_weather(course_names, race_date)
+    tomorrow_course_names = {r["course_name"] for r in tomorrow_races}
+    tomorrow_weather = fetch_course_weather(tomorrow_course_names, tomorrow_date) if tomorrow_races else {}
 
-    html = render_html(race_date, races, course_weather, daily_summaries, race_history)
+    html = render_html(race_date, races, course_weather, daily_summaries, race_history,
+                        tomorrow_date, tomorrow_races, tomorrow_weather)
     OUTPUT_PATH.write_text(html, encoding="utf-8")
-    print(f"Dashboard written to {OUTPUT_PATH} ({len(races)} races).")
+    print(f"Dashboard written to {OUTPUT_PATH} ({len(races)} races today, {len(tomorrow_races)} tomorrow).")
 
 
 if __name__ == "__main__":

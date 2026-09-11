@@ -25,6 +25,8 @@ from scripts.generate_dashboard import (
     find_market_favourite,
     real_calibration_confidence,
     render_bank_tracker,
+    render_day_panel,
+    render_day_tabs,
     render_hero,
     render_html,
     render_overview_chart,
@@ -391,6 +393,38 @@ def test_render_bank_tracker_real_running_balance():
     assert "+19.2%" in html
 
 
+def test_render_day_tabs_no_tab_ui_without_tomorrow_data():
+    races = [_hero_race(1, "Doncaster", time(13, 15), "Race A", {}, {"Horse A": 0.3})]
+    html = render_day_tabs(date(2026, 9, 11), races, {}, None, [], {})
+    assert "day-tabs" not in html
+    assert 'id="day-panel-today"' not in html  # falls back to the plain single-day layout
+    assert '<div id="races">' in html
+
+
+def test_render_day_tabs_no_tab_ui_when_tomorrow_races_empty():
+    races = [_hero_race(1, "Doncaster", time(13, 15), "Race A", {}, {"Horse A": 0.3})]
+    html = render_day_tabs(date(2026, 9, 11), races, {}, date(2026, 9, 12), [], {})
+    assert "day-tabs" not in html
+
+
+def test_render_day_tabs_shows_both_days_when_tomorrow_has_races():
+    today_races = [_hero_race(1, "Doncaster", time(13, 15), "Race A", {}, {"Horse A": 0.3})]
+    tomorrow_races = [_hero_race(2, "Epsom", time(14, 0), "Race B", {}, {"Horse B": 0.4})]
+    html = render_day_tabs(date(2026, 9, 11), today_races, {}, date(2026, 9, 12), tomorrow_races, {})
+    assert "day-tabs" in html
+    assert 'id="day-panel-today"' in html
+    assert 'id="day-panel-tomorrow"' in html
+    assert "Today —" in html and "Tomorrow —" in html
+    # tomorrow panel starts hidden, today panel does not
+    assert '<div class="day-panel" id="day-panel-tomorrow" hidden>' in html
+    assert '<div class="day-panel" id="day-panel-today">' in html
+
+
+def test_render_day_panel_shows_empty_state_with_no_races():
+    html = render_day_panel("today", [], {})
+    assert "No predictions locked for this date yet" in html
+
+
 def test_render_html_emits_no_tracking_script_when_site_code_blank():
     import scripts.generate_dashboard as dashboard_module
     original = dashboard_module.GOATCOUNTER_SITE_CODE
@@ -629,6 +663,10 @@ if __name__ == "__main__":
         test_render_hero_renders_real_cards_and_recap_lines,
         test_render_bank_tracker_empty_with_no_summaries,
         test_render_bank_tracker_real_running_balance,
+        test_render_day_tabs_no_tab_ui_without_tomorrow_data,
+        test_render_day_tabs_no_tab_ui_when_tomorrow_races_empty,
+        test_render_day_tabs_shows_both_days_when_tomorrow_has_races,
+        test_render_day_panel_shows_empty_state_with_no_races,
     ]
     passed = 0
     for t in tests:

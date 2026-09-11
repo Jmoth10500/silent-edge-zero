@@ -1,13 +1,22 @@
 #!/usr/bin/env python3
 """
 Real daily racecard collector — Phase 3, finally live.
-Pulls today's GB racecards from The Racing API free tier and stores them as
+Pulls GB racecards from The Racing API free tier and stores them as
 PRE_RACE_SNAPSHOT rows (runner_snapshot), never overwriting a prior snapshot
 for the same race+horse — a re-run just adds another row with a later
 ingested_at, per the schema's own design (see db/schema.sql comments).
+
+**Real, per Jonathan's request (2026-09-11) "how do I see tomorrow's
+races?":** fetches BOTH today's and tomorrow's real card — the free tier
+genuinely supports both (see src/providers/racecard_theracingapi.py's own
+docstring: 'today'/'tomorrow' only, no arbitrary date). Each date is
+best-effort and independent: if tomorrow's card isn't published yet (or
+any other real fetch error), that date is skipped and reported, not a
+reason to abort today's real collection.
 """
 import sys
-from datetime import date, datetime, timezone
+import time
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -20,37 +29,22 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 from src.providers.racecard_theracingapi import TheRacingApiProvider
 
 
-def main():
-    conn = psycopg2.connect(dbname="silent_edge_zero")
-    cur = conn.cursor()
-
-    cur.execute(
-        "INSERT INTO data_source (name, url, free_tier, terms_checked, notes) "
-        "VALUES ('theracingapi', 'https://www.theracingapi.com/', TRUE, %s, "
-        "'Free tier: racecards+results (basic), no odds. Confirmed live 2026-09-08.') "
-        "ON CONFLICT (name) DO NOTHING",
-        (date.today(),),
-    )
-    cur.execute("SELECT id FROM data_source WHERE name = 'theracingapi'")
-    source_id = cur.fetchone()[0]
-
-    provider = TheRacingApiProvider()
-    today = date.today()
+def store_races(conn, cur, source_id: int, races: list, target_date: date) -> tuple[int, int]:
+    """Real inserts for one date's fetched racecards. Returns
+    (races_stored, runners_stored). Caller commits."""
     now = datetime.now(timezone.utc)
-
-    try:
-        races = provider.get_racecards(today, region="GB")
-    except Exception as e:
-        print(f"FAILED to fetch racecards: {e}")
-        cur.close()
-        conn.close()
-        sys.exit(1)
-
-    print(f"Fetched {len(races)} real GB races for {today} from The Racing API.")
-
     races_stored, runners_stored = 0, 0
 
     for rc in races:
+        if rc.race_date != target_date:
+            # Real defensive check: never trust the API's own date field
+            # blindly against the date we asked for — a mismatch here
+            # would mean today's/tomorrow's collection silently stored a
+            # race under the wrong day.
+            print(f"  WARNING: race {rc.race_name!r} has race_date={rc.race_date}, "
+                  f"expected {target_date} — skipping this one race, not guessing which is right.")
+            continue
+
         cur.execute(
             "INSERT INTO course (name, country) VALUES (%s, 'GB') "
             "ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id",
@@ -113,10 +107,49 @@ def main():
             )
             runners_stored += 1
 
-    conn.commit()
-    print(f"Stored {races_stored} races, {runners_stored} runner snapshots.")
+    return races_stored, runners_stored
+
+
+def main():
+    conn = psycopg2.connect(dbname="silent_edge_zero")
+    cur = conn.cursor()
+
+    cur.execute(
+        "INSERT INTO data_source (name, url, free_tier, terms_checked, notes) "
+        "VALUES ('theracingapi', 'https://www.theracingapi.com/', TRUE, %s, "
+        "'Free tier: racecards+results (basic), no odds. Confirmed live 2026-09-08.') "
+        "ON CONFLICT (name) DO NOTHING",
+        (date.today(),),
+    )
+    cur.execute("SELECT id FROM data_source WHERE name = 'theracingapi'")
+    source_id = cur.fetchone()[0]
+
+    provider = TheRacingApiProvider()
+    today = date.today()
+
+    any_success = False
+    for i, target_date in enumerate((today, today + timedelta(days=1))):
+        if i > 0:
+            time.sleep(2.0)  # real rate-limit avoidance — confirmed live 2026-09-11 (a 429 hit
+                              # two consecutive calls with no gap between them)
+        try:
+            races = provider.get_racecards(target_date, region="GB")
+        except Exception as e:
+            print(f"{target_date}: FAILED to fetch racecards ({e}) — skipping this date, "
+                  f"not aborting the other real date.")
+            continue
+
+        print(f"Fetched {len(races)} real GB races for {target_date} from The Racing API.")
+        races_stored, runners_stored = store_races(conn, cur, source_id, races, target_date)
+        conn.commit()
+        print(f"  Stored {races_stored} races, {runners_stored} runner snapshots for {target_date}.")
+        any_success = True
+
     cur.close()
     conn.close()
+
+    if not any_success:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

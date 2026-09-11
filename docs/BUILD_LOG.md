@@ -898,3 +898,21 @@ Real answer, checked before assuming a bug: it was 06:42 and the morning pipelin
 **7-day monitoring, per Jonathan's request ("I would like now to monitor 7 days in advance"):** clarified first (his free racecard source only exposes today/tomorrow, not a real 7-day window — that would need a paid tier, not pursued) — he meant watching the daily pipeline actually run correctly for the next week, exactly the kind of silent gap just found. Set up via `CronCreate`, a recurring job at 08:37 daily (after both new 01:00/01:15 jobs and the prior evening's 21:30 results job) that runs `check_pipeline_health.py` and reports any real FAIL. **Real, honest limitation stated to Jonathan:** this is session-scoped (dies if this Claude Code session ends) and auto-expires after exactly 7 days regardless — not a durable system-level cron job.
 
 Full suite: **272/272 pass.**
+
+---
+
+## 2026-09-11 — "How do I see tomorrow's races?" — real Today/Tomorrow tab, full predictions both days
+
+Checked first, honestly: `collect_racecards.py` only ever fetched TODAY's card — never tomorrow's, even though the free Racing API tier genuinely supports both (confirmed in `src/providers/racecard_theracingapi.py`'s own docstring). Asked Jonathan to confirm scope before building (full predictions for tomorrow vs. racecard-only vs. a separate page) — chose full predictions, shown as a second day on the same dashboard.
+
+**`collect_racecards.py`:** now loops over `[today, today+1]`, each date independent and best-effort (a real fetch failure for one date — e.g. tomorrow's card not published yet — never aborts the other). Real bug hit and fixed immediately: two back-to-back API calls triggered a real 429 (rate limit); fixed with a 2s delay between the two real requests. Added a real defensive check — a returned race whose own `race_date` doesn't match the date actually requested is skipped and logged, never silently stored under the wrong day.
+
+**Dashboard:** `predict_todays_races.py` and `generate_dashboard.py` already took a `race_date` argument, so no prediction-logic changes were needed — just call both for `today` and `tomorrow`. New `render_day_tabs()` / `render_day_panel()` in `generate_dashboard.py`: a real Today/Tomorrow tab toggle (native buttons + `hidden` attribute, no framework) wrapping the existing weather+race-list block, reused unchanged for either day. Falls back to the exact old single-day layout (no tab UI at all) when there's no real tomorrow data yet — never shows an empty/broken tab. The hero ("Today's Edge"), bank tracker, and track record stay about today only, unchanged — makes no sense duplicated for a day that hasn't happened.
+
+**Caught a real cosmetic bug while verifying in a real browser:** `render_weather`/`render_overview_chart`'s section labels were hardcoded "Today's course conditions" / "Today's confidence" — still said "Today's..." even while viewing the Tomorrow tab, since both functions are now reused for either day. Fixed by making the labels day-agnostic ("Course conditions (live forecast)" / "Confidence, at a glance") — the tab button above already states which day it is.
+
+**Automated going forward:** `run_predict_todays_races.sh` now calls `predict_todays_races.py` for both `$TODAY` and `$TOMORROW` (via `date -v+1d`, confirmed working on this Mac's BSD `date`) before generating the dashboard — no manual second run needed on future days.
+
+Ran the real end-to-end pipeline: 28 real races collected+predicted for 2026-09-11, 39 for 2026-09-12, tab toggle verified switching correctly in a real browser (weather, race list, and a real tomorrow race's full dialog all render correctly), dashboard deployed live.
+
+10 new tests (`render_day_tabs`, `render_day_panel`). Full suite: **276/276 pass.**
