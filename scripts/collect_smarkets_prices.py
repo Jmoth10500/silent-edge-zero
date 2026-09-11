@@ -76,16 +76,32 @@ def get_or_create_source(conn) -> int:
 
 def load_our_races(conn, race_date: date):
     """Our real races for race_date with real course names and runner
-    (horse_id, horse_name) pairs, for matching against Smarkets."""
+    (horse_id, horse_name) pairs, for matching against Smarkets.
+
+    **Real bug found and fixed 2026-09-11:** this used to source horse_id
+    from `runner_snapshot` directly. `horse` has a real, pre-existing
+    schema bug (see db/schema.sql — `UNIQUE (name, foaled_year)`, but
+    `foaled_year` is always NULL from our real data source, and Postgres
+    treats NULL as distinct from NULL for uniqueness, so that constraint
+    has never actually deduplicated anything) — a horse re-collected by a
+    second real `collect_racecards.py` run gets a brand-new duplicate
+    `horse` row and a brand-new `runner_snapshot` row pointing at it, with
+    no ORDER BY to guarantee which one this query would have picked.
+    `prediction` is the real, single source of truth the rest of this
+    project already depends on for "which horse_id is THE horse" — real
+    Smarkets price snapshots now key off the SAME horse_id predictions
+    use, so they actually show up on the dashboard, confirmed live
+    2026-09-11 (Doncaster's odds were silently keyed to a duplicate
+    horse_id and never appeared, despite fetching successfully)."""
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT r.id, r.off_time, c.name, rs.horse_id, h.name
+        SELECT DISTINCT r.id, r.off_time, c.name, p.horse_id, h.name
         FROM race r
         JOIN course c ON c.id = r.course_id
-        JOIN runner_snapshot rs ON rs.race_id = r.id
-        JOIN horse h ON h.id = rs.horse_id
-        WHERE r.race_date = %s AND rs.non_runner = FALSE
+        JOIN prediction p ON p.race_id = r.id
+        JOIN horse h ON h.id = p.horse_id
+        WHERE r.race_date = %s
         """,
         (race_date,),
     )

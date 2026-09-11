@@ -21,6 +21,31 @@ CREATE TABLE IF NOT EXISTS course (
     longitude       DOUBLE PRECISION
 );
 
+-- **Real, known, DELIBERATELY UNFIXED bug, found 2026-09-11 — read before
+-- touching this table.** `UNIQUE (name, foaled_year)` below has never
+-- actually deduplicated anything: our real data source (The Racing API
+-- free tier) never populates foaled_year, it's always NULL, and Postgres
+-- treats NULL as distinct from NULL for uniqueness — so every
+-- `ON CONFLICT (name, foaled_year)` re-insert of an already-known horse
+-- silently created a brand-new duplicate row instead of matching the
+-- existing one. Confirmed live: 536 real duplicate horse names, 1,085
+-- excess rows — discovered when a duplicate broke real Smarkets price
+-- matching for every Doncaster runner (2026-09-11).
+--
+-- The real, structural fix (two partial unique indexes — see this
+-- table's git history for the exact statements) was drafted and reverted
+-- the same day: creating it requires the table to already be free of
+-- duplicates, and 294 of the 536 duplicate groups are referenced by
+-- LOCKED rows in `prediction` — fixing those means deliberately
+-- repointing an immutable ledger row's horse_id (with a proper
+-- trigger-disable, re-hash, and real testing), which needs Jonathan's
+-- explicit go-ahead before being done at scale, not a silent migration.
+-- Until that happens: `scripts/collect_smarkets_prices.py::load_our_races`
+-- was changed to source horse_id via `prediction` (the real, single
+-- source of truth everything else already depends on) instead of raw
+-- `runner_snapshot`, which fixes the actual user-visible symptom (a
+-- newer duplicate horse row silently breaking Smarkets price matching)
+-- without needing this migration — see that function's own docstring.
 CREATE TABLE IF NOT EXISTS horse (
     id              SERIAL PRIMARY KEY,
     name            TEXT NOT NULL,
