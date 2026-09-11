@@ -995,3 +995,19 @@ Jonathan: "the word" (go-ahead for Stage 2, offered at the end of Stage 1's summ
 **Visually verified live:** Doncaster 13:50 — Masaban and Little Miss India both individually qualified as BEST VALUE (+6.2pts / +7.7pts), the race-level badge correctly picked the stronger of the two (Little Miss India), and Caragio correctly showed NO EDGE with its real negative edge (-8.0pts) in red.
 
 Full suite: **316/316 pass** (9 + 6 new). Deployed live.
+
+---
+
+## 2026-09-11 — "Why has Silent Edge Zero not rounded up today's results?" — same duplicate-horse bug, second script
+
+Real cause, found the same way as the Doncaster-odds investigation earlier today: `daily_summary` showed `races_settled = 0` for today despite the 21:30 `collect-results` job having genuinely run and inserted **79 real result rows**. Checked, not assumed: `runner_result.horse_id` for today's rows had zero overlap with `prediction.horse_id` for the same races — the exact same root cause as this morning's Doncaster odds bug (`horse`'s never-actually-deduplicating `UNIQUE (name, foaled_year)` constraint — see `db/schema.sql`'s own comment), just surfacing in a second, separate script that has its own independent horse-matching query.
+
+**Real fix:** `scripts/collect_race_results.py::load_our_runners` sourced horse_id from `runner_snapshot` (the duplicate-prone table) with no ORDER BY. Changed to source via `prediction` — same fix, same reasoning, as this morning's `collect_smarkets_prices.py::load_our_races` fix. Documented in the function's own docstring, cross-referencing the earlier fix so the pattern is recognisable next time it turns up in a third script.
+
+**Also found while re-running live:** three courses racing today (Chester, Salisbury, Sandown) weren't yet in `data/racingpost_course_ids.py` — a real, expected, already-documented limitation (an unmapped course is skipped and reported, never guessed), not a bug. Found their real Racing Post course IDs (13/chester, 52/salisbury, 54/sandown) and added them.
+
+**Re-ran the real pipeline end to end:** `collect_race_results.py` — 28/28 races matched, 260 real result rows, 0 errors. `generate_daily_summary.py` — **25/28 races settled** (3 remaining lack a real market price on the top pick, an honest gap, not this bug): top pick won 4 (16.0%), placed 12 (48.0%), favourite won 6, £1-win P&L £4.85, £2-EW P&L £6.05. Dashboard regenerated and deployed.
+
+Full suite: **316/316 pass** (no test changes — `load_our_runners` is DB-integration only, same convention as `load_our_races`, exercised by the real live re-run above).
+
+**Checked immediately, not deferred:** grepped the rest of the codebase for any other query sourcing horse_id from `runner_snapshot` instead of `prediction`. Only one other hit — `scripts/derive_recent_form.py` — and it's a one-shot historical backfill already run once over the bulk Kaggle load (not part of the live daily pipeline, so not exposed to cross-run duplication the same way). `generate_dashboard.py`'s own `runner_snapshot` join is safe — it joins FOR extra stats against `prediction.horse_id`, never sources FROM it. No other live-pipeline script affected.

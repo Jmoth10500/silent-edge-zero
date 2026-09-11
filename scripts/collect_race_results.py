@@ -250,14 +250,33 @@ def load_our_races(conn, race_date: date) -> dict[int, dict]:
 def load_our_runners(conn, race_id: int) -> dict[str, int]:
     """Real {stripped-lowercase horse name -> horse_id} for one of our
     races, for matching against Racing Post's own (non-country-suffixed)
-    names."""
+    names.
+
+    **Real bug found and fixed 2026-09-11 (same root cause as
+    scripts/collect_smarkets_prices.py::load_our_races, found earlier
+    the same day):** this used to source horse_id from `runner_snapshot`
+    directly. `horse` has a real, pre-existing schema bug — a plain
+    `UNIQUE (name, foaled_year)` that's never actually deduplicated
+    anything, because `foaled_year` is always NULL from our real data
+    source and Postgres treats NULL as distinct from NULL for
+    uniqueness (see db/schema.sql's own comment on the `horse` table for
+    the full real story). A second real `collect_racecards.py` run
+    creates a fresh duplicate `horse`/`runner_snapshot` row, and this
+    query had no ORDER BY to guarantee which one it picked — confirmed
+    live: real results were being inserted correctly, but keyed to a
+    horse_id `prediction` never used, so `generate_daily_summary.py`
+    found 0 settled races despite 79 real result rows existing.
+    `prediction` is the real, single source of truth the rest of this
+    project already depends on for "which horse_id is THE horse" —
+    sourcing from it here means results always link up with the real
+    top picks, regardless of any duplicate rows elsewhere."""
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT h.name, h.id
-        FROM runner_snapshot rs
-        JOIN horse h ON h.id = rs.horse_id
-        WHERE rs.race_id = %s AND rs.non_runner = FALSE
+        SELECT DISTINCT h.name, p.horse_id
+        FROM prediction p
+        JOIN horse h ON h.id = p.horse_id
+        WHERE p.race_id = %s
         """,
         (race_id,),
     )
