@@ -884,3 +884,17 @@ Jonathan gave a full, specific redesign brief: replace the top-of-page stack (ra
 **Visually verified** in a real browser: stale-banner fires correctly (today real-dated 2026-09-11, dashboard generated for 2026-09-10), hero cards render real data, bank tracker shows the real running balance, transparency section opens/closes and still contains the Brier/calibration content, and the whole page reflows cleanly at a real 390px mobile width.
 
 16 new tests (`_implied_market_probs`, `compute_todays_edge`, `compute_cumulative_track_record`, `render_hero`, `render_bank_tracker`). Full suite: **267/267 pass.**
+
+---
+
+## 2026-09-11 — "Why have today's cards not come through?", pipeline moved to 1am, 7-day health monitoring
+
+Real answer, checked before assuming a bug: it was 06:42 and the morning pipeline (racecards 07:00, predictions 07:15) simply hadn't fired yet — confirmed via log mtimes (both still dated 2026-09-10). Ran it manually to get Friday's cards live immediately, which surfaced a real (harmless) sequencing detail: running `predict_todays_races.py` before `collect_racecards.py` had run for the day gives 0 races — not a bug, just proved the two jobs are correctly dependent on each other in order. Re-ran racecards first, then predictions — 28 real races, correct dashboard, clean deploy.
+
+**Real schedule change, per Jonathan's request:** `com.silentedgezero.collect-racecards` moved 07:00 -> 01:00, `com.silentedgezero.predict-races` moved 07:15 -> 01:15 (same 15-minute gap preserved so racecards always finish first). Both LaunchAgents unloaded and reloaded to pick up the new `StartCalendarInterval`. **Real, unverified assumption flagged, not hidden:** this assumes The Racing API's free "today" racecard is actually populated that early (UK racecards are typically published the evening before, but this hasn't been confirmed at exactly 01:00 yet) — worth checking the first real 01:00 run's log.
+
+**New `scripts/check_pipeline_health.py`:** real, honest daily health check — queries the DB directly (never trusts a log alone) for whether today's races were actually stored, predictions actually locked, the deploy log is fresh and shows a real "Deploy is live!" line, and the most recent race day 2+ days old has real settled results. Every check reports a concrete real reason on FAIL, never a bare "something's wrong". 5 new tests for the one file-based check (`check_deploy_log_fresh`); the DB-backed checks are exercised by actually running the script (same convention as every other operational script here) — ran it live, correctly caught that the log hadn't refreshed since my manual (non-launchd) run bypassed the log-redirection paths that only launchd sets up.
+
+**7-day monitoring, per Jonathan's request ("I would like now to monitor 7 days in advance"):** clarified first (his free racecard source only exposes today/tomorrow, not a real 7-day window — that would need a paid tier, not pursued) — he meant watching the daily pipeline actually run correctly for the next week, exactly the kind of silent gap just found. Set up via `CronCreate`, a recurring job at 08:37 daily (after both new 01:00/01:15 jobs and the prior evening's 21:30 results job) that runs `check_pipeline_health.py` and reports any real FAIL. **Real, honest limitation stated to Jonathan:** this is session-scoped (dies if this Claude Code session ends) and auto-expires after exactly 7 days regardless — not a durable system-level cron job.
+
+Full suite: **272/272 pass.**
