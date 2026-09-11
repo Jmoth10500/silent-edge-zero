@@ -10,6 +10,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from datetime import date, time
 
+from src.analysis.runner_classification import (
+    RUNNER_STATUS_BEST_VALUE,
+    RUNNER_STATUS_INSUFFICIENT_DATA,
+    RUNNER_STATUS_MODEL_WARNING,
+    RUNNER_STATUS_NO_EDGE,
+)
+
 from scripts.generate_dashboard import (
     _bar_html,
     _bet_calculator_html,
@@ -21,6 +28,7 @@ from scripts.generate_dashboard import (
     _stat_row,
     build_race_analysis,
     compute_cumulative_track_record,
+    compute_runner_edge,
     compute_todays_edge,
     fetch_course_weather,
     find_market_favourite,
@@ -30,6 +38,7 @@ from scripts.generate_dashboard import (
     render_day_tabs,
     render_hero,
     render_html,
+    _value_status_badge_html,
     render_overview_chart,
     render_summary,
     render_day_history_dialog,
@@ -427,7 +436,7 @@ def test_render_day_panel_shows_empty_state_with_no_races():
 
 
 def test_edge_chips_html_no_market_price_shows_only_fair_odds():
-    html = _edge_chips_html(0.22, None, None)
+    html = _edge_chips_html(compute_runner_edge(0.22, None, None))
     assert "Fair odds 4.55" in html
     assert "Market" not in html
     assert "Edge" not in html
@@ -436,7 +445,7 @@ def test_edge_chips_html_no_market_price_shows_only_fair_odds():
 
 def test_edge_chips_html_real_worked_example():
     # Jonathan's own spec example: 22% model, 8.60 market odds, 11.6% normalised market
-    html = _edge_chips_html(0.22, 8.60, 0.116)
+    html = _edge_chips_html(compute_runner_edge(0.22, 8.60, 0.116))
     assert "Fair odds 4.55" in html
     assert "Market (raw) 11.6%" in html
     assert "Market (fair) 11.6%" in html
@@ -446,13 +455,38 @@ def test_edge_chips_html_real_worked_example():
 
 
 def test_edge_chips_html_negative_edge_shown_honestly():
-    html = _edge_chips_html(0.10, 5.0, 0.30)  # model well below market
+    html = _edge_chips_html(compute_runner_edge(0.10, 5.0, 0.30))  # model well below market
     assert "Edge -20.0pts" in html
 
 
 def test_edge_chips_html_zero_probability_gives_no_fair_odds():
-    html = _edge_chips_html(0.0, 5.0, 0.20)
+    html = _edge_chips_html(compute_runner_edge(0.0, 5.0, 0.20))
     assert "Fair odds" not in html
+
+
+def test_compute_runner_edge_matches_spec_worked_example():
+    edge_data = compute_runner_edge(0.22, 8.60, 0.116)
+    assert round(edge_data["fair_odds"], 2) == 4.55
+    assert round(edge_data["edge"], 3) == round(0.104, 3)
+    assert round(edge_data["price_advantage"], 2) == 0.89
+    assert round(edge_data["ev"], 2) == 0.89
+
+
+def test_compute_runner_edge_none_fields_without_market_price():
+    edge_data = compute_runner_edge(0.22, None, None)
+    assert edge_data["fair_odds"] is not None  # fair odds needs only the model probability
+    assert edge_data["raw_prob"] is None
+    assert edge_data["edge"] is None
+    assert edge_data["ev"] is None
+
+
+def test_value_status_badge_html_real_labels():
+    assert "BEST VALUE" in _value_status_badge_html(RUNNER_STATUS_BEST_VALUE)
+    assert "value-best" in _value_status_badge_html(RUNNER_STATUS_BEST_VALUE)
+    assert "MODEL WARNING" in _value_status_badge_html(RUNNER_STATUS_MODEL_WARNING)
+    assert "value-warning" in _value_status_badge_html(RUNNER_STATUS_MODEL_WARNING)
+    assert "NO EDGE" in _value_status_badge_html(RUNNER_STATUS_NO_EDGE)
+    assert "INSUFFICIENT DATA" in _value_status_badge_html(RUNNER_STATUS_INSUFFICIENT_DATA)
 
 
 def test_render_html_emits_no_tracking_script_when_site_code_blank():
@@ -701,6 +735,9 @@ if __name__ == "__main__":
         test_edge_chips_html_real_worked_example,
         test_edge_chips_html_negative_edge_shown_honestly,
         test_edge_chips_html_zero_probability_gives_no_fair_odds,
+        test_compute_runner_edge_matches_spec_worked_example,
+        test_compute_runner_edge_none_fields_without_market_price,
+        test_value_status_badge_html_real_labels,
     ]
     passed = 0
     for t in tests:

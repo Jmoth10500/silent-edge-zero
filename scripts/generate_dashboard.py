@@ -50,6 +50,15 @@ from src.analysis.edge_metrics import (
     probability_edge,
     raw_market_implied_probability,
 )
+from src.analysis.runner_classification import (
+    RUNNER_STATUS_BEST_VALUE,
+    RUNNER_STATUS_INSUFFICIENT_DATA,
+    RUNNER_STATUS_MODEL_WARNING,
+    RUNNER_STATUS_NO_EDGE,
+    ValueFilterConfig,
+    classify_runner_value,
+    pick_race_best_value,
+)
 from src.features.runner_features import (
     RunnerFeatureInput,
     draw_bias_features,
@@ -77,6 +86,17 @@ GOATCOUNTER_SITE_CODE = "sez"
 # (Smarkets' own standard commission is ~2% on winnings, but that is a
 # real fact to confirm and set deliberately, not to guess into code).
 COMMISSION_RATE = 0.0
+
+# Real, configurable Stage 2 value-classification thresholds (2026-09-11).
+# Deliberately simple/permissive defaults — see src/analysis/
+# runner_classification.py's own docstring for why these aren't tightened
+# based on 1 day of real live data. Change these, not the classification
+# logic itself, to adjust what counts as BEST VALUE.
+VALUE_FILTER_CONFIG = ValueFilterConfig(
+    min_edge_pts=0.05,
+    min_ev=0.0,
+    overconfidence_threshold=0.40,  # RL-012's real, validated finding
+)
 
 # Real, committed backtest results (docs/RESEARCH_LAB.md RL-008, 2026-09-09,
 # 9 walk-forward folds, ~487k real predictions, 2023-06 to 2026-06) — shown
@@ -573,42 +593,73 @@ def _bet_calculator_html(dom_id: str, odds: Optional[float], field_size: int) ->
         </details>"""
 
 
-def _edge_chips_html(model_probability: float, market_odds: Optional[float],
-                      normalized_prob: Optional[float]) -> str:
-    """Stage 1 of the model-vs-market upgrade (2026-09-11) — per-runner
-    real edge metrics, computed fresh at display time against the
-    latest real market price (see src/analysis/edge_metrics.py's module
-    docstring for why this is never baked into the locked prediction).
-    Renders nothing extra beyond an honest 'no market price yet' state
-    when there's no real price — never a guessed number."""
+def compute_runner_edge(model_probability: float, market_odds: Optional[float],
+                         normalized_prob: Optional[float]) -> dict:
+    """Real, shared per-runner edge computation (Stage 1) — the single
+    source of truth used both for display (_edge_chips_html) and for
+    Stage 2's classification (classify_runner_value), so the two can
+    never show inconsistent numbers. All values None when there's no
+    real market price — never guessed."""
     fair = model_fair_odds(model_probability)
-    fair_chip = f'<span class="stat-chip edge-chip">Fair odds {fair:.2f}</span>' if fair else ""
-
     if market_odds is None:
-        return f'<div class="stat-chips edge-chips">{fair_chip}</div>' if fair_chip else ""
-
+        return {
+            "fair_odds": fair, "raw_prob": None, "normalized_prob": normalized_prob,
+            "edge": None, "price_advantage": None, "ev": None,
+        }
     raw_prob = raw_market_implied_probability(market_odds)
     edge = probability_edge(model_probability, normalized_prob) if normalized_prob is not None else None
     adv = price_advantage(market_odds, fair)
-    ev = expected_value(model_probability, market_odds, commission=COMMISSION_RATE)
+    ev_result = expected_value(model_probability, market_odds, commission=COMMISSION_RATE)
+    ev_val = ev_result["net_ev"] if COMMISSION_RATE > 0 else ev_result["gross_ev"]
+    return {
+        "fair_odds": fair, "raw_prob": raw_prob, "normalized_prob": normalized_prob,
+        "edge": edge, "price_advantage": adv, "ev": ev_val,
+    }
+
+
+def _edge_chips_html(edge_data: dict) -> str:
+    """Stage 1 of the model-vs-market upgrade (2026-09-11) — renders the
+    real per-runner edge metrics from compute_runner_edge's output.
+    Renders nothing extra beyond an honest 'no market price yet' state
+    when there's no real price — never a guessed number."""
+    fair = edge_data["fair_odds"]
+    fair_chip = f'<span class="stat-chip edge-chip">Fair odds {fair:.2f}</span>' if fair else ""
+
+    if edge_data["raw_prob"] is None:
+        return f'<div class="stat-chips edge-chips">{fair_chip}</div>' if fair_chip else ""
 
     chips = [fair_chip] if fair_chip else []
-    if raw_prob is not None:
-        chips.append(f'<span class="stat-chip edge-chip">Market (raw) {_pct(raw_prob)}</span>')
-    if normalized_prob is not None:
-        chips.append(f'<span class="stat-chip edge-chip">Market (fair) {_pct(normalized_prob)}</span>')
+    chips.append(f'<span class="stat-chip edge-chip">Market (raw) {_pct(edge_data["raw_prob"])}</span>')
+    if edge_data["normalized_prob"] is not None:
+        chips.append(f'<span class="stat-chip edge-chip">Market (fair) {_pct(edge_data["normalized_prob"])}</span>')
+    edge = edge_data["edge"]
     if edge is not None:
         edge_color = "var(--good)" if edge > 0 else ("var(--bad)" if edge < 0 else "var(--text-muted)")
         chips.append(f'<span class="stat-chip edge-chip" style="color:{edge_color}">Edge {edge*100:+.1f}pts</span>')
+    adv = edge_data["price_advantage"]
     if adv is not None:
         chips.append(f'<span class="stat-chip edge-chip">Price adv {adv*100:+.0f}%</span>')
-    if ev["gross_ev"] is not None:
-        ev_val = ev["net_ev"] if COMMISSION_RATE > 0 else ev["gross_ev"]
+    ev_val = edge_data["ev"]
+    if ev_val is not None:
         ev_color = "var(--good)" if ev_val > 0 else ("var(--bad)" if ev_val < 0 else "var(--text-muted)")
         ev_label = "EV (net)" if COMMISSION_RATE > 0 else "EV"
         chips.append(f'<span class="stat-chip edge-chip" style="color:{ev_color}">{ev_label} {ev_val:+.2f}</span>')
 
     return f'<div class="stat-chips edge-chips">{"".join(chips)}</div>'
+
+
+def _value_status_badge_html(status: str) -> str:
+    """Stage 2 (2026-09-11) — the real, honest per-runner value badge.
+    Never rendered for MOST LIKELY WINNER (that's the existing, separate
+    TOP PICK badge) — this is purely the model-vs-market value read."""
+    classes = {
+        RUNNER_STATUS_BEST_VALUE: "value-badge value-best",
+        RUNNER_STATUS_MODEL_WARNING: "value-badge value-warning",
+        RUNNER_STATUS_NO_EDGE: "value-badge value-none",
+        RUNNER_STATUS_INSUFFICIENT_DATA: "value-badge value-unknown",
+    }
+    css_class = classes.get(status, "value-badge value-unknown")
+    return f'<span class="{css_class}">{status}</span>'
 
 
 def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> str:
@@ -624,8 +675,24 @@ def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> st
     race_market_probs = normalized_market_probabilities(
         {h: stats.get(h, {}).get("exchange_back") for h in horses}
     )
-    rows_html = []
+
+    # Stage 2 (2026-09-11): classify every runner's real value status —
+    # computed for the WHOLE field, not just the top pick, since "the
+    # highest-probability horse is NOT automatically the best-value
+    # horse" (Jonathan's own framing). pick_race_best_value then finds
+    # the single strongest real, qualifying runner in this race, if any.
+    classified = []
     for h in horses:
+        p2 = m2.get(h, 0.0)
+        h_stats = stats.get(h, {})
+        edge_data = compute_runner_edge(p2, h_stats.get("exchange_back"), race_market_probs.get(h))
+        status = classify_runner_value(p2, edge_data["edge"], edge_data["ev"], VALUE_FILTER_CONFIG)
+        classified.append({"horse": h, "edge_data": edge_data, "status": status, "edge": edge_data["edge"]})
+    race_best_value = pick_race_best_value(classified)
+
+    rows_html = []
+    for entry in classified:
+        h, edge_data, status = entry["horse"], entry["edge_data"], entry["status"]
         p2 = m2.get(h, 0.0)
         is_top = h == m2_top
         row_class = "runner-row top-pick" if is_top else "runner-row"
@@ -638,7 +705,8 @@ def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> st
         horse_id = h_stats.get("horse_id")
         dom_id = f"bc-{race['race_id']}-{horse_id}" if horse_id is not None else None
         bet_calc_html = _bet_calculator_html(dom_id, h_stats.get("exchange_back"), field_size) if dom_id else ""
-        edge_chips_html = _edge_chips_html(p2, h_stats.get("exchange_back"), race_market_probs.get(h))
+        edge_chips_html = _edge_chips_html(edge_data)
+        value_badge_html = _value_status_badge_html(status)
 
         rows_html.append(f"""
         <div class="{row_class}">
@@ -652,10 +720,14 @@ def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> st
           </div>
           {_stat_row(h_stats)}
           {edge_chips_html}
+          <div class="value-badge-row">{value_badge_html}</div>
           {bet_calc_html}
         </div>""")
 
     agree_badge = '<span class="agree-badge agree">MODELS AGREE</span>' if agree else '<span class="agree-badge disagree">MODELS DISAGREE</span>'
+    best_value_badge = ""
+    if race_best_value:
+        best_value_badge = f'<span class="agree-badge value-best">VALUE: {race_best_value["horse"]}</span>'
 
     w = course_weather.get(race["course_name"])
     weather_html = ""
@@ -677,6 +749,7 @@ def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> st
           <div class="race-name">{race['race_name']}</div>
         </div>
         {agree_badge}
+        {best_value_badge}
         <button class="close-btn" onclick="this.closest('dialog').close()" aria-label="Close">✕</button>
       </div>
       {weather_html}
@@ -1325,6 +1398,17 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
   .stat-empty {{ font-size: 11px; color: var(--text-muted); padding: 4px 6px 12px; }}
   .edge-chips {{ padding-top: 0; margin-top: -6px; }}
   .edge-chip {{ border: 1px solid var(--border); background: var(--surface-1); font-weight: 600; }}
+
+  .value-badge-row {{ padding: 0 6px 10px; }}
+  .value-badge {{
+    display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .03em;
+    padding: 3px 9px; border-radius: 20px;
+  }}
+  .value-badge.value-best {{ background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }}
+  .value-badge.value-warning {{ background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }}
+  .value-badge.value-none {{ background: var(--surface-2); color: var(--text-muted); }}
+  .value-badge.value-unknown {{ background: var(--surface-2); color: var(--text-muted); font-style: italic; }}
+  .agree-badge.value-best {{ background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }}
 
   .bet-calc {{
     margin: 0 6px 12px; border: 1px solid var(--border); border-radius: 8px;

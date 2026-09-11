@@ -978,4 +978,20 @@ Jonathan's full spec: reframe the platform from "which horse is most likely to w
 - `generate_dashboard.py`: `_implied_market_probs` now delegates to the new shared module (removed duplicate logic). New `_edge_chips_html()` renders Fair Odds / Market (raw) / Market (fair) / Edge (colour-coded green/red) / Price advantage / EV per runner, wired into `render_race`'s runner rows. New `COMMISSION_RATE` module constant (0.0 default, clearly documented as needing a deliberate real value, not Smarkets' ~2% assumed). 4 new tests for `_edge_chips_html`.
 - Visually verified live in a real browser: Doncaster 13:50 showed real, correct, differentiated numbers per runner (Masaban +6.0pts edge/EV +1.33; Caragio -7.5pts edge/EV -0.47, shown in red) — exactly the "model vs market disagreement" reframing the spec asks for, using live real data, no fabrication.
 
-Full suite: **304/304 pass** (19 + 4 new). Not yet deployed to Netlify — pending the full-session wrap-up.
+Full suite: **304/304 pass** (19 + 4 new). Deployed live the same session.
+
+---
+
+## 2026-09-11 — Model-vs-market upgrade, Stage 2: BEST VALUE / NO EDGE / MODEL WARNING labels
+
+Jonathan: "the word" (go-ahead for Stage 2, offered at the end of Stage 1's summary).
+
+`src/analysis/runner_classification.py` (new module) — `ValueFilterConfig` (real, configurable: `min_edge_pts` default 0.05 matching the spec's own example filter, `min_ev` default 0.0, optional model-probability bounds, `overconfidence_threshold` default 0.40), `classify_runner_value()` (returns BEST VALUE / NO EDGE / MODEL WARNING / INSUFFICIENT DATA — never auto-labels the biggest raw edge as a bet; a runner must clear the real configured bar first), `pick_race_best_value()` (the single strongest real, qualifying runner in a race, or None).
+
+**MODEL WARNING uses a real, already-validated finding, not a fabricated rule:** the default `overconfidence_threshold=0.40` is RL-012's own real result (top picks shown >=40% overstate their real win rate by 4-9pp, validated on genuinely held-out data — see docs/RESEARCH_LAB.md) — a runner with a real, large edge but a model probability in that band is flagged MODEL WARNING instead of BEST VALUE, since the apparent edge may just be the model's own known overconfidence, not a real opportunity. 9 tests, including one proving the classifier doesn't just chase the raw edge number (the exact same edge/EV numbers get BEST VALUE at 30% model probability and MODEL WARNING at 41%).
+
+**Wired into `generate_dashboard.py`:** refactored Stage 1's inline edge calculation into a shared `compute_runner_edge()` (single source of truth for both the display chips and the classifier — can't drift apart). Every runner in a race — not just the top pick, since "the highest-probability horse is NOT automatically the best-value horse" — gets classified and shown a colour-coded status badge (green BEST VALUE, amber MODEL WARNING, grey NO EDGE/INSUFFICIENT DATA). The race header now also shows a `VALUE: <horse>` badge for the single strongest qualifying runner in that race, when one exists. New `VALUE_FILTER_CONFIG` module constant. 6 new dashboard-level tests.
+
+**Visually verified live:** Doncaster 13:50 — Masaban and Little Miss India both individually qualified as BEST VALUE (+6.2pts / +7.7pts), the race-level badge correctly picked the stronger of the two (Little Miss India), and Caragio correctly showed NO EDGE with its real negative edge (-8.0pts) in red.
+
+Full suite: **316/316 pass** (9 + 6 new). Deployed live.
