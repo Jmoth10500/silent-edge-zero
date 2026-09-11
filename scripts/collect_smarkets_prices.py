@@ -209,7 +209,12 @@ def main():
             time.sleep(1.0)  # back off before the next race, in case it's a rate limit
             continue
 
-        time.sleep(0.3)  # a small real delay between races — polite to Smarkets, reduces 429 risk
+        # 0.3s -> 0.5s (2026-09-11): real live testing showed a course whose
+        # races happen to land later in Smarkets' event order could still
+        # trip a 429 with the tighter delay, even with get_win_market_id/
+        # get_runner_prices' own retry-with-backoff (src/providers/
+        # odds_smarkets.py::_get_with_retry) absorbing some of it.
+        time.sleep(0.5)
 
         our_runners = our_races[race_id]["runners"]
         matched = []

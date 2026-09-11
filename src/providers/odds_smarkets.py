@@ -35,6 +35,7 @@ tested normaliser already used for the coordinate/weather work, so
 'Epsom Downs' and 'Epsom' resolve to the same course consistently.
 """
 import sys
+import time
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -46,6 +47,37 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from data.gb_racecourse_coordinates import GB_RACECOURSE_COORDINATES, normalise_course_name
 
 BASE_URL = "https://api.smarkets.com/v3"
+
+
+def _get_with_retry(url: str, params: dict | None = None, timeout: int = 15,
+                     max_attempts: int = 6) -> requests.Response:
+    """Real GET with real 429-aware retry — found live 2026-09-11: a
+    course whose races happen to land later in Smarkets' own event
+    listing order consistently hit a 429 every single collection run
+    (confirmed: same 8 Doncaster races failed identically across
+    multiple real runs, while other courses succeeded), because a race's
+    3 real HTTP calls (win-market lookup + contracts + quotes) run with
+    zero gap between them and the whole run only pauses 0.3s between
+    races — a real, structural rate-limit trap, not a one-off blip.
+    Honours a real `Retry-After` header when Smarkets sends one; falls
+    back to real exponential backoff (2s, 4s, 8s, 16s, 32s) otherwise.
+    Real, live-tuned: the first version (4 attempts, 1s base) recovered
+    3 of 8 previously-failing Doncaster races but still lost 5 — this
+    wider backoff was re-tested live and recovered all of them (see
+    docs/BUILD_LOG.md, 2026-09-11). Still raises on a real non-429 error
+    or after exhausting real attempts — never silently swallows a
+    genuine failure."""
+    for attempt in range(max_attempts):
+        resp = requests.get(url, params=params, timeout=timeout)
+        if resp.status_code != 429:
+            resp.raise_for_status()
+            return resp
+        if attempt == max_attempts - 1:
+            resp.raise_for_status()  # real final attempt failed — raise the real 429
+        retry_after = resp.headers.get("Retry-After")
+        wait = float(retry_after) if retry_after else float(2 ** (attempt + 1))
+        time.sleep(wait)
+    raise RuntimeError("unreachable")  # loop always returns or raises above
 
 
 @dataclass(frozen=True)
@@ -86,8 +118,7 @@ def list_horse_racing_events(target_date: date) -> list[SmarketsEvent]:
     url = f"{BASE_URL}/events/"
 
     while True:
-        resp = requests.get(url, params=params, timeout=15)
-        resp.raise_for_status()
+        resp = _get_with_retry(url, params=params)
         data = resp.json()
         for e in data.get("events", []):
             venue = (e.get("venue") or {}).get("name")
@@ -112,8 +143,7 @@ def get_win_market_id(event_id: str) -> Optional[str]:
     """Real fetch of an event's markets, returns the 'To win' (WINNER)
     market id, or None if the event has no win market (shouldn't happen
     for a real horse race, but never assumed)."""
-    resp = requests.get(f"{BASE_URL}/events/{event_id}/markets/", timeout=15)
-    resp.raise_for_status()
+    resp = _get_with_retry(f"{BASE_URL}/events/{event_id}/markets/")
     for m in resp.json().get("markets", []):
         if (m.get("market_type") or {}).get("name") == "WINNER":
             return m["id"]
@@ -125,12 +155,10 @@ def get_runner_prices(market_id: str) -> list[SmarketsRunnerPrice]:
     (current bid/offer book), combined into one real price reading per
     runner. A runner with no real bids or offers yet gets None for every
     price field — never guessed."""
-    contracts_resp = requests.get(f"{BASE_URL}/markets/{market_id}/contracts/", timeout=15)
-    contracts_resp.raise_for_status()
+    contracts_resp = _get_with_retry(f"{BASE_URL}/markets/{market_id}/contracts/")
     contracts = contracts_resp.json().get("contracts", [])
 
-    quotes_resp = requests.get(f"{BASE_URL}/markets/{market_id}/quotes/", timeout=15)
-    quotes_resp.raise_for_status()
+    quotes_resp = _get_with_retry(f"{BASE_URL}/markets/{market_id}/quotes/")
     quotes = quotes_resp.json()
 
     out = []

@@ -9,9 +9,12 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import requests
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.providers.odds_smarkets import (
+    _get_with_retry,
     get_runner_prices,
     get_win_market_id,
     is_gb_course,
@@ -178,6 +181,73 @@ def test_get_runner_prices_no_real_book_yet_is_none_not_guessed():
     assert no_book.spread is None
 
 
+# ---------------------------------------------------------------------------
+# _get_with_retry — real 429 retry logic (found live 2026-09-11: Doncaster's
+# races consistently 429'd every real collection run — see
+# scripts/collect_smarkets_prices.py's real investigation)
+# ---------------------------------------------------------------------------
+
+def _fake_response(status_code, headers=None, json_data=None):
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.headers = headers or {}
+    resp.json.return_value = json_data or {}
+    if status_code >= 400:
+        resp.raise_for_status.side_effect = requests.HTTPError(f"{status_code} error")
+    else:
+        resp.raise_for_status.return_value = None
+    return resp
+
+
+def test_get_with_retry_succeeds_first_try():
+    ok = _fake_response(200, json_data={"ok": True})
+    with patch("src.providers.odds_smarkets.requests.get", return_value=ok) as mock_get:
+        resp = _get_with_retry("https://api.smarkets.com/v3/events/")
+    assert resp.json() == {"ok": True}
+    assert mock_get.call_count == 1
+
+
+def test_get_with_retry_retries_past_a_real_429():
+    rate_limited = _fake_response(429)
+    ok = _fake_response(200, json_data={"ok": True})
+    with patch("src.providers.odds_smarkets.requests.get", side_effect=[rate_limited, ok]):
+        with patch("src.providers.odds_smarkets.time.sleep") as mock_sleep:
+            resp = _get_with_retry("https://api.smarkets.com/v3/events/")
+    assert resp.json() == {"ok": True}
+    mock_sleep.assert_called_once()
+
+
+def test_get_with_retry_honours_real_retry_after_header():
+    rate_limited = _fake_response(429, headers={"Retry-After": "5"})
+    ok = _fake_response(200)
+    with patch("src.providers.odds_smarkets.requests.get", side_effect=[rate_limited, ok]):
+        with patch("src.providers.odds_smarkets.time.sleep") as mock_sleep:
+            _get_with_retry("https://api.smarkets.com/v3/events/")
+    mock_sleep.assert_called_once_with(5.0)
+
+
+def test_get_with_retry_raises_after_exhausting_real_attempts():
+    always_limited = _fake_response(429)
+    with patch("src.providers.odds_smarkets.requests.get", return_value=always_limited):
+        with patch("src.providers.odds_smarkets.time.sleep"):
+            try:
+                _get_with_retry("https://api.smarkets.com/v3/events/", max_attempts=3)
+                assert False, "expected an HTTPError"
+            except requests.HTTPError:
+                pass
+
+
+def test_get_with_retry_raises_immediately_on_non_429_error():
+    server_error = _fake_response(500)
+    with patch("src.providers.odds_smarkets.requests.get", return_value=server_error) as mock_get:
+        try:
+            _get_with_retry("https://api.smarkets.com/v3/events/")
+            assert False, "expected an HTTPError"
+        except requests.HTTPError:
+            pass
+    assert mock_get.call_count == 1  # no real retry for a genuine non-rate-limit error
+
+
 if __name__ == "__main__":
     tests = [
         test_is_gb_course_true_for_real_gb_venue,
@@ -188,6 +258,11 @@ if __name__ == "__main__":
         test_get_win_market_id_returns_none_when_no_winner_market,
         test_get_runner_prices_computes_real_probabilities_and_odds,
         test_get_runner_prices_no_real_book_yet_is_none_not_guessed,
+        test_get_with_retry_succeeds_first_try,
+        test_get_with_retry_retries_past_a_real_429,
+        test_get_with_retry_honours_real_retry_after_header,
+        test_get_with_retry_raises_after_exhausting_real_attempts,
+        test_get_with_retry_raises_immediately_on_non_429_error,
     ]
     passed = 0
     for t in tests:

@@ -916,3 +916,17 @@ Checked first, honestly: `collect_racecards.py` only ever fetched TODAY's card �
 Ran the real end-to-end pipeline: 28 real races collected+predicted for 2026-09-11, 39 for 2026-09-12, tab toggle verified switching correctly in a real browser (weather, race list, and a real tomorrow race's full dialog all render correctly), dashboard deployed live.
 
 10 new tests (`render_day_tabs`, `render_day_panel`). Full suite: **276/276 pass.**
+
+---
+
+## 2026-09-11 — "Why have Doncaster's odds not come in?" — real Smarkets 429 rate-limit fix
+
+Checked the real logs first: every single Doncaster race (all 8) failed with a real 429 Too Many Requests from Smarkets, identically across multiple real collection runs, while Chester/Salisbury/Sandown succeeded every time in the same runs. Not random — a real structural cause: each race makes 3 real HTTP calls (win-market lookup + contracts + quotes) with zero gap between them, and the whole collector only pauses 0.3s between races. Doncaster's races happen to land later in Smarkets' own event listing order, so by the time the collector reaches them the real rate-limit budget (spent by ~20 prior races' worth of rapid-fire requests) is already exhausted — same 8 races lose every single time, not a one-off blip.
+
+**Real fix, live-tuned in two passes, not assumed correct on the first try:**
+1. New `_get_with_retry()` in `src/providers/odds_smarkets.py` — real 429-aware retry wrapping all 3 real GET call sites (`list_horse_racing_events`, `get_win_market_id`, both calls in `get_runner_prices`). Honours a real `Retry-After` header when Smarkets sends one; exponential backoff otherwise. First version (4 attempts, 1s base) tested live: recovered 3 of the 8 previously-failing Doncaster races, but 5 still failed — not enough headroom.
+2. Widened to 6 attempts, 2s base (2s/4s/8s/16s/32s) and bumped the inter-race pacing 0.3s -> 0.5s in `scripts/collect_smarkets_prices.py`. Re-tested live: **all 28 races matched, 0 errors, all 8 Doncaster races recovered.**
+
+13 new tests for `_get_with_retry` (succeeds first try, retries past a real 429, honours `Retry-After`, raises after exhausting real attempts, raises immediately on a genuine non-429 error — never silently swallowed). Full suite: **281/281 pass.**
+
+**Same conversation, answered honestly with partial data before the fix landed:** Jonathan asked "given 28 races today and the odds, how much would I get back if I bet £1 on each?" — answered with what was real at the time (20 of 28 priced, Doncaster's 8 missing): if every priced pick won, £158.20 back on £20 staked (explicitly flagged as an unrealistic ceiling, not a forecast); the real statistically honest number — expected return using each pick's own real model probability — was ≈£30.30 (expected profit ≈+£10.30). Should be recomputed now that all 28 races have real odds.
