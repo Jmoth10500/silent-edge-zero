@@ -13,6 +13,7 @@ from datetime import date, time
 from scripts.generate_dashboard import (
     _bar_html,
     _bet_calculator_html,
+    _edge_chips_html,
     _ew_defaults,
     _going_hint,
     _implied_market_probs,
@@ -425,6 +426,35 @@ def test_render_day_panel_shows_empty_state_with_no_races():
     assert "No predictions locked for this date yet" in html
 
 
+def test_edge_chips_html_no_market_price_shows_only_fair_odds():
+    html = _edge_chips_html(0.22, None, None)
+    assert "Fair odds 4.55" in html
+    assert "Market" not in html
+    assert "Edge" not in html
+    assert "EV" not in html
+
+
+def test_edge_chips_html_real_worked_example():
+    # Jonathan's own spec example: 22% model, 8.60 market odds, 11.6% normalised market
+    html = _edge_chips_html(0.22, 8.60, 0.116)
+    assert "Fair odds 4.55" in html
+    assert "Market (raw) 11.6%" in html
+    assert "Market (fair) 11.6%" in html
+    assert "Edge +10.4pts" in html
+    assert "Price adv +89%" in html
+    assert "EV +0.89" in html
+
+
+def test_edge_chips_html_negative_edge_shown_honestly():
+    html = _edge_chips_html(0.10, 5.0, 0.30)  # model well below market
+    assert "Edge -20.0pts" in html
+
+
+def test_edge_chips_html_zero_probability_gives_no_fair_odds():
+    html = _edge_chips_html(0.0, 5.0, 0.20)
+    assert "Fair odds" not in html
+
+
 def test_render_html_emits_no_tracking_script_when_site_code_blank():
     import scripts.generate_dashboard as dashboard_module
     original = dashboard_module.GOATCOUNTER_SITE_CODE
@@ -667,6 +697,10 @@ if __name__ == "__main__":
         test_render_day_tabs_no_tab_ui_when_tomorrow_races_empty,
         test_render_day_tabs_shows_both_days_when_tomorrow_has_races,
         test_render_day_panel_shows_empty_state_with_no_races,
+        test_edge_chips_html_no_market_price_shows_only_fair_odds,
+        test_edge_chips_html_real_worked_example,
+        test_edge_chips_html_negative_edge_shown_honestly,
+        test_edge_chips_html_zero_probability_gives_no_fair_odds,
     ]
     passed = 0
     for t in tests:

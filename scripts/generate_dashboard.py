@@ -42,6 +42,14 @@ import requests
 from data.gb_racecourse_coordinates import GB_RACECOURSE_COORDINATES, normalise_course_name
 from scripts.analyze_top_pick_calibration import summarise as summarise_calibration_bins
 from scripts.generate_eod_report import ew_terms_for_field_size
+from src.analysis.edge_metrics import (
+    expected_value,
+    model_fair_odds,
+    normalized_market_probabilities,
+    price_advantage,
+    probability_edge,
+    raw_market_implied_probability,
+)
 from src.features.runner_features import (
     RunnerFeatureInput,
     draw_bias_features,
@@ -62,6 +70,13 @@ OUTPUT_PATH = Path(__file__).parent.parent / "dashboard.html"
 # setup needed on top of that. See docs/BUILD_LOG.md for the real code
 # once it's set.
 GOATCOUNTER_SITE_CODE = "sez"
+
+# Real, configurable exchange commission for EV calculations (Stage 1 of
+# the model-vs-market upgrade, 2026-09-11) — NEVER assumed. Defaults to
+# 0.0 (no commission, i.e. gross EV) until Jonathan sets a real rate here
+# (Smarkets' own standard commission is ~2% on winnings, but that is a
+# real fact to confirm and set deliberately, not to guess into code).
+COMMISSION_RATE = 0.0
 
 # Real, committed backtest results (docs/RESEARCH_LAB.md RL-008, 2026-09-09,
 # 9 walk-forward folds, ~487k real predictions, 2023-06 to 2026-06) — shown
@@ -558,6 +573,44 @@ def _bet_calculator_html(dom_id: str, odds: Optional[float], field_size: int) ->
         </details>"""
 
 
+def _edge_chips_html(model_probability: float, market_odds: Optional[float],
+                      normalized_prob: Optional[float]) -> str:
+    """Stage 1 of the model-vs-market upgrade (2026-09-11) — per-runner
+    real edge metrics, computed fresh at display time against the
+    latest real market price (see src/analysis/edge_metrics.py's module
+    docstring for why this is never baked into the locked prediction).
+    Renders nothing extra beyond an honest 'no market price yet' state
+    when there's no real price — never a guessed number."""
+    fair = model_fair_odds(model_probability)
+    fair_chip = f'<span class="stat-chip edge-chip">Fair odds {fair:.2f}</span>' if fair else ""
+
+    if market_odds is None:
+        return f'<div class="stat-chips edge-chips">{fair_chip}</div>' if fair_chip else ""
+
+    raw_prob = raw_market_implied_probability(market_odds)
+    edge = probability_edge(model_probability, normalized_prob) if normalized_prob is not None else None
+    adv = price_advantage(market_odds, fair)
+    ev = expected_value(model_probability, market_odds, commission=COMMISSION_RATE)
+
+    chips = [fair_chip] if fair_chip else []
+    if raw_prob is not None:
+        chips.append(f'<span class="stat-chip edge-chip">Market (raw) {_pct(raw_prob)}</span>')
+    if normalized_prob is not None:
+        chips.append(f'<span class="stat-chip edge-chip">Market (fair) {_pct(normalized_prob)}</span>')
+    if edge is not None:
+        edge_color = "var(--good)" if edge > 0 else ("var(--bad)" if edge < 0 else "var(--text-muted)")
+        chips.append(f'<span class="stat-chip edge-chip" style="color:{edge_color}">Edge {edge*100:+.1f}pts</span>')
+    if adv is not None:
+        chips.append(f'<span class="stat-chip edge-chip">Price adv {adv*100:+.0f}%</span>')
+    if ev["gross_ev"] is not None:
+        ev_val = ev["net_ev"] if COMMISSION_RATE > 0 else ev["gross_ev"]
+        ev_color = "var(--good)" if ev_val > 0 else ("var(--bad)" if ev_val < 0 else "var(--text-muted)")
+        ev_label = "EV (net)" if COMMISSION_RATE > 0 else "EV"
+        chips.append(f'<span class="stat-chip edge-chip" style="color:{ev_color}">{ev_label} {ev_val:+.2f}</span>')
+
+    return f'<div class="stat-chips edge-chips">{"".join(chips)}</div>'
+
+
 def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> str:
     course_weather = course_weather or {}
     m1, m2, stats = race["model1"], race["model2"], race["stats"]
@@ -568,6 +621,9 @@ def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> st
     agree = m1_top is not None and m1_top == m2_top
 
     field_size = len(horses)
+    race_market_probs = normalized_market_probabilities(
+        {h: stats.get(h, {}).get("exchange_back") for h in horses}
+    )
     rows_html = []
     for h in horses:
         p2 = m2.get(h, 0.0)
@@ -582,6 +638,7 @@ def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> st
         horse_id = h_stats.get("horse_id")
         dom_id = f"bc-{race['race_id']}-{horse_id}" if horse_id is not None else None
         bet_calc_html = _bet_calculator_html(dom_id, h_stats.get("exchange_back"), field_size) if dom_id else ""
+        edge_chips_html = _edge_chips_html(p2, h_stats.get("exchange_back"), race_market_probs.get(h))
 
         rows_html.append(f"""
         <div class="{row_class}">
@@ -594,6 +651,7 @@ def render_race(race: dict, course_weather: dict[str, dict] | None = None) -> st
             </span>
           </div>
           {_stat_row(h_stats)}
+          {edge_chips_html}
           {bet_calc_html}
         </div>""")
 
@@ -858,17 +916,14 @@ def render_live_calibration(race_history: dict[date, list[dict]]) -> str:
 
 
 def _implied_market_probs(stats: dict[str, dict]) -> dict[str, float]:
-    """Real, simple de-vig: 1/exchange_back per runner that actually has a
-    real price, renormalised to sum to 1 among ONLY those priced runners.
-    This is a display-only approximation (not Model 0's proper de-vig,
-    which requires every runner priced) — a race where fewer than 2
+    """Thin wrapper over src.analysis.edge_metrics.normalized_market_probabilities
+    (Stage 1 of the model-vs-market upgrade, 2026-09-11) — real de-vig:
+    1/exchange_back per runner that actually has a real price, renormalised
+    to sum to 1 among ONLY those priced runners. A race where fewer than 2
     runners have a real price returns {} rather than a misleading number
     from a single quote."""
-    priced = {h: 1.0 / s["exchange_back"] for h, s in stats.items() if s.get("exchange_back")}
-    if len(priced) < 2:
-        return {}
-    total = sum(priced.values())
-    return {h: v / total for h, v in priced.items()}
+    odds_by_horse = {h: s.get("exchange_back") for h, s in stats.items()}
+    return normalized_market_probabilities(odds_by_horse)
 
 
 def compute_todays_edge(races: list[dict]) -> dict:
@@ -1268,6 +1323,8 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     border-radius: 6px; padding: 3px 8px;
   }}
   .stat-empty {{ font-size: 11px; color: var(--text-muted); padding: 4px 6px 12px; }}
+  .edge-chips {{ padding-top: 0; margin-top: -6px; }}
+  .edge-chip {{ border: 1px solid var(--border); background: var(--surface-1); font-weight: 600; }}
 
   .bet-calc {{
     margin: 0 6px 12px; border: 1px solid var(--border); border-radius: 8px;
