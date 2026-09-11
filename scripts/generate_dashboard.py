@@ -726,20 +726,12 @@ def render_track_record(summaries: list[dict], race_history: dict[date, list[dic
       scripts/collect_race_results.py and scripts/generate_daily_summary.py have run
       for at least one real race day.</div>"""
 
-    days = len(summaries)
-    races_settled = sum(s["races_settled"] for s in summaries)
-    top_pick_wins = sum(s["top_pick_wins"] for s in summaries)
-    top_pick_placed = sum(s["top_pick_placed"] for s in summaries)
-    favourite_wins = sum(s["favourite_wins"] for s in summaries)
-    win_profit = sum(s["win_profit"] for s in summaries)
-    win_stake = sum(s["win_stake_total"] for s in summaries)
-    ew_profit = sum(s["ew_profit"] for s in summaries)
-    ew_stake = sum(s["ew_stake_total"] for s in summaries)
-
-    hit_rate = top_pick_wins / races_settled if races_settled else 0.0
-    fav_rate = favourite_wins / races_settled if races_settled else 0.0
-    win_roi = win_profit / win_stake if win_stake else 0.0
-    ew_roi = ew_profit / ew_stake if ew_stake else 0.0
+    cum = compute_cumulative_track_record(summaries)
+    days, races_settled = cum["days"], cum["races_settled"]
+    win_profit, win_stake = cum["win_profit"], cum["win_stake"]
+    ew_profit, ew_stake = cum["ew_profit"], cum["ew_stake"]
+    hit_rate, fav_rate = cum["hit_rate"], cum["fav_rate"]
+    win_roi, ew_roi = cum["win_roi"], cum["ew_roi"]
 
     tiles = f"""
     <div class="stats-row">
@@ -863,6 +855,207 @@ def render_live_calibration(race_history: dict[date, list[dict]]) -> str:
       many more real days accumulate. Purely observational: nothing here changes any
       probability shown elsewhere on this page.</div>
     <div class="calib-chart">{''.join(rows)}</div>"""
+
+
+def _implied_market_probs(stats: dict[str, dict]) -> dict[str, float]:
+    """Real, simple de-vig: 1/exchange_back per runner that actually has a
+    real price, renormalised to sum to 1 among ONLY those priced runners.
+    This is a display-only approximation (not Model 0's proper de-vig,
+    which requires every runner priced) — a race where fewer than 2
+    runners have a real price returns {} rather than a misleading number
+    from a single quote."""
+    priced = {h: 1.0 / s["exchange_back"] for h, s in stats.items() if s.get("exchange_back")}
+    if len(priced) < 2:
+        return {}
+    total = sum(priced.values())
+    return {h: v / total for h, v in priced.items()}
+
+
+def compute_todays_edge(races: list[dict]) -> dict:
+    """Real, pure computation behind the "Today's Edge" hero cards —
+    highest-confidence pick, the model agreement pick, and the biggest
+    real model/market disagreement on the model's own top pick. Returns
+    None for any card with no real qualifying race (never a guessed
+    placeholder)."""
+    best_pick = None       # (course, off_time, race_name, horse, m2_prob)
+    agree_pick = None      # same shape, restricted to races where M1 and M2 agree
+    disagreement = None    # (course, off_time, race_name, horse, m2_prob, market_prob)
+
+    for race in races:
+        m1, m2 = race["model1"], race["model2"]
+        m1_top = max(m1, key=m1.get) if m1 else None
+        m2_top = max(m2, key=m2.get) if m2 else None
+        if m2_top is None:
+            continue
+        p = m2[m2_top]
+        entry = (race["course_name"], race["off_time"], race["race_name"], m2_top, p)
+
+        if best_pick is None or p > best_pick[4]:
+            best_pick = entry
+        if m1_top is not None and m1_top == m2_top:
+            if agree_pick is None or p > agree_pick[4]:
+                agree_pick = entry
+
+        market_probs = _implied_market_probs(race.get("stats", {}))
+        market_p = market_probs.get(m2_top)
+        if market_p is not None:
+            gap = abs(p - market_p)
+            if disagreement is None or gap > disagreement[6]:
+                disagreement = (race["course_name"], race["off_time"], race["race_name"],
+                                 m2_top, p, market_p, gap)
+
+    return {"best_pick": best_pick, "agree_pick": agree_pick, "disagreement": disagreement}
+
+
+def compute_cumulative_track_record(summaries: list[dict]) -> dict:
+    """Real cumulative track-record totals across every settled day —
+    shared by the hero's "Lifetime" line and the full Track Record
+    section, so the two numbers can never drift apart."""
+    days = len(summaries)
+    races_settled = sum(s["races_settled"] for s in summaries)
+    top_pick_wins = sum(s["top_pick_wins"] for s in summaries)
+    top_pick_placed = sum(s["top_pick_placed"] for s in summaries)
+    favourite_wins = sum(s["favourite_wins"] for s in summaries)
+    win_profit = sum(s["win_profit"] for s in summaries)
+    win_stake = sum(s["win_stake_total"] for s in summaries)
+    ew_profit = sum(s["ew_profit"] for s in summaries)
+    ew_stake = sum(s["ew_stake_total"] for s in summaries)
+    return {
+        "days": days, "races_settled": races_settled,
+        "top_pick_wins": top_pick_wins, "top_pick_placed": top_pick_placed,
+        "favourite_wins": favourite_wins,
+        "win_profit": win_profit, "win_stake": win_stake,
+        "ew_profit": ew_profit, "ew_stake": ew_stake,
+        "hit_rate": top_pick_wins / races_settled if races_settled else 0.0,
+        "fav_rate": favourite_wins / races_settled if races_settled else 0.0,
+        "win_roi": win_profit / win_stake if win_stake else 0.0,
+        "ew_roi": ew_profit / ew_stake if ew_stake else 0.0,
+    }
+
+
+def render_hero(races: list[dict], daily_summaries: list[dict]) -> str:
+    """The new top-of-page hero, per Jonathan's real redesign brief
+    (2026-09-11): three "Today's Edge" cards (highest-confidence pick,
+    where the two models agree, the biggest real model/market
+    disagreement), a one-line "Yesterday" real result, a one-line
+    "Lifetime" real cumulative record, and a jump link down to the race
+    list. Every number here is real and already computed elsewhere on
+    this page — this is a compact restatement, not a new source of truth."""
+    edge = compute_todays_edge(races)
+    cards = []
+
+    bp = edge["best_pick"]
+    if bp:
+        course, off_time, race_name, horse, p = bp
+        t = off_time.strftime("%H:%M") if hasattr(off_time, "strftime") else off_time
+        cards.append(f"""
+        <div class="edge-card">
+          <div class="edge-icon">🥇</div>
+          <div class="edge-label">Best win probability</div>
+          <div class="edge-main">{horse}</div>
+          <div class="edge-sub">{t} {course} — {race_name}</div>
+          <div class="edge-value">{_pct(p)}</div>
+        </div>""")
+
+    ap = edge["agree_pick"]
+    if ap:
+        course, off_time, race_name, horse, p = ap
+        t = off_time.strftime("%H:%M") if hasattr(off_time, "strftime") else off_time
+        cards.append(f"""
+        <div class="edge-card">
+          <div class="edge-icon">🤝</div>
+          <div class="edge-label">Models agree</div>
+          <div class="edge-main">{horse}</div>
+          <div class="edge-sub">{t} {course} — {race_name}</div>
+          <div class="edge-value">{_pct(p)}</div>
+        </div>""")
+
+    dg = edge["disagreement"]
+    if dg:
+        course, off_time, race_name, horse, model_p, market_p, _gap = dg
+        t = off_time.strftime("%H:%M") if hasattr(off_time, "strftime") else off_time
+        cards.append(f"""
+        <div class="edge-card">
+          <div class="edge-icon">💰</div>
+          <div class="edge-label">Biggest model/market disagreement</div>
+          <div class="edge-main">{horse}</div>
+          <div class="edge-sub">{t} {course} — {race_name}</div>
+          <div class="edge-value">Model {_pct(model_p)} / Market {_pct(market_p)}</div>
+        </div>""")
+
+    if not cards:
+        return ""
+
+    yesterday_html = ""
+    if daily_summaries:
+        y = daily_summaries[-1]
+        pnl_color = "var(--good)" if y["win_profit"] >= 0 else "var(--bad)"
+        yesterday_html = (
+            f'<div class="edge-recap"><strong>{y["race_date"].strftime("%A")}:</strong> '
+            f'{y["top_pick_wins"]} winner{"s" if y["top_pick_wins"] != 1 else ""} · '
+            f'{y["top_pick_placed"]} placed · '
+            f'<span style="color:{pnl_color}">£{y["win_profit"]:+.2f}</span> £1-win P&amp;L</div>'
+        )
+
+    lifetime_html = ""
+    if daily_summaries:
+        cum = compute_cumulative_track_record(daily_summaries)
+        if cum["races_settled"]:
+            lifetime_html = (
+                f'<div class="edge-recap"><strong>Lifetime:</strong> '
+                f'{cum["races_settled"]} races · {_pct(cum["hit_rate"])} winners</div>'
+            )
+
+    return f"""
+    <div class="section-label">Today's edge</div>
+    <div class="edge-grid">{''.join(cards)}</div>
+    {yesterday_html}
+    {lifetime_html}
+    <a class="edge-jump" href="#races">View today's races ↓</a>"""
+
+
+def render_bank_tracker(summaries: list[dict]) -> str:
+    """Real "£100 starting bank" tracker — Jonathan's real request
+    (2026-09-11): "far more understandable than Brier score to 95% of
+    visitors." Walks the same real, already-computed daily £1-win P&L
+    figures (scripts/generate_daily_summary.py) in date order, starting
+    from a defined £100 bank, showing the real running balance day by
+    day. Same flat-£1-per-race strategy documented everywhere else on
+    this page — no new betting logic invented here, just a running sum.
+    A day with no real settled races contributes £0 P&L, never guessed.
+    Empty entirely until at least one real day exists."""
+    if not summaries:
+        return ""
+    STARTING_BANK = 100.0
+    balance = STARTING_BANK
+    rows = []
+    for s in summaries:
+        balance += s["win_profit"]
+        pnl = s["win_profit"]
+        pnl_color = "var(--good)" if pnl >= 0 else "var(--bad)"
+        rows.append(f"""
+        <div class="bank-row">
+          <span class="bank-date">{s['race_date'].strftime('%d %b')}</span>
+          <span class="bank-pnl" style="color:{pnl_color}">£{pnl:+.2f}</span>
+          <span class="bank-balance">£{balance:.2f}</span>
+        </div>""")
+
+    total_return = balance - STARTING_BANK
+    return_pct = total_return / STARTING_BANK
+    result_color = "var(--good)" if total_return >= 0 else "var(--bad)"
+
+    return f"""
+    <div class="section-label">£100 starting bank — flat £1 win stake, every top pick, since Day 1</div>
+    <div class="bank-tracker">
+      <div class="bank-headline">
+        <span>Started £{STARTING_BANK:.0f} on {summaries[0]['race_date'].strftime('%d %b')}</span>
+        <span class="bank-now" style="color:{result_color}">Now £{balance:.2f} ({return_pct:+.1%})</span>
+      </div>
+      <div class="bank-note">Real, honest, and not a recommendation — a flat £1 stake on every
+        real top pick, same definition used everywhere else on this page. A real losing run
+        would show up here exactly as it happened, never smoothed out.</div>
+      <div class="bank-rows">{''.join(rows)}</div>
+    </div>"""
 
 
 def render_summary(races: list[dict]) -> str:
@@ -1251,6 +1444,60 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     padding: 3px 8px; border-radius: 20px;
   }}
 
+  .stale-banner {{
+    background: color-mix(in srgb, var(--warn) 14%, var(--surface-1));
+    border: 1px solid var(--warn); border-radius: 8px; padding: 12px 16px;
+    font-size: 13px; color: var(--text-primary); margin-bottom: 20px;
+  }}
+
+  .edge-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px; }}
+  .edge-card {{
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px;
+  }}
+  .edge-icon {{ font-size: 20px; margin-bottom: 4px; }}
+  .edge-label {{ font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; }}
+  .edge-main {{ font-size: 18px; font-weight: 700; margin-top: 4px; }}
+  .edge-sub {{ font-size: 12px; color: var(--text-secondary); margin-top: 2px; }}
+  .edge-value {{ font-size: 15px; font-weight: 600; color: var(--series-1); margin-top: 8px; }}
+  .edge-recap {{ font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }}
+  .edge-jump {{
+    display: inline-block; margin-top: 10px; margin-bottom: 24px; font-size: 13px;
+    font-weight: 600; color: var(--series-1); text-decoration: none;
+  }}
+  .edge-jump:hover {{ text-decoration: underline; }}
+
+  .bank-tracker {{
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; margin-bottom: 24px;
+  }}
+  .bank-headline {{
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 16px;
+    font-size: 14px; margin-bottom: 6px;
+  }}
+  .bank-now {{ font-weight: 700; }}
+  .bank-note {{ font-size: 11px; color: var(--text-muted); margin-bottom: 10px; line-height: 1.5; }}
+  .bank-rows {{ border-top: 1px solid var(--border); }}
+  .bank-row {{
+    display: flex; justify-content: space-between; gap: 12px; padding: 8px 2px;
+    border-bottom: 1px solid var(--border); font-size: 12px; font-variant-numeric: tabular-nums;
+  }}
+  .bank-row:last-child {{ border-bottom: none; }}
+  .bank-date {{ color: var(--text-secondary); flex: 1; }}
+  .bank-balance {{ font-weight: 600; min-width: 70px; text-align: right; }}
+
+  details.model-transparency {{
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 24px;
+  }}
+  details.model-transparency summary {{
+    cursor: pointer; font-weight: 600; font-size: 14px; list-style: none;
+  }}
+  details.model-transparency summary::-webkit-details-marker {{ display: none; }}
+  details.model-transparency summary::before {{ content: "▸ "; color: var(--series-1); }}
+  details.model-transparency[open] summary::before {{ content: "▾ "; }}
+  details.model-transparency > *:not(summary) {{ margin-top: 14px; }}
+
   dialog.race-card {{
     background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px;
     padding: 20px 22px; margin: auto; max-width: 640px; width: calc(100% - 48px);
@@ -1270,13 +1517,15 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
   <div class="top-bar">
     <div>
       <h1>Silent Edge Zero</h1>
-      <div class="subtitle">Live predictions — {race_date.strftime('%A %-d %B %Y')}</div>
+      <div class="subtitle" id="page-subtitle" data-race-date="{race_date.isoformat()}">Independent racing probability model — every prediction locked before the race.</div>
     </div>
     <div class="top-bar-buttons">
       <button class="theme-toggle" onclick="document.getElementById('help-dialog').showModal()">❓ What do OR / Form mean?</button>
       <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">🌓 Toggle theme</button>
     </div>
   </div>
+
+  <div class="stale-banner" id="stale-banner" hidden></div>
 
   <dialog class="help-dialog" id="help-dialog">
     <button class="close-btn" onclick="this.closest('dialog').close()" aria-label="Close">✕</button>
@@ -1326,35 +1575,68 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     reasoning honestly, it doesn't make the underlying prediction better than that.</p>
   </dialog>
 
-  <div class="disclaimer">
-    Not a tipster service. These are research predictions from a walk-forward-validated
-    model that has NOT beaten the market baseline in real backtesting (see stats below) —
-    shown as research output, not betting advice. The probability shown is Model 2
-    (gradient boosting, the better-backtested of the two models built) — Model 1's pick is
-    only flagged when it disagrees. Real hit rate (RL-010): picks the actual winner ~23.2%
-    of races, vs 11.8% for a random guess, vs 33.3% for the market favourite alone.
-  </div>
+  {render_hero(races, daily_summaries)}
 
-  {render_summary(races)}
+  {render_bank_tracker(daily_summaries)}
 
-  <div class="stats-row">
-    {render_backtest_context()}
+  {render_weather(course_weather)}
+
+  <div id="races">
+    {render_overview_chart(races)}
+    {empty_message}
   </div>
 
   {render_track_record(daily_summaries, race_history)}
 
-  {render_live_calibration(race_history)}
+  <details class="model-transparency">
+    <summary>Model transparency — methodology, calibration, technical validation</summary>
 
-  {render_weather(course_weather)}
+    <div class="disclaimer">
+      Not a tipster service. These are research predictions from a walk-forward-validated
+      model that has NOT beaten the market baseline in real backtesting (see stats below) —
+      shown as research output, not betting advice. The probability shown is Model 2
+      (gradient boosting, the better-backtested of the two models built) — Model 1's pick is
+      only flagged when it disagrees. Real hit rate (RL-010): picks the actual winner ~23.2%
+      of races, vs 11.8% for a random guess, vs 33.3% for the market favourite alone.
+    </div>
 
-  {render_overview_chart(races)}
-  {empty_message}
+    {render_summary(races)}
+
+    <div class="stats-row">
+      {render_backtest_context()}
+    </div>
+
+    {render_live_calibration(race_history)}
+  </details>
 
   <footer>Generated by scripts/generate_dashboard.py — real, locked predictions only, never fabricated.</footer>
 </div>
 
 {race_dialogs}
 <script>
+  // Real staleness check — a static page generated once a day can't know
+  // "now" after it's deployed, so this runs client-side on every real
+  // page load: compares the page's own real generated race_date against
+  // the VIEWER'S OWN real local date. A real, honest limitation: this
+  // uses the visitor's browser clock/timezone, not authoritative UK race
+  // time — fine for Jonathan's own real use (UK-based), not a promise
+  // this is correct for a visitor in a very different timezone.
+  (function () {{
+    var subtitle = document.getElementById('page-subtitle');
+    var banner = document.getElementById('stale-banner');
+    if (!subtitle || !banner) return;
+    var pageDate = subtitle.dataset.raceDate;
+    var now = new Date();
+    var todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    if (pageDate >= todayStr) return;  // page is today's (or, oddly, the future) — no banner
+    var pageDateObj = new Date(pageDate + 'T00:00:00');
+    var pageDayName = pageDateObj.toLocaleDateString('en-GB', {{ weekday: 'long' }});
+    var todayDayName = now.toLocaleDateString('en-GB', {{ weekday: 'long' }});
+    subtitle.textContent = 'Showing ' + pageDayName + "'s real predictions and results — today's picks are not live yet.";
+    banner.textContent = todayDayName + "'s predictions are being prepared. " + pageDayName + "'s verified results are available below.";
+    banner.hidden = false;
+  }})();
+
   function applyTheme(theme) {{
     if (theme) {{ document.documentElement.setAttribute('data-theme', theme); }}
     else {{ document.documentElement.removeAttribute('data-theme'); }}

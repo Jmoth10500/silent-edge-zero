@@ -15,12 +15,17 @@ from scripts.generate_dashboard import (
     _bet_calculator_html,
     _ew_defaults,
     _going_hint,
+    _implied_market_probs,
     _pct,
     _stat_row,
     build_race_analysis,
+    compute_cumulative_track_record,
+    compute_todays_edge,
     fetch_course_weather,
     find_market_favourite,
     real_calibration_confidence,
+    render_bank_tracker,
+    render_hero,
     render_html,
     render_overview_chart,
     render_summary,
@@ -274,6 +279,118 @@ def test_bet_calculator_html_renders_with_real_odds():
     assert 'selected>1/5 odds' in html  # actually selected, not just present
 
 
+def _hero_race(race_id, course_name, off_time_, race_name, model1, model2, stats=None):
+    return {
+        "race_id": race_id, "course_name": course_name, "off_time": off_time_,
+        "race_name": race_name, "model1": model1, "model2": model2, "stats": stats or {},
+    }
+
+
+def test_implied_market_probs_needs_at_least_two_priced_runners():
+    assert _implied_market_probs({"A": {"exchange_back": 2.0}}) == {}
+    assert _implied_market_probs({}) == {}
+
+
+def test_implied_market_probs_renormalises_only_priced_runners():
+    stats = {
+        "A": {"exchange_back": 2.0},   # implied 0.5
+        "B": {"exchange_back": 4.0},   # implied 0.25
+        "C": {},                       # no real price — excluded, not guessed
+    }
+    probs = _implied_market_probs(stats)
+    assert set(probs) == {"A", "B"}
+    assert abs(sum(probs.values()) - 1.0) < 1e-9
+    assert probs["A"] > probs["B"]  # shorter real price = higher implied probability
+
+
+def test_compute_todays_edge_best_pick_is_highest_model2_probability():
+    races = [
+        _hero_race(1, "Doncaster", time(13, 15), "Race A", {}, {"Horse A": 0.20}),
+        _hero_race(2, "Epsom", time(14, 0), "Race B", {}, {"Horse B": 0.40}),
+    ]
+    edge = compute_todays_edge(races)
+    assert edge["best_pick"][3] == "Horse B"
+    assert edge["best_pick"][4] == 0.40
+
+
+def test_compute_todays_edge_agree_pick_requires_matching_top_picks():
+    races = [
+        _hero_race(1, "Doncaster", time(13, 15), "Race A",
+                   {"Horse A": 0.30}, {"Horse A": 0.20}),   # agree
+        _hero_race(2, "Epsom", time(14, 0), "Race B",
+                   {"Horse C": 0.30}, {"Horse D": 0.40}),   # disagree — excluded
+    ]
+    edge = compute_todays_edge(races)
+    assert edge["agree_pick"][3] == "Horse A"
+
+
+def test_compute_todays_edge_disagreement_uses_implied_market_probability():
+    races = [
+        _hero_race(1, "Doncaster", time(13, 15), "Race A", {}, {"Horse A": 0.30},
+                   stats={"Horse A": {"exchange_back": 7.0}, "Horse B": {"exchange_back": 1.4}}),
+    ]
+    edge = compute_todays_edge(races)
+    dg = edge["disagreement"]
+    assert dg[3] == "Horse A"
+    assert dg[4] == 0.30  # model probability
+    assert abs(dg[5] - (1 / 7.0) / (1 / 7.0 + 1 / 1.4)) < 1e-9  # real implied market probability
+
+
+def test_compute_todays_edge_empty_races_returns_all_none():
+    edge = compute_todays_edge([])
+    assert edge == {"best_pick": None, "agree_pick": None, "disagreement": None}
+
+
+def test_compute_cumulative_track_record_real_shape():
+    summaries = [
+        {"race_date": date(2026, 9, 10), "races_settled": 10, "top_pick_wins": 2, "top_pick_placed": 4,
+         "favourite_wins": 3, "win_profit": 5.0, "win_stake_total": 10.0, "ew_profit": 4.0, "ew_stake_total": 20.0},
+        {"race_date": date(2026, 9, 11), "races_settled": 5, "top_pick_wins": 1, "top_pick_placed": 2,
+         "favourite_wins": 1, "win_profit": -1.0, "win_stake_total": 5.0, "ew_profit": -2.0, "ew_stake_total": 10.0},
+    ]
+    cum = compute_cumulative_track_record(summaries)
+    assert cum["days"] == 2
+    assert cum["races_settled"] == 15
+    assert cum["top_pick_wins"] == 3
+    assert cum["win_profit"] == 4.0
+    assert abs(cum["hit_rate"] - 3 / 15) < 1e-9
+
+
+def test_render_hero_empty_when_no_races():
+    assert render_hero([], []) == ""
+
+
+def test_render_hero_renders_real_cards_and_recap_lines():
+    races = [_hero_race(1, "Doncaster", time(13, 15), "Race A",
+                         {"Horse A": 0.30}, {"Horse A": 0.216})]
+    summaries = [{"race_date": date(2026, 9, 10), "races_total": 1, "races_settled": 1,
+                  "top_pick_wins": 1, "top_pick_placed": 1, "favourite_wins": 0,
+                  "win_profit": 4.0, "win_stake_total": 1.0, "ew_profit": 4.8, "ew_stake_total": 2.0}]
+    html = render_hero(races, summaries)
+    assert "Horse A" in html
+    assert "21.6%" in html
+    assert "Sunday" not in html  # sanity: not hallucinating a day name
+    assert "Wednesday" in html or "Thursday" in html  # 2026-09-10 is a Thursday
+    assert "£+4.00" in html
+    assert "View today's races" in html
+
+
+def test_render_bank_tracker_empty_with_no_summaries():
+    assert render_bank_tracker([]) == ""
+
+
+def test_render_bank_tracker_real_running_balance():
+    summaries = [
+        {"race_date": date(2026, 9, 10), "win_profit": 24.24},
+        {"race_date": date(2026, 9, 11), "win_profit": -5.0},
+    ]
+    html = render_bank_tracker(summaries)
+    assert "£100" in html
+    assert "£124.24" in html   # running balance after day 1
+    assert "£119.24" in html  # running balance after day 2 (100 + 24.24 - 5.0)
+    assert "+19.2%" in html
+
+
 def test_render_html_emits_no_tracking_script_when_site_code_blank():
     import scripts.generate_dashboard as dashboard_module
     original = dashboard_module.GOATCOUNTER_SITE_CODE
@@ -501,6 +618,17 @@ if __name__ == "__main__":
         test_render_live_calibration_flags_small_sample,
         test_render_html_emits_no_tracking_script_when_site_code_blank,
         test_render_html_emits_real_tracking_script_when_site_code_set,
+        test_implied_market_probs_needs_at_least_two_priced_runners,
+        test_implied_market_probs_renormalises_only_priced_runners,
+        test_compute_todays_edge_best_pick_is_highest_model2_probability,
+        test_compute_todays_edge_agree_pick_requires_matching_top_picks,
+        test_compute_todays_edge_disagreement_uses_implied_market_probability,
+        test_compute_todays_edge_empty_races_returns_all_none,
+        test_compute_cumulative_track_record_real_shape,
+        test_render_hero_empty_when_no_races,
+        test_render_hero_renders_real_cards_and_recap_lines,
+        test_render_bank_tracker_empty_with_no_summaries,
+        test_render_bank_tracker_real_running_balance,
     ]
     passed = 0
     for t in tests:
