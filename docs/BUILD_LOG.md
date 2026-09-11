@@ -951,3 +951,17 @@ Jonathan asked whether the whole pipeline runs fully automated without Claude Co
 **Fixed:** `scripts/run_collect_smarkets_prices.sh` now also regenerates and redeploys the dashboard after every real odds collection, same nvm-PATH pattern as the other two wrappers (netlify CLI needs real node on PATH, which launchd's minimal environment doesn't include). Ran it live end to end twice: real odds collected, dashboard regenerated (28 races today, 39 tomorrow), Netlify deploy succeeded both times — the live site will now refresh with real odds roughly every 20 minutes, all day, automatically.
 
 Full suite: **281/281 pass** (shell-script-only change, no test changes needed).
+
+---
+
+## 2026-09-11 — 1am schedule never actually fired: Mac was asleep, reverted to 07:00/07:15
+
+The scheduled daily health check (`scripts/check_pipeline_health.py`, running via the 7-day `CronCreate` monitor) caught a real FAIL: `predict_races.log` still dated 2026-09-10 at 09:07 the next morning. Investigated rather than assumed:
+
+- `launchctl print` on `com.silentedgezero.predict-races` showed `last exit code = (never exited)` — the job has not fired even once since the schedule moved to 01:00/01:15 the previous session.
+- `pmset -g log` showed no real wake activity around 01:00–01:15; the system only shows continuous wake starting ~06:40 that morning.
+- **Real root cause:** regular user `launchd` LaunchAgents do NOT wake a sleeping Mac to run — if the machine is asleep at the scheduled time, the job is silently skipped, not queued or retried. Today's real racecards/predictions data exists only because it was run manually earlier this session while investigating the Doncaster odds issue, not because the automated 1am job fired.
+
+**Real fix, per Jonathan's choice** (offered `pmset` scheduled auto-wake vs. reverting the schedule vs. relying on manual catch-up — chose to revert): `com.silentedgezero.collect-racecards` and `com.silentedgezero.predict-races` moved back to 07:00/07:15 — the schedule that was actually working reliably before. Both LaunchAgents unloaded and reloaded, confirmed picked up the new `StartCalendarInterval`.
+
+**What this means for the 20-minute Smarkets/redeploy job and the 21:30 results job:** unaffected — `StartInterval`-based jobs (Smarkets) resume on wake and catch up naturally since they're not tied to one fixed clock time, and 21:30 is well within normal waking hours, so no equivalent risk there.
