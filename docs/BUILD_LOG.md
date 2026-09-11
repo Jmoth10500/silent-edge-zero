@@ -941,3 +941,13 @@ Checked the real logs first: every single Doncaster race (all 8) failed with a r
 Full suite: **281/281 pass** (no new dedicated tests for `load_our_races` itself — DB-integration only, same convention as the rest of this file; exercised by the real live re-run above).
 
 **Open decision for Jonathan:** whether/when to run the full historical horse-dedup migration (merges 536 duplicate groups, repoints `runner_snapshot`/`market_snapshot`/`runner_result`/`prediction` FKs, recomputes `record_hash` for any touched locked prediction rows, then creates the two partial unique indexes for real going forward). Not started without his explicit go-ahead.
+
+---
+
+## 2026-09-11 — Live dashboard now redeploys every 20 minutes, not just twice a day
+
+Jonathan asked whether the whole pipeline runs fully automated without Claude Code open. Real answer: yes for the actual data pipeline (racecards/predictions/odds/results are all real macOS `launchd` LaunchAgents, confirmed loaded, independent of any Claude Code session) — with one real exception (the 7-day pipeline health-check set up earlier is genuinely session-scoped, per `CronCreate`'s own "dies when Claude exits") and one real gap noticed while checking: Smarkets odds are collected every 20 minutes (`StartInterval: 1200`), but only `run_predict_todays_races.sh` (01:15) and `run_collect_results.sh` (21:30) ever regenerated the dashboard and redeployed — so real intraday odds movement sat in the DB all day without ever reaching the live site.
+
+**Fixed:** `scripts/run_collect_smarkets_prices.sh` now also regenerates and redeploys the dashboard after every real odds collection, same nvm-PATH pattern as the other two wrappers (netlify CLI needs real node on PATH, which launchd's minimal environment doesn't include). Ran it live end to end twice: real odds collected, dashboard regenerated (28 races today, 39 tomorrow), Netlify deploy succeeded both times — the live site will now refresh with real odds roughly every 20 minutes, all day, automatically.
+
+Full suite: **281/281 pass** (shell-script-only change, no test changes needed).
