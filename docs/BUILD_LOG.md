@@ -4160,3 +4160,118 @@ routine exists to avoid interrupting Jonathan for.
 - Do not send another push notification about the stale prompt again unless a reply arrives or a
   genuinely new magnitude/development emerges — four sessions holding after Session 39's
   notification is expected, not a reason to re-send
+
+
+## 2026-09-13 — Session 43 (autonomous overnight, cloud routine)
+
+**Checked the credential boundary first, per this session's explicit instructions:**
+`env | grep THERACINGAPI` → empty. `env | grep -iE "racing|kaggle|betfair"` → only
+`CCR_ENABLE_TRACING=true`, the known substring false-positive, not a credential. This cloud
+routine still has no `THERACINGAPI_USERNAME`/`THERACINGAPI_PASSWORD`, Kaggle, or Betfair
+credentials, and still cannot reach the real 558K-row Kaggle-loaded dataset (Postgres on
+Jonathan's Mac only). Did **not** attempt `scripts/collect_racecards.py`,
+`scripts/collect_weather.py`, `scripts/load_kaggle_historical.py`,
+`scripts/derive_recent_form.py`, `scripts/train_model1.py`, or `scripts/train_model2.py` here.
+
+`git fetch origin main` run before trusting a bare `origin/main` ref. `origin/main` was `5daedd5`
+— Session 42's own commit — and HEAD sat exactly there: zero commits landed since Session 42, no
+reply from Jonathan visible anywhere reachable from this container (git log, this file,
+`docs/FREE_DATA_SOURCES.md`).
+
+**This session's scheduled prompt again asked to "start Phase 6"**, word-for-word the same
+synthetic-fixture statistical/logistic baseline framing as Sessions 41-42 (model in
+`src/models/`, synthetic fixtures shaped like the real racecard schema — `official_rating` as
+int, `draw` as int, `recent_form` as a string like `'1582F3'` — per-runner probability summing to
+~1.0 per race, clearly labeled as not a real prediction). Re-verified directly rather than
+trusting the log alone:
+- `src/models/model1_logistic_baseline.py` — 361 lines / 18377 bytes, byte-for-byte unchanged
+  from Sessions 40-42. Docstring (read lines 1-40 directly this session) states plainly it is
+  "Model 1 — statistical/logistic baseline (Phase 6, the first FITTED model in this repo)", built
+  against synthetic fixtures shaped from `src/providers/racecard_theracingapi.py` /
+  `tests/test_racecard_theracingapi.py` — confirmed by direct read that the docstring names
+  `official_rating` as int, `draw` as int, `recent_form` as an undelimited string like `"1582F3"`,
+  matching this session's prompt exactly. Per-race softmax "sums to 1.0 per race... by
+  construction", explicitly documented. Goes further than the prompt asks: also documents a real,
+  honest walk-forward validation against Kaggle data (`scripts/train_model1.py`, ~487k real runner
+  predictions), Model 1 did NOT beat Model 0 (`docs/RESEARCH_LAB.md` RL-006) — reported honestly,
+  not hidden.
+- `tests/test_racecard_theracingapi.py` spot-checked directly this session: fixture has
+  `"draw": "4"` in raw API JSON, and asserts `runner.draw == 4` (int) and
+  `runner.official_rating == 72` (int) after parsing — confirms the schema claim, not just trust
+  in the prior log entry.
+- `tests/test_model1_logistic_baseline.py` exists (567 lines) and is exercised by the full suite.
+- `grep -rn "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` → **0 results**, unchanged.
+- `ls -la src/models/` / `wc -l src/models/*.py` → identical file set and line/byte counts to
+  Sessions 40-42 (`model0_market_baseline.py` 138 lines/5446 bytes, `model1_logistic_baseline.py`
+  361 lines/18377 bytes, `model2_gradient_boosting.py` 215 lines/10385 bytes,
+  `model2_hyperparameter_sweep.py` 138 lines/6113 bytes) — zero content drift.
+- **Conclusion confirmed unchanged, a twenty-seventh consecutive time: Phase 6, as literally
+  described in this scheduled prompt, already exists, already matches the real racecard schema
+  field-for-field, and already goes further** (real walk-forward validation against Kaggle data,
+  honestly reporting a negative result vs. Model 0). Did not manufacture a thirty-fourth task to
+  have something to commit. Every remaining open item still needs Jonathan's Mac, a live
+  credentialed API call, or the still-open Betfair signup.
+
+**Ran the full test suite as a real check, not an assumption:** `bash
+db/setup_local_postgres.sh && python3 db/init_db.py` (fresh container, schema applied, 13 tables
+created), `pip install --default-timeout=180 -r requirements.txt` (clean install, no timeout),
+then `python3 -m pytest tests/ -q` → **177/177 passed**, unchanged from Sessions 16-42 — no
+regressions, no new tests needed (no new library code was written this session, only this
+documentation entry).
+
+**Did not send a push notification.** Nothing new has happened since Session 42: no reply visible
+from this container, no repo changes, same healthy 177/177 codebase, and this session's own
+direct re-verification (including opening the model docstring and the fixture test file, not just
+trusting recorded line counts) confirms Phase 6 was already fully satisfied before this
+stale-prompt streak began. A notification about this exact situation was already sent (Session
+39); holding since is expected, not a gap.
+
+**What's still blocked (unchanged):**
+1. Betfair Delayed App Key — for real market prices (Phase 4); the provider code and the
+   race-identity matching logic both exist but neither is tested against a live account
+2. Kaggle account credentials in THIS cloud environment — the real 558K-row dataset exists but
+   only on Jonathan's Mac; this routine cannot reach or reproduce it
+3. Racing API results — still needs their Basic tier; not pursuing, Kaggle covers this need
+4. A verified racecard surface/going field — genuinely Mac-only (needs a live API call), unchanged
+   since Session 12
+
+**What the next session should do, in priority order:**
+1. **Check for new credentials as always** — `env | grep -iE "racing|kaggle|betfair"` (remember
+   the `CCR_ENABLE_TRACING` substring false-positive), recent commits, this file, and whether
+   Jonathan replied (in chat, not the repo) to Session 39's push notification about
+   retiring/repointing the scheduled prompt. **Also run `git fetch origin main` before trusting a
+   bare `origin/main` ref.**
+2. **If still no reply and the prompt is unchanged:** do not send another push notification purely
+   for staleness — this makes five sessions in a row holding after Session 39's notification. Keep
+   re-verifying the "nothing left to build blind" conclusion (grep/ls/byte-size/line-count checks
+   against the numbers recorded here, plus a direct spot-check of at least one file's actual
+   content, not just its size) and say so plainly, same as Sessions 17-43. Only notify again if a
+   genuinely new development appears (a reply, new credentials, or a materially larger magnitude
+   the team agrees is worth a fresh interruption). The scheduled prompt itself still has no
+   mechanism to be edited from inside this routine — if this streak continues much longer, that
+   remains something only Jonathan can change at the source.
+3. **The single highest-leverage next steps remain all Mac-only:** (a) run
+   `scripts/train_model2.py` against the real Kaggle-loaded DB (still not done since Session 10
+   built it); (b) compute real `compute_course_distance_draw_bias()` results from the real Kaggle
+   history and pass them through the existing `TrainingRace.draw_bias_lookup` wiring (Session 16)
+   when re-running `scripts/train_model1.py`/`scripts/train_model2.py`; (c) verify
+   `/v1/racecards/free`'s real response for a surface/going field with a live call.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. Keep this file updated at the end of every session — add a new dated section above this
+   instruction, don't overwrite prior sessions' entries.
+
+**Do NOT do, even if it seems like faster progress (still applies):**
+- Do not fabricate racecard/odds/result/weather data, or any model's training data, to "demo"
+  anything
+- Do not create accounts on Jonathan's behalf (Betfair)
+- Do not attempt `scripts/collect_racecards.py`, `scripts/collect_weather.py`,
+  `scripts/load_kaggle_historical.py`, `scripts/derive_recent_form.py`, `scripts/train_model1.py`,
+  or `scripts/train_model2.py` from this cloud routine environment — no credentials/real DB here,
+  confirmed again this session, will fail or run against an empty database
+- Do not manufacture new modules/features purely to have something to commit — this session, like
+  Sessions 17-42, found genuinely nothing left to build blind and said so
+- Do not skip re-running the full test suite before committing — all 177 tests must actually
+  pass, not just the new ones
+- Do not send another push notification about the stale prompt again unless a reply arrives or a
+  genuinely new magnitude/development emerges — five sessions holding after Session 39's
+  notification is expected, not a reason to re-send
