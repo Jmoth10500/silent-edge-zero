@@ -1085,3 +1085,15 @@ Jonathan: "Ive just Chat GPT the rase pick and got this" — a full 39-race resu
 - Verified live: auto-detect correctly found today's real 2 courses (Bath, Doncaster) from the DB with zero hard-coding, honestly recorded 0 results for all 16 races (10:10am, none had raced yet) — real, not fabricated. Real settling will happen via tonight's scheduled 21:30 run.
 
 Full suite: **328/328 pass** (no new dedicated tests — `main()`'s auto-detect/pacing logic is DB/network-coupled, same convention as every other collector's `main()` in this repo; exercised by the real live run above).
+
+---
+
+## 2026-09-13 — Real Netlify usage warning: fixed the deploy-frequency mistake I made two days ago
+
+Jonathan: "Would it be better if these results were put on a database so a Netlily does not have to publish a site every time, I am getting warnings that my tokens are being used too quickly." Real, direct cause: the 2026-09-11 change that added a Netlify redeploy to the 20-minute Smarkets odds job meant **~72 real deploys/day**, up from ~3/day before — a real oversight on my part not to flag that usage/cost tradeoff when I built it.
+
+**Immediate real fix:** `run_collect_smarkets_prices.sh` no longer deploys — it only regenerates the local `dashboard.html` (free, no Netlify call) every 20 minutes as before. A new, separate, much coarser job (`scripts/run_redeploy_dashboard.sh`, `com.silentedgezero.redeploy-dashboard.plist`, hourly via `StartInterval`) picks up whatever's accumulated and does the actual real deploy — **~24 deploys/day instead of ~72**, a real 3x cut, while the live site still refreshes within the hour rather than only twice daily. Loaded and confirmed running; verified the odds script still works correctly without the deploy call.
+
+**Jonathan's own instinct (a database, not full-site redeploys) is the real, correct longer-term fix** — deploying a whole static HTML page every time a number changes is fundamentally the wrong shape for frequently-changing data. The real, honest constraint: this project's Postgres lives locally on Jonathan's own Mac, not publicly reachable, so the deployed static page's own JavaScript can't fetch from it directly. Doing this properly would mean either (a) a small real cloud-hosted database with a public read API (e.g. Supabase's genuinely free tier) that the local pipeline writes to and the already-deployed page's JS reads from — no deploy needed for routine data updates at all — or (b) something similar via a Netlify Function as a thin proxy. **Not started — a real, meaningful architecture decision, not something to pick unilaterally.** The hourly-redeploy fix above is the safe, immediate stopgap; whether to pursue the real database-backed version is Jonathan's call.
+
+Full suite: **328/328 pass** (shell-script/plist changes only).
