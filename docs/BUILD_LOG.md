@@ -4895,3 +4895,72 @@ Jonathan reviews the log, but does not on its own meet the bar for a second inte
 - Do not send another push notification about the stale prompt again unless a reply arrives or a
   genuinely new magnitude/development emerges — eleven sessions holding after Session 39's
   notification is expected, not a reason to re-send
+
+## 2026-09-13 — Session 50 (autonomous overnight, cloud routine)
+
+**Re-verified from scratch, not trusting Session 49's log entry alone.** `git fetch origin main`:
+`origin/main` was `85b03ee` — Session 49's own commit — and HEAD sat exactly there (detached, as
+at the start of every prior session in this streak). `git log --all --format='%an' | sort -u` →
+still only `Claude` and `Jonathan Nuttall`, no Nuttall commit since Session 1: no reply visible
+anywhere reachable from this container.
+
+**This session's scheduled prompt again asked to "start Phase 6,"** the same synthetic-fixture
+statistical/logistic baseline framing as Sessions 41-49. Checked directly:
+- `env | grep -iE "racing|kaggle|betfair"` → only the known `CCR_ENABLE_TRACING=true`
+  false-positive substring, no real credentials. Did **not** attempt
+  `scripts/collect_racecards.py`, `scripts/collect_weather.py`,
+  `scripts/load_kaggle_historical.py`, `scripts/derive_recent_form.py`, `scripts/train_model1.py`,
+  or `scripts/train_model2.py` here.
+- All four `src/models/*.py` files re-checked by line/byte count against Session 49's recorded
+  numbers: `model0_market_baseline.py` 138/5446, `model1_logistic_baseline.py` 361/18377,
+  `model2_gradient_boosting.py` 215/10385, `model2_hyperparameter_sweep.py` 138/6113 — all
+  identical. Spot-checked `model1_logistic_baseline.py`'s header content directly — unchanged,
+  still documents the honest walk-forward result vs. Model 0 (`docs/RESEARCH_LAB.md` RL-006).
+- `grep -rn "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` → 0 results, unchanged.
+- **Conclusion confirmed unchanged, a thirty-fourth consecutive time:** Phase 6 (and Phase 7's
+  gradient-boosted Model 2) already exists, already matches the real racecard schema field-for-
+  field, and already goes further than what this prompt asks for. Did not manufacture a new task
+  to have something to commit.
+
+**Ran the full test suite as a real check:** `bash db/setup_local_postgres.sh && python3
+db/init_db.py` (fresh container, 13 tables), `pip install -r requirements.txt` (clean install),
+`python3 -m pytest tests/ -q` → **177/177 passed**, unchanged.
+
+**Did not send a push notification.** Nothing new since Session 49: no reply, no repo changes, no
+new credentials, same 177/177-passing codebase. The staleness itself was already reported once
+(Session 39, now twelve sessions ago); re-flagging the identical unresolved state every night
+would be exactly the noisy repetition a scheduled routine should avoid. Held per that precedent.
+
+**Housekeeping note for Jonathan, not urgent enough to page for:** this file is now ~4,900 lines /
+~385KB, almost entirely repeated verbatim re-verification entries from 30+ stale-prompt sessions.
+Worth trimming/archiving the Sessions 17-49 entries into a compressed summary next time a human
+touches this file — no action taken here, since summarizing away prior sessions' own words is a
+judgment call better left to Jonathan or a session he explicitly asks to do it.
+
+**What's still blocked (unchanged):** Betfair Delayed App Key (Phase 4, untested against a live
+account); Kaggle credentials in this cloud environment (real 558K-row dataset is Mac-only);
+Racing API results (not pursuing, Kaggle covers this); a verified racecard surface/going field
+(needs a live API call, Mac-only).
+
+**What the next session should do, in priority order:**
+1. Check for new credentials/reply as always (`env | grep -iE "racing|kaggle|betfair"`, `git fetch
+   origin main`, `git log --all --format='%an'`).
+2. If still no reply and the prompt is unchanged: do not send another staleness-only notification
+   (this would make thirteen sessions holding after Session 39's). Keep re-verifying and say so
+   plainly. Only notify again on a genuinely new development (reply, credentials, or a materially
+   new magnitude).
+3. Highest-leverage next steps remain Mac-only: (a) run `scripts/train_model2.py` against the real
+   Kaggle-loaded DB; (b) compute real `compute_course_distance_draw_bias()` results and wire them
+   into `TrainingRace.draw_bias_lookup` when re-running `scripts/train_model1.py`/`train_model2.py`;
+   (c) verify `/v1/racecards/free`'s real response for a surface/going field with a live call.
+4. Keep using `db/setup_local_postgres.sh` at the start of any session that touches the DB.
+5. Keep this file updated at the end of every session — add a new dated section above this
+   instruction, don't overwrite prior sessions' entries. Consider the housekeeping note above.
+
+**Do NOT do, even if it seems like faster progress (still applies):** fabricate racecard/odds/
+result/weather/training data; create accounts on Jonathan's behalf; attempt
+`scripts/collect_racecards.py`, `scripts/collect_weather.py`, `scripts/load_kaggle_historical.py`,
+`scripts/derive_recent_form.py`, `scripts/train_model1.py`, or `scripts/train_model2.py` from this
+cloud routine (no credentials/real DB here); manufacture new modules/features purely to have
+something to commit; skip re-running the full test suite before committing; send another
+staleness-only push notification.
