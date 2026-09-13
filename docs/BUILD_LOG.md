@@ -1019,3 +1019,27 @@ Full suite: **316/316 pass** (no test changes — `load_our_runners` is DB-integ
 The scheduled health check flagged a real FAIL: "predict_races.log doesn't contain a real 'Deploy is live!' line." Investigated rather than trusting the FAIL at face value — the real pipeline had genuinely succeeded: `predict_races.log` (stdout) showed a real "🚀 Deploy complete" line, and `predict_races_error.log` (stderr) showed "✔ Deploy is live!" twice. Confirmed independently: the live site's own `<title>` tag showed today's real date. **The bug was in `check_pipeline_health.py` itself** — it only ever checked stdout for that one exact literal string, but Netlify's CLI doesn't consistently write that particular spinner-status line to the same stream every run (this run it landed in stderr instead, twice, while a different real success line — "Deploy complete" — was in stdout).
 
 **Real fix:** `check_deploy_log_fresh` now checks BOTH real log files, combined, for EITHER of two real success markers ("Deploy is live!" / "Deploy complete") — a genuine deploy is confirmed by either marker turning up anywhere in the real output, not by one exact string always landing in one exact file. 2 new regression tests (the exact real shape that caused today's false positive, and a genuine no-marker-anywhere failure case to confirm real failures are still caught). Full suite: **318/318 pass.** Re-ran the real health check after the fix: **HEALTHY.**
+
+---
+
+## 2026-09-13 — "Saturday races are not showing results" — a real, structural Racing Post blocking change, not a bug in our code
+
+Real cause, this time genuinely different from the two duplicate-horse-row bugs found the previous two days: Saturday's (2026-09-12) evening `collect-results` run failed completely — `runner_result` had ZERO rows for the day. The log showed every single course's meeting-page fetch failing with the real "`__NEXT_DATA__` script tag not found" error, even Chester's real browser LAUNCH itself timing out once.
+
+**Investigated properly rather than just re-running:**
+1. Added real retry-with-backoff (`fetch_page_html_with_retry`, 4 attempts, 3s/6s/12s backoff) to `collect_race_results.py`, matching the exact fix already proven for Smarkets' 429s, plus 1s real pacing between courses/races. 5 new tests.
+2. Re-ran live: **every single course still failed, even with retries.** This ruled out "just a transient blip."
+3. Tested in isolation: `/racecards/{course}/{slug}/2026-09-13/` (today) succeeded (1.5MB real page); the exact same route for `2026-09-12` (yesterday) failed consistently, on every course, every retry.
+4. Tested the alternative: `/results/{course}/{slug}/{date}/{raceId}/` (the permalink route, once a real race ID is already known) still works fine for the same past date — confirmed live by fetching a real WebSearch-found Doncaster result URL for 2026-09-12 successfully.
+
+**Real, structural finding:** Racing Post's `/racecards/` meeting-page route — the one this whole results pipeline depends on for discovering each day's race IDs (see `scripts/collect_race_results.py`'s own module docstring) — appears to have become unreliable once a meeting's racing has genuinely finished, even on the SAME calendar day (Saturday's own 21:30 same-day run failed the same way). The permalink `/results/` route remains reliable once an ID is known — the same real distinction (deep permalinks survive, listing/discovery routes get blocked) found from the very start of this integration, now apparently extended to cover the meeting-page route this project had been relying on since 2026-09-11.
+
+**This is a real, open architectural risk, not something patched away today:** the retry/pacing fix genuinely helps with ordinary transient 429-style blocking (as it did for Smarkets), but does NOT recover a race-day discovery route that Racing Post has stopped serving reliably once racing there has finished. No good same-day automated fix exists yet without either (a) running collection earlier — before a course's own last race, course by course, rather than one fixed 21:30 for everyone, or (b) a live web-search-assisted fallback (only runnable interactively, not from an unattended script — see `docs/BUILD_LOG.md`'s earlier notes on why).
+
+**Real partial recovery performed:** manually re-discovered a handful of Saturday's real result URLs via live web search (the same method used before the meeting-page shortcut existed) and inserted them through the existing, unmodified fetch/parse/insert pipeline — **2 of Saturday's 39 races recovered** (Doncaster 13:10 and 15:35), genuinely real data, not fabricated to fill the gap. `daily_summary` for 2026-09-12 now honestly shows **2/39 settled** rather than a false 0/39 — still substantially incomplete, and reported to Jonathan as such, not glossed over.
+
+Also added Bath and Musselburgh to `data/racingpost_course_ids.py` (real, expected, previously-undiscovered courses, same pattern as before).
+
+Full suite: **321/321 pass.**
+
+**Real, open decision for Jonathan:** whether to (a) move `collect-results` earlier per-course rather than one fixed 21:30, (b) accept that some days will need this kind of manual/interactive recovery when the automated route fails and treat the health check's results-check as the trigger for that, or (c) leave Saturday's gap as-is (2/39 is a real, honestly-labelled partial day, not a fabricated one) and watch whether today's evening run recovers cleanly before deciding anything is systemically broken.

@@ -26,4 +26,6 @@ RACINGPOST_COURSE_IDS: dict[str, tuple[str, str]] = {
     "chester": ("13", "chester"),
     "salisbury": ("52", "salisbury"),
     "sandown": ("54", "sandown"),
+    "bath": ("5", "bath"),
+    "musselburgh": ("16", "musselburgh"),
 }

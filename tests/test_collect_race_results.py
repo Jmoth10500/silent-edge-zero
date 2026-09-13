@@ -11,10 +11,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from datetime import time
+from unittest.mock import patch
 
+import scripts.collect_race_results as collect_race_results
 from scripts.collect_race_results import (
     build_result_rows,
     extract_runners_from_next_data,
+    fetch_page_html_with_retry,
     match_meeting_race,
     parse_beaten_distance,
     parse_fractional_odds,
@@ -185,6 +188,54 @@ def test_match_meeting_race_picks_closest_among_candidates():
     assert match_meeting_race(meeting_races, time(14, 6)) == 2
 
 
+def test_fetch_page_html_with_retry_succeeds_first_try():
+    with patch.object(collect_race_results, "fetch_page_html", return_value="<html>ok</html>") as mock_fetch:
+        result = fetch_page_html_with_retry("https://example.com", lambda html: html.upper())
+    assert result == "<HTML>OK</HTML>"
+    assert mock_fetch.call_count == 1
+
+
+def test_fetch_page_html_with_retry_recovers_from_real_intermittent_block():
+    # Real, observed live shape (2026-09-12/13): a real Racing Post
+    # bot-block error page (no __NEXT_DATA__) on the first attempt, a
+    # real successful page on a later attempt — the exact transient
+    # pattern found live (Doncaster succeeded seconds after Epsom and
+    # Sandown both failed the same way).
+    calls = {"n": 0}
+
+    def flaky_fetch(url):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            return "<html>block page, no next data</html>"
+        return "<html>__NEXT_DATA__real content</html>"
+
+    def parse_fn(html):
+        if "__NEXT_DATA__" not in html:
+            raise ValueError("__NEXT_DATA__ script tag not found — page did not render as expected")
+        return html
+
+    with patch.object(collect_race_results, "fetch_page_html", side_effect=flaky_fetch):
+        with patch.object(collect_race_results, "time_module") as mock_time:
+            result = fetch_page_html_with_retry("https://example.com", parse_fn, max_attempts=4)
+    assert "__NEXT_DATA__" in result
+    assert calls["n"] == 3
+    assert mock_time.sleep.call_count == 2  # 2 real backoff waits before the 3rd, successful attempt
+
+
+def test_fetch_page_html_with_retry_raises_last_real_error_after_exhausting_attempts():
+    def always_fails(url):
+        raise ValueError("__NEXT_DATA__ script tag not found — page did not render as expected")
+
+    with patch.object(collect_race_results, "fetch_page_html", side_effect=always_fails) as mock_fetch:
+        with patch.object(collect_race_results, "time_module"):
+            try:
+                fetch_page_html_with_retry("https://example.com", lambda html: html, max_attempts=3)
+                assert False, "expected the real last error to be raised"
+            except ValueError as e:
+                assert "__NEXT_DATA__" in str(e)
+    assert mock_fetch.call_count == 3  # exhausted all real attempts, never silently gave up early
+
+
 if __name__ == "__main__":
     tests = [
         test_parse_fractional_odds_real_formats,
@@ -205,6 +256,9 @@ if __name__ == "__main__":
         test_match_meeting_race_real_exact_and_within_tolerance,
         test_match_meeting_race_rejects_time_outside_tolerance,
         test_match_meeting_race_picks_closest_among_candidates,
+        test_fetch_page_html_with_retry_succeeds_first_try,
+        test_fetch_page_html_with_retry_recovers_from_real_intermittent_block,
+        test_fetch_page_html_with_retry_raises_last_real_error_after_exhausting_attempts,
     ]
     passed = 0
     for t in tests:

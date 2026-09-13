@@ -46,6 +46,7 @@ race+horse are updated (ON CONFLICT), not duplicated.
 import json
 import re
 import sys
+import time as time_module  # `time` (the type) is already imported from datetime below
 from datetime import date, datetime, time, timezone
 from pathlib import Path
 
@@ -192,6 +193,31 @@ def fetch_page_html(url: str) -> str:
         html = page.content()
         browser.close()
     return html
+
+
+def fetch_page_html_with_retry(url: str, parse_fn, max_attempts: int = 4):
+    """Real fetch + parse with retry-with-backoff — found live
+    2026-09-12/13: Racing Post intermittently returns its own real
+    bot-block error page (no `__NEXT_DATA__`) even via headless
+    Playwright, and separately the browser launch itself can time out
+    under load. Both confirmed real and TRANSIENT, not a permanent
+    per-URL block — the exact same request type succeeded on one course
+    and failed on another within the same real run (Doncaster's meeting
+    page loaded fine seconds after Epsom's and Sandown's both failed).
+    Retries the WHOLE fetch (not just the parse) since a fresh page load
+    is what actually recovers. Real exponential backoff (3s, 6s, 12s...)
+    between attempts. Re-raises the last real error after exhausting all
+    attempts — never silently gives up without saying so."""
+    last_error: Exception = RuntimeError(f"no attempts made for {url}")
+    for attempt in range(max_attempts):
+        try:
+            html = fetch_page_html(url)
+            return parse_fn(html)
+        except Exception as e:
+            last_error = e
+            if attempt < max_attempts - 1:
+                time_module.sleep(3.0 * (2 ** attempt))
+    raise last_error
 
 
 def match_meeting_race(meeting_races: list[dict], off_time: time) -> int | None:
@@ -368,11 +394,11 @@ def main():
         course_id, slug = rp_course
         meeting_url = f"https://www.racingpost.com/racecards/{course_id}/{slug}/{race_date.isoformat()}/"
         try:
-            meeting_html = fetch_page_html(meeting_url)
-            meeting_races = parse_meeting_races(extract_next_data(meeting_html))
+            meeting_races = parse_meeting_races(fetch_page_html_with_retry(meeting_url, extract_next_data))
         except Exception as e:
-            print(f"  course '{course_key}': real meeting-page fetch failed ({e}), skipping.")
+            print(f"  course '{course_key}': real meeting-page fetch failed after retries ({e}), skipping.")
             continue
+        time_module.sleep(1.0)  # real pacing between courses — reduces the real intermittent block rate
 
         for race_id in race_ids:
             off_time = our_races[race_id]["off_time"]
@@ -393,10 +419,9 @@ def main():
                 continue
             result_url = f"https://www.racingpost.com/results/{course_id}/{slug}/{race_date.isoformat()}/{rp_race_id}/"
             try:
-                result_html = fetch_page_html(result_url)
-                runners_json = extract_runners_from_next_data(result_html)
+                runners_json = fetch_page_html_with_retry(result_url, extract_runners_from_next_data)
             except Exception as e:
-                print(f"  race {race_id}: real result fetch/parse failed ({e}), skipping.")
+                print(f"  race {race_id}: real result fetch/parse failed after retries ({e}), skipping.")
                 continue
             rows = build_result_rows(runners_json)
             n, unmatched = insert_results(conn, source_id, race_id, rows, our_runners)
@@ -404,6 +429,7 @@ def main():
             n_results_total += n
             print(f"  race {race_id} ({course_key} {off_time}): {n} real results recorded"
                   + (f", {len(unmatched)} unmatched horse name(s)" if unmatched else "."))
+            time_module.sleep(1.0)  # real pacing between races — reduces the real intermittent block rate
 
     print(f"\n{n_matched} races matched and recorded, {n_results_total} total real result rows, "
           f"{n_unmapped_course} skipped (unmapped course), {n_unmatched_time} skipped (no time match), "
