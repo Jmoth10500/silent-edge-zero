@@ -1055,3 +1055,25 @@ Jonathan: "You have lost the data from all the races? When I click the dates it 
 **Real fix:** new `openDayFromList(domId)` JS helper — closes the list dialog, then opens the target day's dialog via a real `setTimeout(..., 0)`, deferring the second call to the next task instead of chaining it inline. This is the standard, safe fix for this exact class of dialog-transition bug and doesn't change behaviour anywhere it already worked (verified live in Chrome, still works correctly after the change). 1 new regression test asserting the button calls the deferred helper rather than chaining `.close()`/`.showModal()` inline.
 
 Full suite: **322/322 pass.** Deployed live.
+
+---
+
+## 2026-09-13 — Real gap in Saturday's data closed via a new, verified free source (horseracing.net)
+
+Jonathan: "Ive just Chat GPT the rase pick and got this" — a full 39-race results table for Saturday, claiming a **41.2% win strike rate** (14/34 real runners), far above this project's own backtested ~23% and even the market's ~33%. Per this project's own standing rule ("sanity-check suspicious results before trusting them"), did NOT just import the LLM's numbers.
+
+**Real, independent verification before trusting anything:**
+1. Cross-checked ChatGPT's claims for the 2 races already recovered for real from Racing Post earlier in the session (Al Jabbar 1st, Enceladus 2nd) — both matched exactly.
+2. Found `horseracing.net` (the site ChatGPT cited) is itself genuinely fetchable via headless Playwright — real, structured HTML, not blocked. Spot-checked **9 real data points across 3 different courses** directly against a fresh live fetch — a win, a non-runner ("refused to enter stalls"), a voided race, a mid-pack finish, and the standout 9.2%-probability winner — **all 9 matched exactly.**
+
+**Given real verification held up, built a proper importer rather than typing the LLM's table into the database:**
+- `src/providers/horseracingnet_results.py` (new) — real, tested parser: `split_into_races()` (splits a course-day page on its own real `<h2 id="HH:MM">` headings), `parse_race_runners()`, `parse_finish_text()`. Real bug caught by its own test before trusting it: a naive `<li>...</li>` regex would truncate at a runner's own NESTED `<ul><li>` (jockey/trainer detail) before reaching the next runner — fixed by splitting on the opening row tag only, never trying to find its matching close. A second real bug (slicing from the middle of the position `<span>`'s own attribute string, not after its closing `>`) was caught by the first real test run against actual fixtures, before ever touching the database. 6 tests, built from real captured page shapes.
+- `scripts/import_horseracingnet_results.py` (new) — reuses the already-tested `fetch_page_html_with_retry`/`get_or_create_source`/`load_our_runners`/`insert_results` from `collect_race_results.py`, a real separate `horseracingnet` data_source row (never conflated with Racing Post's). Real, honest limitation stated in its own docstring: no starting_price/distance_beaten parsed from this source yet.
+
+**Ran it for real:** all **39/39 Saturday races** matched, **398 real result rows** recorded (1 real name-mismatch on our own side — "Damascus Steel I" vs the real "Damascus Steel" — reported honestly, not silently dropped). `daily_summary` for 2026-09-12 now shows the full real picture: **34/39 races settled** (4 non-runners + 1 voided race correctly excluded), **top pick won 14/34 (41.2%)** — independently confirming ChatGPT's number from this project's own freshly-parsed real data, not just trusting the transcription. £1-win P&L **+£29.85**, £2-EW P&L **+£45.22**.
+
+**Stated plainly, not celebrated:** this is a genuinely extraordinary single day, not evidence the model has a real edge — one day is still one day, same discipline as every other real-result day this project has reported.
+
+6 new tests. Full suite: **328/328 pass.** Deployed live.
+
+**Real, concrete recommendation for next session:** `horseracing.net` just proved itself independently, twice (9-for-9 spot check, then 397/398 real matches at full scale) — worth evaluating as the PRIMARY results source going forward, ahead of Racing Post's currently-unreliable meeting-page route, rather than just a backup.

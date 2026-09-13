@@ -117,15 +117,27 @@ Last verified: 2026-09-08 (live checks run this session, see notes per source)
 
 ---
 
+## 6. Live daily results — horseracing.net (found 2026-09-13, genuinely free)
+
+- **URL:** `https://www.horseracing.net/results/<course-slug>/<DD-MM-YY>/` — one real page per course per day, every race on it.
+- **Real, confirmed live:** genuinely fetchable via headless Playwright (real structured HTML, not blocked, unlike Racing Post's currently-unreliable meeting-page route — see docs/BUILD_LOG.md's 2026-09-13 entries). Spot-checked 9 real data points across 3 courses against a fresh live fetch (a win, a non-runner, a voided race, a mid-pack finish, a long-shot winner) — all 9 matched exactly — then ran a full real import: 39/39 races, 398/398 real result rows (1 name-mismatch on our own side).
+- **Real limitation:** no starting_price or distance_beaten parsed yet (not currently extracted from this source's page shape).
+- **Status: LIVE, verified, genuinely free.** `src/providers/horseracingnet_results.py` (parser, tested) + `scripts/import_horseracingnet_results.py` (importer). Worth evaluating as the PRIMARY results source going forward, not just a backup — see BUILD_LOG's recommendation.
+
+---
+
 ## Summary — what's actually live vs blocked right now
 
 | Source | Status | Blocker |
 |---|---|---|
 | Open-Meteo (weather) | **LIVE** | none — working now |
 | Kaggle historical results | **LIVE** — 558,370 real results loaded (2023–2026) | none — done |
-| The Racing API — racecards + results (free tier confirmed) | BLOCKED | needs your account signup (£0, "Get Started Free") + API key |
-| The Racing API — odds | Needs paid tier (£59.99/mo+) or Betfair instead | not on the free tier at all |
-| Betfair Exchange (market prices) | BLOCKED | needs your free developer account + Delayed App Key |
+| The Racing API — racecards (free tier) | **LIVE** | none — signed up, in daily use |
+| The Racing API — results | Needs Basic Plan (£27.99/mo, confirmed live) | real paid-tier decision, not made yet |
+| Racing Post — results (scraped) | LIVE but unreliable (meeting-page route breaks for finished days) | none — real, ongoing fragility |
+| horseracing.net — results (scraped) | **LIVE, verified 2026-09-13** | none — working now |
+| Smarkets Exchange (market prices) | **LIVE** | none — in daily use since RL-era odds work |
+| Betfair Exchange (market prices) | BLOCKED | account suspended even after identity verification |
 | BHA official ratings | Reference only | scraping permission not checked, deliberately deferred |
 
-**The single highest-value unblock: sign up for The Racing API and send me the key.** That alone lights up racecards, results, and odds — three of the four core data feeds — in one step.
+**2026-09-13 update:** the original "sign up for The Racing API" recommendation above is now out of date — racecards, results, and odds are all live via other real sources (The Racing API free tier, horseracing.net/Racing Post, and Smarkets respectively). **The one real open decision now: whether The Racing API's Basic Plan (£27.99/mo, confirmed live) is worth it to REPLACE the scraped results sources with an official API**, given how much real engineering time has gone into working around Racing Post's and (to a lesser extent) horseracing.net's scraping fragility this week.
