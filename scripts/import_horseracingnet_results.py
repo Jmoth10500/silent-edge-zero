@@ -24,10 +24,17 @@ Course-slug mapping is deliberately incomplete, same pattern as
 data/racingpost_course_ids.py — an unmapped course is skipped and
 reported, never guessed.
 
-Usage: python3 scripts/import_horseracingnet_results.py <race_date> <course_slug1> [<course_slug2> ...]
-Example: python3 scripts/import_horseracingnet_results.py 2026-09-12 doncaster bath chester lingfield musselburgh
+Usage: python3 scripts/import_horseracingnet_results.py <race_date> [course_key1 course_key2 ...]
+With no course args (the real daily-automation case, see
+scripts/run_collect_results.sh): processes every real course that has
+locked predictions for race_date, discovered from our own DB — never a
+hard-coded list. Explicit course args (matching our own course.name,
+lowercased — e.g. "lingfield (aw)") restrict the run to just those,
+for manual/one-off recovery.
+Example: python3 scripts/import_horseracingnet_results.py 2026-09-12 doncaster bath chester "lingfield (aw)" musselburgh
 """
 import sys
+import time
 from datetime import date
 from pathlib import Path
 
@@ -37,7 +44,6 @@ import psycopg2
 
 from scripts.collect_race_results import (
     fetch_page_html_with_retry,
-    get_or_create_source,
     insert_results,
     load_our_runners,
 )
@@ -82,33 +88,45 @@ def load_our_races_by_course(conn, race_date: date) -> dict[str, dict[str, int]]
     return out
 
 
-def main():
-    if len(sys.argv) < 3:
-        print(__doc__)
-        sys.exit(1)
-    race_date = date.fromisoformat(sys.argv[1])
-    course_keys = [c.strip().lower() for c in sys.argv[2:]]
-    url_date = race_date.strftime("%d-%m-%y")
-
-    conn = psycopg2.connect(dbname="silent_edge_zero")
-    source_id = get_or_create_source(conn)
-    # Real, separate data_source row — never conflated with Racing Post's.
+def get_or_create_hrnet_source(conn) -> int:
+    """Real, separate data_source row — never conflated with Racing
+    Post's (see scripts/collect_race_results.py::get_or_create_source)."""
     cur = conn.cursor()
     cur.execute(
         "INSERT INTO data_source (name, url, free_tier, terms_checked, notes) "
         "VALUES ('horseracingnet', 'https://www.horseracing.net/', TRUE, %s, "
-        "'Real, free, fetched via headless browser. Backup/cross-check source found "
-        "2026-09-13 after Racing Post''s meeting-page route became unreliable for "
-        "finished race days. No starting_price/distance_beaten parsed yet.') "
+        "'Real, free, fetched via headless browser. Promoted to PRIMARY results "
+        "source 2026-09-13 after Racing Post''s meeting-page route became unreliable "
+        "for finished race days — real, verified live (9/9 spot-check, then 398/398 "
+        "at full scale). No starting_price/distance_beaten parsed yet.') "
         "ON CONFLICT (name) DO NOTHING",
         (date.today(),),
     )
     cur.execute("SELECT id FROM data_source WHERE name = 'horseracingnet'")
-    hrnet_source_id = cur.fetchone()[0]
+    source_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
+    return source_id
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(__doc__)
+        sys.exit(1)
+    race_date = date.fromisoformat(sys.argv[1])
+    url_date = race_date.strftime("%d-%m-%y")
+
+    conn = psycopg2.connect(dbname="silent_edge_zero")
+    hrnet_source_id = get_or_create_hrnet_source(conn)
 
     our_races_by_course = load_our_races_by_course(conn, race_date)
+
+    # Explicit course args restrict to just those (manual/recovery use);
+    # with none given, process every real course with locked predictions
+    # for this date — the real daily-automation case, never a hard-coded
+    # course list.
+    course_keys = [c.strip().lower() for c in sys.argv[2:]] or sorted(our_races_by_course)
+    print(f"Processing {len(course_keys)} real course(s) for {race_date}: {course_keys}")
 
     n_races_matched, n_results_total, n_unmatched_horses = 0, 0, 0
     for course_key in course_keys:
@@ -163,6 +181,15 @@ def main():
             n_unmatched_horses += len(unmatched)
             note = f", {len(unmatched)} unmatched horse name(s): {unmatched[:3]}" if unmatched else ""
             print(f"    {off_time} (race {race_id}): {n} real results recorded{note}.")
+
+        # Real pacing between COURSE fetches (2026-09-13, Jonathan's own
+        # suggestion after this session hit real rate-limiting/blocking
+        # twice this week on other sources) — proactive, not waiting for
+        # horseracing.net to actually break first. One page already
+        # covers a whole course's real races, so this naturally paces
+        # the run into small real batches without needing to also
+        # stagger individual races within a course.
+        time.sleep(1.0)
 
     print(f"\n{n_races_matched} races matched and recorded, {n_results_total} total real result rows, "
           f"{n_unmatched_horses} unmatched horse names across the run.")

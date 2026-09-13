@@ -1077,3 +1077,11 @@ Jonathan: "Ive just Chat GPT the rase pick and got this" — a full 39-race resu
 6 new tests. Full suite: **328/328 pass.** Deployed live.
 
 **Real, concrete recommendation for next session:** `horseracing.net` just proved itself independently, twice (9-for-9 spot check, then 397/398 real matches at full scale) — worth evaluating as the PRIMARY results source going forward, ahead of Racing Post's currently-unreliable meeting-page route, rather than just a backup.
+
+**Same session, acted on immediately ("OK great do that"):** promoted `horseracing.net` to the real primary results source in the daily automated pipeline.
+- `scripts/import_horseracingnet_results.py`: with no course args, now auto-discovers every real course with locked predictions for the given date straight from the DB — never a hard-coded course list. Explicit course args still work, for manual/one-off recovery (as used for Saturday's real backfill).
+- Real proactive pacing added between course fetches (1s), per Jonathan's own suggestion ("Would it help, getting the results in smaller lots") — added BEFORE horseracing.net has shown any real rate-limiting, not after, given this session hit exactly that failure mode twice already this week on other sources (Smarkets, Racing Post).
+- `scripts/run_collect_results.sh`: horseracing.net now runs first (primary); `collect_race_results.py` (Racing Post) still runs second as a real, harmless cross-check — both scripts UPSERT into `runner_result`, so running both back-to-back never conflicts, whichever source actually has a race's real result fills it in.
+- Verified live: auto-detect correctly found today's real 2 courses (Bath, Doncaster) from the DB with zero hard-coding, honestly recorded 0 results for all 16 races (10:10am, none had raced yet) — real, not fabricated. Real settling will happen via tonight's scheduled 21:30 run.
+
+Full suite: **328/328 pass** (no new dedicated tests — `main()`'s auto-detect/pacing logic is DB/network-coupled, same convention as every other collector's `main()` in this repo; exercised by the real live run above).
