@@ -1011,3 +1011,11 @@ Real cause, found the same way as the Doncaster-odds investigation earlier today
 Full suite: **316/316 pass** (no test changes — `load_our_runners` is DB-integration only, same convention as `load_our_races`, exercised by the real live re-run above).
 
 **Checked immediately, not deferred:** grepped the rest of the codebase for any other query sourcing horse_id from `runner_snapshot` instead of `prediction`. Only one other hit — `scripts/derive_recent_form.py` — and it's a one-shot historical backfill already run once over the bulk Kaggle load (not part of the live daily pipeline, so not exposed to cross-run duplication the same way). `generate_dashboard.py`'s own `runner_snapshot` join is safe — it joins FOR extra stats against `prediction.horse_id`, never sources FROM it. No other live-pipeline script affected.
+
+---
+
+## 2026-09-12 — Daily health check false-positived; fixed a real bug in the checker itself
+
+The scheduled health check flagged a real FAIL: "predict_races.log doesn't contain a real 'Deploy is live!' line." Investigated rather than trusting the FAIL at face value — the real pipeline had genuinely succeeded: `predict_races.log` (stdout) showed a real "🚀 Deploy complete" line, and `predict_races_error.log` (stderr) showed "✔ Deploy is live!" twice. Confirmed independently: the live site's own `<title>` tag showed today's real date. **The bug was in `check_pipeline_health.py` itself** — it only ever checked stdout for that one exact literal string, but Netlify's CLI doesn't consistently write that particular spinner-status line to the same stream every run (this run it landed in stderr instead, twice, while a different real success line — "Deploy complete" — was in stdout).
+
+**Real fix:** `check_deploy_log_fresh` now checks BOTH real log files, combined, for EITHER of two real success markers ("Deploy is live!" / "Deploy complete") — a genuine deploy is confirmed by either marker turning up anywhere in the real output, not by one exact string always landing in one exact file. 2 new regression tests (the exact real shape that caused today's false positive, and a genuine no-marker-anywhere failure case to confirm real failures are still caught). Full suite: **318/318 pass.** Re-ran the real health check after the fix: **HEALTHY.**

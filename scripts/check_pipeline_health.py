@@ -56,7 +56,20 @@ def check_predictions_locked(conn, today: date) -> tuple[bool, str]:
     return True, f"{n} real races have locked predictions for {today}."
 
 
+_DEPLOY_SUCCESS_MARKERS = ("Deploy is live!", "Deploy complete")
+
+
 def check_deploy_log_fresh(today: date) -> tuple[bool, str]:
+    """Real bug found and fixed 2026-09-12: this used to check ONLY
+    predict_races.log (stdout) for the literal 'Deploy is live!' line —
+    a real false positive, confirmed live: the deploy genuinely
+    succeeded (site's own title tag showed today's real date), but the
+    Netlify CLI happened to write that particular spinner-status line to
+    STDERR that run instead of stdout (it did so twice, in fact), while
+    stdout still carried its own real 'Deploy complete' success line.
+    Netlify's own stdout/stderr allocation for these lines isn't
+    consistent run to run, so this now checks BOTH real log files for
+    EITHER real success marker, combined."""
     log_path = LOG_DIR / "predict_races.log"
     err_path = LOG_DIR / "predict_races_error.log"
     if not log_path.exists():
@@ -64,17 +77,15 @@ def check_deploy_log_fresh(today: date) -> tuple[bool, str]:
     mtime = date.fromtimestamp(log_path.stat().st_mtime)
     if mtime != today:
         return False, f"predict_races.log last modified {mtime}, not today ({today}) — the job may not have run yet."
-    if "Deploy is live!" not in log_path.read_text():
-        return False, "predict_races.log doesn't contain a real 'Deploy is live!' line — the Netlify deploy may have failed."
-    real_error = ""
+
+    combined_text = log_path.read_text()
     if err_path.exists():
-        err_text = err_path.read_text()
-        # "env: node: No such file or directory" has appeared harmlessly before
-        # (a secondary subprocess, not the real deploy command) — only flag an
-        # error log that does NOT also show the deploy succeeding.
-        if err_text.strip() and "Deploy is live!" not in err_text:
-            real_error = f" (stderr has content and no successful deploy line: {err_text[:200]!r})"
-    return True, f"predict_races.log is fresh ({today}) and shows a real successful deploy.{real_error}"
+        combined_text += err_path.read_text()
+
+    if not any(marker in combined_text for marker in _DEPLOY_SUCCESS_MARKERS):
+        return False, ("Neither predict_races.log nor predict_races_error.log contains a real "
+                        f"success marker ({' / '.join(_DEPLOY_SUCCESS_MARKERS)}) — the Netlify deploy may have failed.")
+    return True, f"predict_races.log is fresh ({today}) and a real successful deploy marker was found."
 
 
 def check_recent_results(conn, today: date) -> tuple[bool, str]:
