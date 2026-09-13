@@ -564,6 +564,16 @@ def test_render_days_tracked_dialog_lists_real_dates_newest_first():
     assert "day-2026-09-10" in html  # onclick target matches the per-day dialog's dom id
 
 
+def test_render_days_tracked_dialog_uses_deferred_open_not_inline_chained_calls():
+    """Real fix (2026-09-13): closing a dialog and immediately opening
+    another in the same synchronous handler is flaky on some WebKit
+    builds. Buttons must call the deferred openDayFromList() helper, not
+    chain .close() and .showModal() inline."""
+    html = render_days_tracked_dialog([date(2026, 9, 10)])
+    assert "openDayFromList('day-2026-09-10')" in html
+    assert "showModal()\"" not in html  # no inline chained showModal in the button itself
+
+
 def test_render_day_history_dialog_shows_win_loss_placed_badges():
     races = [
         {"off_time": time(13, 15), "course_name": "Doncaster", "race_name": "Race A",
@@ -707,6 +717,7 @@ if __name__ == "__main__":
         test_render_track_record_no_caveat_at_20_plus_days,
         test_render_days_tracked_dialog_empty_when_no_dates,
         test_render_days_tracked_dialog_lists_real_dates_newest_first,
+        test_render_days_tracked_dialog_uses_deferred_open_not_inline_chained_calls,
         test_render_day_history_dialog_shows_win_loss_placed_badges,
         test_render_day_history_dialog_shows_tally_of_win_placed_loss,
         test_render_day_history_dialog_shows_result_note_for_non_finishes,

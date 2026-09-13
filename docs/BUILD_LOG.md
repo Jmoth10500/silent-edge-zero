@@ -1043,3 +1043,15 @@ Also added Bath and Musselburgh to `data/racingpost_course_ids.py` (real, expect
 Full suite: **321/321 pass.**
 
 **Real, open decision for Jonathan:** whether to (a) move `collect-results` earlier per-course rather than one fixed 21:30, (b) accept that some days will need this kind of manual/interactive recovery when the automated route fails and treat the health check's results-check as the trigger for that, or (c) leave Saturday's gap as-is (2/39 is a real, honestly-labelled partial day, not a fabricated one) and watch whether today's evening run recovers cleanly before deciding anything is systemically broken.
+
+---
+
+## 2026-09-13 — "Why does clicking a date show nothing?" — real Safari/WebKit dialog-chaining bug
+
+Jonathan: "You have lost the data from all the races? When I click the dates it does not show me the races, wins, place or losses results." Checked the live site's own HTML directly first, and via a real Chrome browser click-through — the real data was completely intact and rendered correctly every time in Chrome (Saturday's real 1 win/1 placed/37 pending, Friday's real 4 wins/8 placed/13 losses, etc.) — nothing was lost.
+
+**Real, likely cause found:** the "Days tracked" list button's `onclick` called `document.getElementById('days-tracked-dialog').close()` immediately followed by `document.getElementById(dayId).showModal()` in the same synchronous handler. Closing a native `<dialog>` and opening a second one in the same call is a known-flaky pattern on some WebKit/Safari builds — the browser's internal dialog state can still be mid-close when the second `showModal()` fires, which silently does nothing rather than throwing a visible error. Jonathan monitors this dashboard on his phone (his own stated reason for wanting it on Netlify in the first place), making iOS Safari the most likely real environment for this to actually bite, even though it couldn't be reproduced in this session's Chrome-based browser tool.
+
+**Real fix:** new `openDayFromList(domId)` JS helper — closes the list dialog, then opens the target day's dialog via a real `setTimeout(..., 0)`, deferring the second call to the next task instead of chaining it inline. This is the standard, safe fix for this exact class of dialog-transition bug and doesn't change behaviour anywhere it already worked (verified live in Chrome, still works correctly after the change). 1 new regression test asserting the button calls the deferred helper rather than chaining `.close()`/`.showModal()` inline.
+
+Full suite: **322/322 pass.** Deployed live.

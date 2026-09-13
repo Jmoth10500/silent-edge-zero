@@ -781,8 +781,7 @@ def render_days_tracked_dialog(dates: list[date]) -> str:
     for d in sorted(dates, reverse=True):
         dom_id = f"day-{d.isoformat()}"
         rows.append(f"""
-        <button class="days-list-row" onclick="document.getElementById('days-tracked-dialog').close();
-          document.getElementById('{dom_id}').showModal()">
+        <button class="days-list-row" onclick="openDayFromList('{dom_id}')">
           <span>{d.strftime('%A %d %B %Y')}</span>
           <span class="days-list-arrow">›</span>
         </button>""")
@@ -1820,6 +1819,21 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
     banner.textContent = todayDayName + "'s predictions are being prepared. " + pageDayName + "'s verified results are available below.";
     banner.hidden = false;
   }})();
+
+  // Real fix (2026-09-13): closing a native <dialog> and immediately
+  // calling showModal() on a second one in the SAME synchronous click
+  // handler is a known-flaky pattern on some WebKit/Safari builds — the
+  // close can still be "in flight" when the second dialog tries to open,
+  // silently failing (nothing visibly opens). A real setTimeout(...,0)
+  // defers the second call to the next task, which is the standard real
+  // fix and works correctly everywhere Chrome already worked too.
+  function openDayFromList(domId) {{
+    document.getElementById('days-tracked-dialog').close();
+    setTimeout(function () {{
+      var target = document.getElementById(domId);
+      if (target) target.showModal();
+    }}, 50);
+  }}
 
   function showDay(which) {{
     ['today', 'tomorrow'].forEach(function (d) {{
