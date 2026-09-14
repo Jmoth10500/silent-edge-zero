@@ -62,6 +62,11 @@ HORSERACINGNET_COURSE_SLUGS: dict[str, str] = {
     "lingfield (aw)": "lingfield",
     "lingfield": "lingfield",
     "musselburgh": "musselburgh",
+    "kempton (aw)": "kempton",
+    "kempton": "kempton",
+    "sedgefield": "sedgefield",
+    "thirsk": "thirsk",
+    "windsor": "windsor",
 }
 
 
