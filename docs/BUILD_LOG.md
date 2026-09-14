@@ -4964,3 +4964,60 @@ result/weather/training data; create accounts on Jonathan's behalf; attempt
 cloud routine (no credentials/real DB here); manufacture new modules/features purely to have
 something to commit; skip re-running the full test suite before committing; send another
 staleness-only push notification.
+
+## 2026-09-14 — Session 51 (autonomous overnight, cloud routine)
+
+**35th consecutive session with this identical stale prompt.** Verified rather than trusted:
+`git fetch origin main` → HEAD already at `a976eef` (Session 50's commit, no drift). `git log
+--all --format='%an' | sort -u` → still only `Claude` and `Jonathan Nuttall`, no new commit from
+Jonathan. `env | grep -iE "racing|kaggle|betfair"` → only the known `CCR_ENABLE_TRACING`
+false-positive; still no `THERACINGAPI_USERNAME`/`PASSWORD`, Kaggle, or Betfair credentials here.
+`src/models/*.py` line/byte counts unchanged from Session 50 (138/5446, 361/18377, 215/10385,
+138/6113); `grep -rn "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` → 0. Did not attempt
+`scripts/collect_racecards.py`, `scripts/collect_weather.py`, `scripts/load_kaggle_historical.py`,
+`scripts/derive_recent_form.py`, `scripts/train_model1.py`, or `scripts/train_model2.py`.
+
+**Conclusion unchanged: Phase 6 (and Phase 7) already satisfy this prompt and go beyond it** (real
+walk-forward validation vs. Model 0, `docs/RESEARCH_LAB.md` RL-006). Nothing left to build blind;
+did not manufacture new work to have something to commit.
+
+**Full suite re-run for real:** `db/setup_local_postgres.sh` + `db/init_db.py` (13 tables) + `pip
+install -r requirements.txt` + `pytest tests/ -q` → **177/177 passed**.
+
+**No push notification sent** — nothing changed since Session 50 (no reply, no new credentials,
+no repo drift), and this exact staleness was already reported (Session 39, now 13 sessions ago).
+Re-flagging an unresolved, unchanged state every night is the noisy repetition a routine should
+avoid.
+
+**Taking up Session 50's housekeeping note myself this time:** this file had grown to ~4,900
+lines / ~385KB, almost entirely near-duplicate re-verification prose from Sessions 17-50 (all
+confirming the same "Phase 6 already done, blocked on Mac-only credentials" fact). Keeping every
+one of those verbatim serves no one — Jonathan re-reading 30+ copies of the same paragraph is
+worse documentation, not better. This entry is deliberately terse for the same reason: going
+forward, a stale-prompt confirmation session should log only what changed (nothing, most nights)
+in a few lines, not restate the full historical context each time. The blocked items and next
+steps below are the durable state; they don't need re-deriving nightly.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset (only on Jonathan's Mac); Racing API results tier (not
+pursuing, Kaggle covers it); racecard surface/going field verification (needs a live API call).
+
+**Next session, in order:**
+1. `git fetch origin main`; check for a reply/new commit from Jonathan; `env | grep -iE
+   "racing|kaggle|betfair"` (ignore the `CCR_ENABLE_TRACING` false-positive).
+2. If still nothing new: re-verify briefly (test suite, model file sizes, TODO grep), log a short
+   entry, do not re-notify for staleness alone. Only notify on a real development (reply, real
+   credentials, or a materially new magnitude).
+3. Mac-only highest-leverage work, unchanged: run `scripts/train_model2.py` against the real
+   Kaggle-loaded DB; wire real `compute_course_distance_draw_bias()` results into
+   `TrainingRace.draw_bias_lookup` on the next `train_model1.py`/`train_model2.py` run; verify
+   `/v1/racecards/free`'s surface/going field live.
+4. Use `db/setup_local_postgres.sh` at the start of any DB-touching session.
+5. Keep entries terse from here on (see housekeeping note above) — don't restate the full 30-
+   session history each time; this entry and the "still blocked" list above are the reference.
+
+**Do NOT do (still applies):** fabricate racecard/odds/result/weather/training data; create
+accounts on Jonathan's behalf; run `scripts/collect_racecards.py`, `scripts/collect_weather.py`,
+`scripts/load_kaggle_historical.py`, `scripts/derive_recent_form.py`, `scripts/train_model1.py`,
+or `scripts/train_model2.py` from this cloud routine; manufacture busywork to have something to
+commit; skip the full test suite before committing; send a staleness-only push notification.
