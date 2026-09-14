@@ -5021,3 +5021,28 @@ accounts on Jonathan's behalf; run `scripts/collect_racecards.py`, `scripts/coll
 `scripts/load_kaggle_historical.py`, `scripts/derive_recent_form.py`, `scripts/train_model1.py`,
 or `scripts/train_model2.py` from this cloud routine; manufacture busywork to have something to
 commit; skip the full test suite before committing; send a staleness-only push notification.
+
+## 2026-09-14 — Session 52 (autonomous overnight, cloud routine)
+
+**36th consecutive session, same stale prompt.** Terse per Session 51's housekeeping note.
+`git fetch origin main` → HEAD unchanged at `d6d68cb` (Session 51's commit). `git log --all
+--format='%an' | sort -u` → still only `Claude`, `Jonathan Nuttall`. `env | grep -iE
+"racing|kaggle|betfair"` → nothing (only the known `CCR_ENABLE_TRACING` false-positive).
+`src/models/*.py` sizes unchanged (138/361/215/138 lines). No TODO/FIXME/XXX in src/scripts/
+tests/db. Did not attempt any Mac-only script.
+
+Full suite re-run: `db/setup_local_postgres.sh` + `db/init_db.py` (13 tables) + `pip install -r
+requirements.txt` + `python3 -m pytest tests/ -q` → **177/177 passed**. (Note: the bare `pytest`
+binary on PATH resolves to a stale install missing `requests`/`scikit-learn` in this container —
+use `python3 -m pytest`, which picks up `/root/.local/lib/python3.11/site-packages` correctly.)
+
+Conclusion unchanged: Phase 6/7 already satisfy and exceed this prompt. Nothing new to build
+blind; did not manufacture busywork. No push notification — nothing changed since Session 51.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same three checks (fetch/log authors/env grep) before anything else; if still
+nothing new, re-verify briefly and log a short entry — don't re-notify for staleness alone, don't
+restate history, don't manufacture work.
