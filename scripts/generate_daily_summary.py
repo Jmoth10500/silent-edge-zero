@@ -13,14 +13,20 @@ this script is what makes it durable and accumulable across days for the
 dashboard's track-record chart (see generate_dashboard.py's
 render_track_record).
 
-**Honest by construction:** a race whose top pick has no settled result
-yet (`runner_result` has no row, or `finishing_position IS NULL` — e.g.
-non-runner/pulled-up) is simply excluded from that day's counts, exactly
-as generate_eod_report.py already treats it as PENDING rather than a
-loss. `races_settled` <= `races_total` always shows how much of the day
-is actually counted. Safe to re-run any time (UPSERT) — running it again
-after more results land just updates the same day's row with better
-numbers, never duplicates it.
+**Honest by construction:** a race whose top pick has no result row at
+all yet (`runner_result` has no row for it) is excluded from that day's
+counts as genuinely PENDING. A race whose top pick has a real terminal
+non-finish instead (`finishing_position IS NULL` but `result_note` is
+set — NR/VOID/PU/F/UR/BD/RR/RO/DSQ/SU/REF/CO/FELL, see
+generate_eod_report.py's VOID_RESULT_CODES) IS counted as settled: a
+non-runner (NR/VOID) settles as a void bet (stake refunded, no win/place),
+any other code means the horse actually ran and didn't finish (a real
+loss). Fixed 2026-09-15 — before this, a non-runner top pick stayed
+excluded from races_settled forever, silently undercounting 3 real past
+days (see docs/BUILD_LOG.md). `races_settled` <= `races_total` always
+shows how much of the day is actually counted. Safe to re-run any time
+(UPSERT) — running it again after more results land just updates the
+same day's row with better numbers, never duplicates it.
 
 Usage: python3 scripts/generate_daily_summary.py [race_date]
 Defaults to today.
@@ -34,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import psycopg2
 
 from scripts.generate_eod_report import (
+    VOID_RESULT_CODES,
     ew_terms_for_field_size,
     load_results,
     load_top_picks_and_favourites,
@@ -62,14 +69,23 @@ def compute_daily_summary(races: list[dict], results: dict) -> dict:
 
         tp_result = results.get((race["race_id"], tp["horse_id"]))
         tp_pos = tp_result[0] if tp_result else None
-        if tp_pos is None:
+        tp_note = tp_result[1] if tp_result else None
+        if tp_pos is None and tp_note is None:
             continue  # real result not in yet — honestly excluded, not a loss
+        # A real terminal non-finish (NR/VOID/PU/F/... — see
+        # generate_eod_report.py's VOID_RESULT_CODES) IS a settled outcome
+        # even though finishing_position stays NULL forever; counting it as
+        # still-pending would mean it never settles. Added 2026-09-15 after
+        # Jonathan asked "there is 6 pending why?" and 3 of those 6 turned
+        # out to be exactly this — a non-runner top pick that had been
+        # silently excluded from races_settled on every past run too.
         races_settled += 1
+        is_void = tp_pos is None and tp_note in VOID_RESULT_CODES
 
         if tp_pos == 1:
             top_pick_wins += 1
         _, _, n_places = ew_terms_for_field_size(field_size)
-        if n_places and tp_pos <= n_places:
+        if tp_pos is not None and n_places and tp_pos <= n_places:
             top_pick_placed += 1
 
         if fav is not None:
@@ -78,13 +94,13 @@ def compute_daily_summary(races: list[dict], results: dict) -> dict:
             if fav_pos == 1:
                 favourite_wins += 1
 
-        wp, _ = settle_win(1.0, tp["exchange_back"], tp_pos)
-        if wp is not None:
+        wp, _ = settle_win(1.0, tp["exchange_back"], tp_pos, tp_note)
+        if wp is not None and not is_void:
             win_stake_total += 1.0
             win_profit += wp
 
-        ep, _ = settle_each_way(2.0, tp["exchange_back"], tp_pos, field_size)
-        if ep is not None:
+        ep, _ = settle_each_way(2.0, tp["exchange_back"], tp_pos, field_size, tp_note)
+        if ep is not None and not is_void:
             ew_stake_total += 2.0
             ew_profit += ep
 

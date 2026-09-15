@@ -1099,3 +1099,27 @@ Jonathan: "Would it be better if these results were put on a database so a Netli
 Full suite: **328/328 pass** (shell-script/plist changes only).
 
 **Same conversation, immediately simplified further:** Jonathan clarified the real goal — "The purpose of this is to build something I can use myself... It does not need to be expensive... cant I just run this locally and it updates once a day? just in case I want to show someone on my mobile?" That's a materially simpler real requirement than "always-live." Removed the just-added hourly `redeploy-dashboard` LaunchAgent and its script entirely — back to the original, simple baseline: **exactly 2 real deploys/day** (07:00/07:15 morning predictions, 21:30 evening results), which already existed before any of this week's changes and never caused a usage problem. Odds still refresh locally every 20 minutes (free, no Netlify involvement) so the DATA stays current even though the deployed PAGE only picks it up twice daily — a real, honest tradeoff Jonathan explicitly said is fine for his actual use case. The real database-backed option (no deploy needed at all for data updates) remains documented above as a live option if he ever wants always-fresh data, but isn't needed for what he actually asked for.
+
+---
+
+## 2026-09-15 — "there is 6 pending why?" — real non-runner top picks mislabelled as PENDING forever
+
+Jonathan: "there is 6 pending why? can you check the results." Investigated directly against the DB rather than guessing.
+
+**Real finding:** of today's 30 races, the top pick's result was NULL for exactly 6. Broke down as:
+- 3 genuinely not yet run (Wolverhampton (AW) 19:30/20:00/20:30 — real future races at the time asked).
+- 3 races that finished hours ago with real, complete `runner_result` rows for every other horse in the race, but the specific top-pick horse was a genuine non-runner (`finishing_position IS NULL`, `result_note = 'NR'`): Regal Tiger (15:47 Yarmouth), Martin's Denuo (17:05 Uttoxeter, same race also had a real "FELL" for another horse), Tredegar Square (17:30 Wolverhampton (AW)).
+
+Not a data-collection bug — the results genuinely exist and are correct. **Real bug found instead:** every place that turns `finishing_position IS NULL` into a status treated it as generic "PENDING" (implying a result is still coming) with no check of `result_note` for a real terminal non-finish. A withdrawn horse's `finishing_position` is NULL *forever* — it was staying "PENDING" permanently, both on the dashboard and, more seriously, in `generate_daily_summary.py::compute_daily_summary`, where it meant that race was **permanently excluded from `races_settled`** — silently undercounting real past days. Confirmed via direct query: 5 such races on 2026-09-12, 1 on 2026-09-13, 3 on 2026-09-15, all already recorded (wrongly) in the live `daily_summary` table.
+
+**Real fix**, same "never call something pending when it's a known permanent outcome" discipline as everywhere else in this project:
+- `scripts/generate_eod_report.py`: `settle_win`/`settle_each_way` now take `result_note`. `VOID_RESULT_CODES = {"NR", "VOID"}` (withdrawn — no bet ever stood, stake refunded, £0 profit). Any other real non-finish code (`PU`/`F`/`UR`/`BD`/`RR`/`RO`/`DSQ`/`SU`/`REF`/`CO`/`FELL` — the horse actually ran) settles as a genuine loss, full stake lost.
+- `scripts/generate_daily_summary.py::compute_daily_summary`: a race is now counted as settled (`races_settled += 1`) whenever *either* a real finishing position *or* a real terminal `result_note` exists — not just position. Re-ran for the 3 affected real past days:
+  - 2026-09-12: was 34/39 settled (41.2% win rate) → now **39/39 settled (35.9%)** — the earlier 41.2% figure (also the one independently cross-checked against Jonathan's pasted ChatGPT table on 2026-09-13) was itself slightly overstated by this same bug; the real, fully-settled figure is 35.9%.
+  - 2026-09-13: 16/17 settled (18.8%) — 1 remaining genuinely has no result row at all yet.
+  - 2026-09-15: 27/30 settled (29.6%) — the 3 still-open are the genuinely future Wolverhampton races.
+- `scripts/generate_dashboard.py::load_race_history`: a real terminal non-finish now gets its own `"NR"` status (day-history dialog badge + tally count), distinct from `"PENDING"`, rather than silently lumped in as still-pending. `render_live_calibration` also now excludes `"NR"` (a non-runner says nothing about model calibration — it never raced).
+
+19 new/updated tests (`test_generate_eod_report.py`, `test_generate_daily_summary.py`, `test_generate_dashboard.py`) covering void-vs-loss settlement and the new NR status/badge. Full suite: **335/335 pass**.
+
+**Real, honest note on the P&L numbers:** this is a genuine correction, not new data — some past days' recorded win-rate/P&L figures shift slightly (always toward more accurate, since previously-excluded genuine losses/voids are now counted). 2026-09-12's headline figure in particular drops from the 41.2% quoted earlier this week to the corrected 35.9%.

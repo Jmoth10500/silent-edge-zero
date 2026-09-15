@@ -105,6 +105,37 @@ def test_multiple_races_accumulate():
     assert summary["win_profit"] == round(4.0 + 1.0, 2)  # (5-1) + (2-1)
 
 
+# Real fix, 2026-09-15 (see docs/BUILD_LOG.md): before this, a non-runner
+# top pick (finishing_position NULL forever) stayed excluded from
+# races_settled permanently — this is the exact bug behind Jonathan's
+# "there is 6 pending why?" question, and it had already silently
+# undercounted 3 real past days in the live daily_summary table.
+
+def test_non_runner_top_pick_counts_as_settled_not_pending():
+    races = [_race(1, 10, 0.3, 5.0, 20, 3.0, 9)]
+    results = {(1, 10): (None, "NR")}  # withdrawn, not still pending
+    summary = compute_daily_summary(races, results)
+    assert summary["races_settled"] == 1
+    assert summary["top_pick_wins"] == 0
+    assert summary["top_pick_placed"] == 0
+    assert summary["win_stake_total"] == 0.0  # void — no bet ever stood
+    assert summary["win_profit"] == 0.0
+    assert summary["ew_stake_total"] == 0.0
+    assert summary["ew_profit"] == 0.0
+
+
+def test_real_non_finish_top_pick_counts_as_settled_loss():
+    races = [_race(1, 10, 0.3, 5.0, 20, 3.0, 9)]
+    results = {(1, 10): (None, "PU")}  # ran, pulled up — a real loss
+    summary = compute_daily_summary(races, results)
+    assert summary["races_settled"] == 1
+    assert summary["top_pick_wins"] == 0
+    assert summary["win_stake_total"] == 1.0
+    assert summary["win_profit"] == -1.0
+    assert summary["ew_stake_total"] == 2.0
+    assert summary["ew_profit"] == -2.0
+
+
 if __name__ == "__main__":
     tests = [
         test_empty_races_gives_all_zero,
@@ -116,6 +147,8 @@ if __name__ == "__main__":
         test_favourite_win_counted_separately_from_top_pick,
         test_no_price_race_excluded_from_pnl_but_not_from_settled_count,
         test_multiple_races_accumulate,
+        test_non_runner_top_pick_counts_as_settled_not_pending,
+        test_real_non_finish_top_pick_counts_as_settled_loss,
     ]
     passed = 0
     for t in tests:

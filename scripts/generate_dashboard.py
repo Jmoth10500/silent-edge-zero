@@ -255,8 +255,19 @@ def load_race_history(conn, race_dates: list[date]) -> dict[date, list[dict]]:
             continue  # rows are ordered by probability desc — first row per race is the real top pick
         seen_races.add(race_id)
         _, _, n_places = ew_terms_for_field_size(field_size)
-        if position is None:
+        if position is None and result_note is None:
             status = "PENDING"
+        elif position is None:
+            # A real terminal non-finish (NR/VOID = withdrawn, never ran;
+            # PU/F/UR/BD/RR/RO/DSQ/SU/REF/CO/FELL = ran but didn't finish)
+            # — a known, permanent outcome, not still-pending. Grouped into
+            # one "NR" status bucket for display (the exact code is still
+            # shown in result_note's own text, see render_day_history_dialog)
+            # rather than one badge class per raw code. Found 2026-09-15
+            # investigating Jonathan's "there is 6 pending why?" — 3 of the
+            # 6 were real non-runners the dashboard had been mislabelling
+            # as PENDING forever. See docs/BUILD_LOG.md.
+            status = "NR"
         elif position == 1:
             status = "WIN"
         elif n_places and position <= n_places:
@@ -798,9 +809,9 @@ def render_day_history_dialog(day: date, races: list[dict]) -> str:
     real model probability, and its real settled outcome — WIN, PLACED
     (within that race's real each-way terms), LOSS, or PENDING if no
     real result has been collected yet. Never a guessed outcome."""
-    badge_class = {"WIN": "win", "PLACED": "placed", "LOSS": "loss", "PENDING": "pending"}
+    badge_class = {"WIN": "win", "PLACED": "placed", "LOSS": "loss", "PENDING": "pending", "NR": "nr"}
 
-    tally = {"WIN": 0, "PLACED": 0, "LOSS": 0, "PENDING": 0}
+    tally = {"WIN": 0, "PLACED": 0, "LOSS": 0, "PENDING": 0, "NR": 0}
     for r in races:
         tally[r["status"]] += 1
     tally_html = f"""
@@ -809,6 +820,7 @@ def render_day_history_dialog(day: date, races: list[dict]) -> str:
       <span class="dayhist-tally-item dayhist-badge-placed">{tally['PLACED']} placed</span>
       <span class="dayhist-tally-item dayhist-badge-loss">{tally['LOSS']} loss{'es' if tally['LOSS'] != 1 else ''}</span>
       {f'<span class="dayhist-tally-item dayhist-badge-pending">{tally["PENDING"]} pending</span>' if tally['PENDING'] else ''}
+      {f'<span class="dayhist-tally-item dayhist-badge-nr">{tally["NR"]} non-runner{"s" if tally["NR"] != 1 else ""}</span>' if tally['NR'] else ''}
     </div>"""
 
     rows = []
@@ -955,7 +967,11 @@ def render_live_calibration(race_history: dict[date, list[dict]]) -> str:
     records = []
     for races in race_history.values():
         for r in races:
-            if r["status"] == "PENDING":
+            if r["status"] in ("PENDING", "NR"):
+                # NR excluded too, not just PENDING — a non-runner never
+                # actually raced, so it says nothing about whether the
+                # model's probability was calibrated. Added 2026-09-15
+                # alongside the NR status fix.
                 continue
             records.append((r["model_probability"], r["status"] == "WIN"))
     if not records:
@@ -1494,6 +1510,7 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
   .dayhist-badge-placed {{ background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }}
   .dayhist-badge-loss {{ background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }}
   .dayhist-badge-pending {{ background: var(--surface-2); color: var(--text-muted); }}
+  .dayhist-badge-nr {{ background: var(--surface-2); color: var(--text-muted); font-style: italic; }}
 
   .dayhist-tally {{ display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }}
   .dayhist-tally-item {{

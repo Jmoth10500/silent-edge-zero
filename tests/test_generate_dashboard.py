@@ -629,6 +629,21 @@ def test_render_day_history_dialog_shows_result_note_for_non_finishes():
     assert "PU" in html
 
 
+def test_render_day_history_dialog_shows_non_runner_as_nr_not_pending():
+    # Real fix, 2026-09-15 — a non-runner top pick is a known terminal
+    # outcome, not still PENDING (see docs/BUILD_LOG.md's 2026-09-15 entry,
+    # Jonathan's "there is 6 pending why?"). load_race_history now assigns
+    # status "NR" for these; this checks the render side handles that
+    # status without KeyError-ing on badge_class/tally.
+    races = [{"off_time": time(15, 47), "course_name": "Yarmouth", "race_name": "Race A",
+              "horse_name": "Regal Tiger", "model_probability": 0.3, "finishing_position": None,
+              "result_note": "NR", "field_size": 11, "status": "NR"}]
+    html = render_day_history_dialog(date(2026, 9, 15), races)
+    assert "dayhist-badge-nr\">NR" in html
+    assert "1 non-runner" in html
+    assert "NR" in html  # shown as the result text too, not "result pending"
+
+
 def test_render_live_calibration_empty_when_no_settled_races():
     race_history = {date(2026, 9, 10): [
         {"off_time": time(13, 15), "course_name": "Doncaster", "race_name": "Race A",
@@ -721,6 +736,7 @@ if __name__ == "__main__":
         test_render_day_history_dialog_shows_win_loss_placed_badges,
         test_render_day_history_dialog_shows_tally_of_win_placed_loss,
         test_render_day_history_dialog_shows_result_note_for_non_finishes,
+        test_render_day_history_dialog_shows_non_runner_as_nr_not_pending,
         test_render_live_calibration_empty_when_no_settled_races,
         test_render_live_calibration_empty_with_no_history,
         test_render_live_calibration_buckets_real_settled_races_and_excludes_pending,

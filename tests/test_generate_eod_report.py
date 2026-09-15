@@ -87,6 +87,36 @@ def test_settle_each_way_win_only_field_voids_place_portion():
     assert "void" in note
 
 
+# Real, terminal non-finish states (2026-09-15, see docs/BUILD_LOG.md) —
+# a withdrawn horse (NR/VOID) never had a bet stand at all, so the stake
+# is refunded (profit 0), not still PENDING and not a loss. Any other
+# code (PU/F/UR/BD/RR/RO/DSQ/SU/REF/CO/FELL) means the horse actually
+# ran and didn't finish — a real loss.
+
+def test_settle_win_non_runner_is_void_not_pending():
+    profit, note = settle_win(1.0, 5.0, None, "NR")
+    assert profit == 0.0
+    assert "VOID" in note and "NR" in note
+
+
+def test_settle_win_real_non_finish_is_a_loss():
+    profit, note = settle_win(1.0, 5.0, None, "PU")
+    assert profit == -1.0
+    assert "PU" in note
+
+
+def test_settle_each_way_non_runner_is_void_not_pending():
+    profit, note = settle_each_way(2.0, 5.0, None, 9, "NR")
+    assert profit == 0.0
+    assert "VOID" in note
+
+
+def test_settle_each_way_real_non_finish_is_a_full_loss():
+    profit, note = settle_each_way(2.0, 5.0, None, 9, "F")
+    assert profit == -2.0
+    assert "F" in note
+
+
 if __name__ == "__main__":
     tests = [
         test_ew_terms_real_field_size_bands,
@@ -100,6 +130,10 @@ if __name__ == "__main__":
         test_settle_each_way_real_place_only,
         test_settle_each_way_real_neither_wins_nor_places,
         test_settle_each_way_win_only_field_voids_place_portion,
+        test_settle_win_non_runner_is_void_not_pending,
+        test_settle_win_real_non_finish_is_a_loss,
+        test_settle_each_way_non_runner_is_void_not_pending,
+        test_settle_each_way_real_non_finish_is_a_full_loss,
     ]
     passed = 0
     for t in tests:

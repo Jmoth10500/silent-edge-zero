@@ -137,26 +137,52 @@ def load_results(conn, race_date: date):
     return {(race_id, horse_id): (pos, note) for race_id, horse_id, pos, note in rows}
 
 
-def settle_win(stake: float, odds: float | None, position: int | None):
-    """Real settlement for a straight win bet. Returns (profit_or_None, note)."""
+# Real result_note codes that mean "no bet ever stood" (the horse was
+# withdrawn before the race) — stake is void/refunded, not lost. Distinct
+# from a real non-finish (PU/F/UR/BD/RR/RO/DSQ/SU/REF/CO/FELL — the horse
+# actually ran) which is a genuine loss. Found 2026-09-15 investigating
+# Jonathan's "there is 6 pending why?" — 3 of those 6 were real NR top
+# picks that this script (and generate_daily_summary.py, which reuses
+# these functions) had been silently leaving PENDING forever, since a
+# withdrawn horse's finishing_position is NULL for good, never settling.
+# See docs/BUILD_LOG.md's 2026-09-15 entry.
+VOID_RESULT_CODES = {"NR", "VOID"}
+
+
+def settle_win(stake: float, odds: float | None, position: int | None,
+                result_note: str | None = None):
+    """Real settlement for a straight win bet. Returns (profit_or_None, note).
+    result_note distinguishes a genuinely pending result (None) from a real
+    terminal non-finish (NR/VOID = stake refunded; any other code = the
+    horse ran and didn't finish, a real loss) — see VOID_RESULT_CODES."""
     if odds is None:
         return None, "no real price available"
     if position is None:
-        return None, "PENDING — result not yet collected"
+        if result_note is None:
+            return None, "PENDING — result not yet collected"
+        if result_note in VOID_RESULT_CODES:
+            return 0.0, f"VOID ({result_note}) — non-runner, stake refunded"
+        return round(-stake, 2), f"lost — did not finish ({result_note})"
     if position == 1:
         return round(stake * (odds - 1), 2), "WON"
     return round(-stake, 2), "lost"
 
 
 def settle_each_way(total_stake: float, odds: float | None, position: int | None,
-                     field_size: int):
+                     field_size: int, result_note: str | None = None):
     """Real each-way settlement: total_stake split evenly win/place (e.g. £2
-    total = £1 win + £1 place). Returns (profit_or_None, note)."""
+    total = £1 win + £1 place). Returns (profit_or_None, note). result_note
+    as in settle_win — distinguishes real PENDING from a terminal NR/VOID
+    (whole stake refunded) or a real non-finish (whole stake lost)."""
     label, frac, n_places = ew_terms_for_field_size(field_size)
     if odds is None:
         return None, f"no real price available ({label})"
     if position is None:
-        return None, f"PENDING — result not yet collected ({label})"
+        if result_note is None:
+            return None, f"PENDING — result not yet collected ({label})"
+        if result_note in VOID_RESULT_CODES:
+            return 0.0, f"VOID ({result_note}) — non-runner, stake refunded ({label})"
+        return round(-total_stake, 2), f"lost — did not finish ({result_note}) ({label})"
     win_stake = total_stake / 2
     place_stake = total_stake / 2
     if frac is None:  # win-only terms, e.g. small field
@@ -213,11 +239,13 @@ def main():
         field_size = race["field_size"]
         tp_result = results.get((race["race_id"], tp["horse_id"]))
         tp_pos = tp_result[0] if tp_result else None
+        tp_note = tp_result[1] if tp_result else None
 
         print(f"\n{race['off_time']}  {race['course_name']}  {race['race_name']}  ({field_size} runners)")
+        tp_result_str = ("pos " + str(tp_pos)) if tp_pos else (tp_note if tp_note else "PENDING")
         print(f"  Top pick:  {tp['horse_name']:<24} model p={tp['model_probability']:.3f}  "
               f"price={'%.2f' % tp['exchange_back'] if tp['exchange_back'] else 'n/a'}  "
-              f"result={'pos ' + str(tp_pos) if tp_pos else 'PENDING'}")
+              f"result={tp_result_str}")
 
         if fav:
             fav_result = results.get((race["race_id"], fav["horse_id"]))
@@ -228,8 +256,8 @@ def main():
         else:
             print("  Favourite: no real market price available for this race")
 
-        win_profit, win_note = settle_win(1.0, tp["exchange_back"], tp_pos)
-        ew_profit, ew_note = settle_each_way(2.0, tp["exchange_back"], tp_pos, field_size)
+        win_profit, win_note = settle_win(1.0, tp["exchange_back"], tp_pos, tp_note)
+        ew_profit, ew_note = settle_each_way(2.0, tp["exchange_back"], tp_pos, field_size, tp_note)
         print(f"  £1 win stake:      {('£%.2f' % win_profit) if win_profit is not None else 'PENDING':<10} ({win_note})")
         print(f"  £2 each-way stake: {('£%.2f' % ew_profit) if ew_profit is not None else 'PENDING':<10} ({ew_note})")
 
