@@ -5341,3 +5341,38 @@ surface/going field verification (needs a live API call).
 trusting an author-history result) before anything else; if still nothing new, re-verify briefly
 and log a short entry — don't re-notify for staleness alone, don't restate history, don't
 manufacture work.
+
+## 2026-09-15 — Session 64 (autonomous overnight, cloud routine)
+
+**48th consecutive session, same stale prompt.** `git fetch origin main` → origin/main == HEAD ==
+`bb4977d` (Session 63's commit), no drift. `git fetch --unshallow` → full history restored; newest
+Jonathan-authored commit still `e42411f` (2026-09-08, "RL-007 resolved"), now a full week old, no
+reply. `env | grep -i THERACINGAPI` → empty, as expected in this cloud environment (Mac-only
+credentials, did not attempt `collect_racecards.py` or `collect_weather.py`). `src/models/*.py`
+sizes unchanged (138/361/215/138 lines; 5446/18377/10385/6113 bytes);
+`src/providers/racecard_theracingapi.py` unchanged (116 lines). No TODO/FIXME/XXX in
+src/scripts/tests/db.
+
+Full suite re-run: `db/setup_local_postgres.sh` + `db/init_db.py` (13 tables) + `pip install -r
+requirements.txt` + `python3 -m pytest tests/ -q` → **177/177 passed**.
+
+Conclusion unchanged: `model1_logistic_baseline.py` (Phase 6, fitted per-race logistic/softmax
+baseline over synthetic fixtures shaped exactly like the real racecard schema, clearly labeled
+not-a-real-prediction, probabilities summing to ~1.0/race) already satisfies this session's prompt;
+Phase 7's gradient-boosting models go further. Nothing new to build blind; did not manufacture
+busywork.
+
+**No push notification.** Same reasoning as Sessions 39/50/54-63: the schedule's stored prompt is
+permanently satisfied and needs a human to update or pause it; nothing has changed since last
+night (no reply, no repo changes, no new credentials, same 177/177-passing codebase). Repeating the
+same page every night is exactly the noise a scheduled routine should avoid, so this stays a log
+entry, not a notification.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same three checks (fetch/log authors/env grep — `--unshallow` first) before
+anything else; if still nothing new, re-verify briefly and log a short entry — don't re-notify for
+staleness alone, don't restate history, don't manufacture work. File is now ~5,380 lines / ~420KB;
+the trim/archive suggestion (Session 50) still stands and still needs a human call.
