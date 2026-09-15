@@ -5302,3 +5302,42 @@ surface/going field verification (needs a live API call).
 nothing new, re-verify briefly and log a short entry — don't re-notify for staleness alone, don't
 restate history, don't manufacture work. This file is now ~5,300 lines / ~415KB; the trim/archive
 suggestion from Session 50 still stands and still needs a human call, not a unilateral edit here.
+
+## 2026-09-15 — Session 63 (autonomous overnight, cloud routine)
+
+**47th consecutive session, same stale prompt.** `git fetch origin main` → origin/main == HEAD ==
+`95672d8` (Session 62's commit), no drift. `env | grep -i THERACINGAPI` → empty, as expected in
+this cloud environment. `src/models/*.py` sizes unchanged (138/361/215/138 lines);
+`src/providers/racecard_theracingapi.py` unchanged (116 lines). No TODO/FIXME/XXX in
+src/scripts/tests/db.
+
+**Correction to Session 60's correction:** `git log --author="Jonathan"` initially returned nothing
+this session — but that's because this clone is shallow (`git rev-parse --is-shallow-repository` →
+true, capped at 50 commits) and each nightly commit pushes the shallow horizon forward, eventually
+cutting the human-authored history out of the visible window. `git fetch --unshallow` restored the
+full 66-commit history: both `e42411f` and `4935d67` do exist and are real Jonathan Nuttall commits
+from 2026-09-08 (`git show -s` confirms `Jonathan Nuttall <jonathan@thisisimas.com>` on both) —
+Session 60 was wrong that `e42411f` "doesn't resolve"; it just wasn't fetched yet. Newest
+Jonathan-authored commit is still `e42411f` (2026-09-08, "RL-007 resolved"), one week ago now, no
+reply since. Future sessions: run `git fetch --unshallow` (or at least a deep-enough fetch) before
+concluding a hash is bogus or that authorship history has gone missing.
+
+Full suite re-run: `db/setup_local_postgres.sh` + `db/init_db.py` (13 tables) + `pip install -r
+requirements.txt` + `python3 -m pytest tests/ -q` → **177/177 passed**.
+
+Conclusion unchanged: `model1_logistic_baseline.py` (Phase 6) already satisfies this session's
+prompt; Phase 7 goes further. Nothing new to build blind; did not manufacture busywork.
+
+**No push notification.** Same reasoning as Sessions 39/50/54-62: the schedule's stored prompt is
+permanently satisfied and needs a human to update or pause it; nothing has changed since last
+night (no reply, no repo changes, no new credentials, same 177/177-passing codebase). Not
+re-notifying for staleness alone.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same three checks (fetch/log authors/env grep — remember to `--unshallow` before
+trusting an author-history result) before anything else; if still nothing new, re-verify briefly
+and log a short entry — don't re-notify for staleness alone, don't restate history, don't
+manufacture work.
