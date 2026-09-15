@@ -5243,3 +5243,27 @@ surface/going field verification (needs a live API call).
 **Next session:** same three checks (fetch/log authors/env grep) before anything else; if still
 nothing new, re-verify briefly and log a short entry — don't re-notify for staleness alone, don't
 restate history, don't manufacture work.
+
+## 2026-09-15 — Session 61 (autonomous overnight, cloud routine)
+
+**45th consecutive session, same stale prompt.** `git fetch origin main` → origin/main == HEAD ==
+`ba9a185` (Session 60's commit), no drift. `git log --all --author="Jonathan"` → newest still
+`4935d67` (2026-09-08), no reply. `env | grep -iE "racing|kaggle|betfair"` → only the known
+`CCR_ENABLE_TRACING` false-positive, no real credentials
+(`THERACINGAPI_USERNAME`/`PASSWORD` not set here, as expected). `src/models/*.py` sizes unchanged
+(138/361/215/138 lines, 5446/18377/10385/6113 bytes). No TODO/FIXME/XXX in src/scripts/tests/db.
+Did not attempt any Mac-only script.
+
+Full suite re-run: `db/setup_local_postgres.sh` + `db/init_db.py` (13 tables) + `pip install -r
+requirements.txt` + `python3 -m pytest tests/ -q` → **177/177 passed**.
+
+Conclusion unchanged: Phase 6/7 already satisfy and exceed this prompt. Nothing new to build
+blind; did not manufacture busywork. No push notification — nothing changed since Session 60.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same three checks (fetch/log authors/env grep) before anything else; if still
+nothing new, re-verify briefly and log a short entry — don't re-notify for staleness alone, don't
+restate history, don't manufacture work.
