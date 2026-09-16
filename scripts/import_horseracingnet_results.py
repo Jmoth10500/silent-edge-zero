@@ -72,6 +72,9 @@ HORSERACINGNET_COURSE_SLUGS: dict[str, str] = {
     "wolverhampton (aw)": "wolverhampton",
     "wolverhampton": "wolverhampton",
     "yarmouth": "yarmouth",
+    "beverley": "beverley",
+    "kelso": "kelso",
+    "sandown": "sandown",
 }
 
 
