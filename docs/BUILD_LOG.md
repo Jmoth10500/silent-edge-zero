@@ -5588,3 +5588,39 @@ surface/going field verification (needs a live API call).
 anything else; if still nothing new, re-verify briefly and log a short entry — don't re-notify for
 staleness alone, don't restate history, don't manufacture work. The trim/archive suggestion
 (Session 50) still stands and still needs a human call.
+
+## 2026-09-16 — Session 71 (autonomous overnight, cloud routine)
+
+**55th consecutive session, same stale prompt.** `git fetch origin main` → origin/main == local
+`main` == `12697b6` (Session 70's commit); this session's checkout started in a detached HEAD 8
+commits ahead of the local `main` ref (Sessions 63-70), which looked at first like unpushed work
+from prior sessions — fetching origin confirmed it was already on `origin/main` (repo was already
+fully unshallowed; the local `main` ref was just stale before the fetch). Fast-forwarded local
+`main` to match, no actual drift, no data was ever at risk. `git log --author=Jonathan -1` → still
+`e42411f` (2026-09-08, "RL-007 resolved"), now 8 days old, no reply. `env | grep -i THERACINGAPI` →
+empty, as expected in this cloud environment (Mac-only credentials; did not attempt
+`collect_racecards.py` or `collect_weather.py`). `src/models/*.py` and
+`src/providers/racecard_theracingapi.py` line counts unchanged (0/138/361/215/138/116). No
+TODO/FIXME/XXX in src/scripts/tests/db.
+
+Full suite re-run: `db/setup_local_postgres.sh` + `db/init_db.py` (13 tables) + `pip install -r
+requirements.txt` + `python3 -m pytest tests/ -q` → **177/177 passed**.
+
+Conclusion unchanged: `model1_logistic_baseline.py` (Phase 6) already satisfies this session's
+prompt and has since been exceeded (RL-006/RL-007 walk-forward validation, Phase 7 gradient
+boosting). Nothing new to build blind; did not manufacture busywork.
+
+**No push notification.** Same reasoning as Sessions 39/50/54-70: nothing has changed since last
+session (no reply, no repo drift, same 177/177-passing codebase); the underlying issue was already
+surfaced once (Session 39) and repeating it every session is exactly the noise a scheduled routine
+should avoid.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same three checks (fetch/log authors/env grep) before anything else — note the
+repo is a full clone now, not shallow, so `--unshallow` is a no-op; if still nothing new, re-verify
+briefly and log a short entry — don't re-notify for staleness alone, don't restate history, don't
+manufacture work. The trim/archive suggestion (Session 50) still stands and still needs a human
+call.
