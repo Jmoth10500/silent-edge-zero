@@ -5516,3 +5516,38 @@ surface/going field verification (needs a live API call).
 anything else; if still nothing new, re-verify briefly and log a short entry — don't re-notify for
 staleness alone, don't restate history, don't manufacture work. The trim/archive suggestion
 (Session 50) still stands and still needs a human call.
+
+## 2026-09-16 — Session 69 (autonomous overnight, cloud routine)
+
+**53rd consecutive session, same stale prompt.** `git fetch origin main` → origin/main == HEAD ==
+`da90b38` (Session 68's commit), no drift. `git fetch --unshallow` → full history restored; newest
+Jonathan-authored commit still `e42411f` (2026-09-08, "RL-007 resolved"), now 8 days old, no reply.
+`env | grep -i THERACINGAPI` → empty, as expected in this cloud environment (Mac-only credentials;
+did not attempt `collect_racecards.py` or `collect_weather.py`). `src/models/*.py` sizes unchanged
+(0/138/361/215/138 lines for `__init__`/`model0_market_baseline`/`model1_logistic_baseline`/
+`model2_gradient_boosting`/`model2_hyperparameter_sweep`); `src/providers/racecard_theracingapi.py`
+unchanged (116 lines). No TODO/FIXME/XXX in src/scripts/tests/db.
+
+Full suite re-run: `db/setup_local_postgres.sh` + `db/init_db.py` (13 tables) + `pip install -r
+requirements.txt` + `python3 -m pytest tests/ -q` → **177/177 passed**.
+
+Conclusion unchanged: `model1_logistic_baseline.py` (Phase 6) already satisfies this session's
+prompt (per-race softmax baseline over synthetic fixtures shaped exactly like the real racecard
+schema, explicitly labeled not-a-real-prediction, probabilities summing to ~1.0/race); it has since
+also been walk-forward validated against real historical outcomes (RL-006/RL-007), and Phase 7 adds
+gradient-boosting models on top. Nothing new to build blind; did not manufacture busywork.
+
+**No push notification.** Same reasoning as Sessions 39/50/54-68: nothing has changed since last
+session (no reply, no repo changes, no new credentials, same 177/177-passing codebase); the
+underlying issue (this schedule's stored prompt is permanently satisfied and needs a human to
+update or pause it) was already surfaced repeatedly and repeating it every session is exactly the
+noise a scheduled routine should avoid.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same three checks (fetch/log authors/env grep — `--unshallow` first) before
+anything else; if still nothing new, re-verify briefly and log a short entry — don't re-notify for
+staleness alone, don't restate history, don't manufacture work. The trim/archive suggestion
+(Session 50) still stands and still needs a human call.
