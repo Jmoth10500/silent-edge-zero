@@ -1,2 +1,14 @@
 [build]
   publish = "site"
+
+# Real, whole-site HTTP Basic Auth gate — added 2026-09-16, REMOVED same
+# day (Jonathan: "can you take the password off... so ChatGPT can access
+# the site") — ChatGPT's own browsing can't get past a Basic Auth prompt,
+# and that mattered more than the gate. The edge function itself
+# (netlify/edge-functions/basic-auth.ts) and its env vars
+# (BASIC_AUTH_USER/BASIC_AUTH_PASS) are left in place, just unregistered
+# here — re-enable by uncommenting this block if password protection is
+# wanted again later.
+# [[edge_functions]]
+#   path = "/*"
+#   function = "basic-auth"

@@ -1,0 +1,49 @@
+// Real HTTP Basic Auth gate for the whole silent-edge-zero site — added
+// 2026-09-16, Jonathan: "I need a password protection on it please."
+// Runs server-side on every request (Netlify Edge Function, free tier),
+// before any page/asset is served — never a client-side JS prompt that a
+// viewer could bypass by reading the page source.
+//
+// Credentials are real, live Netlify environment variables
+// (BASIC_AUTH_USER / BASIC_AUTH_PASS), never hardcoded here — set via
+// `netlify env:set`, same discipline as every other secret in this
+// project (see .env.example). If either var is genuinely unset, this
+// fails CLOSED (blocks everything, 500) rather than silently letting
+// requests through unauthenticated.
+export default async (request: Request) => {
+  const user = Netlify.env.get("BASIC_AUTH_USER");
+  const pass = Netlify.env.get("BASIC_AUTH_PASS");
+
+  if (!user || !pass) {
+    return new Response(
+      "Site misconfigured: BASIC_AUTH_USER/BASIC_AUTH_PASS not set in Netlify environment variables.",
+      { status: 500 },
+    );
+  }
+
+  const authHeader = request.headers.get("authorization");
+  if (authHeader) {
+    const [scheme, encoded] = authHeader.split(" ");
+    if (scheme === "Basic" && encoded) {
+      let decoded = "";
+      try {
+        decoded = atob(encoded);
+      } catch {
+        // malformed base64 — fall through to the 401 below
+      }
+      const sepIndex = decoded.indexOf(":");
+      const givenUser = sepIndex >= 0 ? decoded.slice(0, sepIndex) : "";
+      const givenPass = sepIndex >= 0 ? decoded.slice(sepIndex + 1) : "";
+      if (givenUser === user && givenPass === pass) {
+        return; // pass through to the real site
+      }
+    }
+  }
+
+  return new Response("Authentication required.", {
+    status: 401,
+    headers: { "WWW-Authenticate": 'Basic realm="Silent Edge Zero", charset="UTF-8"' },
+  });
+};
+
+export const config = { path: "/*" };
