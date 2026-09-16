@@ -5695,3 +5695,52 @@ shallow again, `git log --author=Jonathan -1`, env grep) before anything else; i
 new, re-verify briefly and log a short entry — don't re-notify for staleness alone, don't restate
 history, don't manufacture work. The trim/archive suggestion (Session 50) still stands and still
 needs a human call.
+
+## 2026-09-16 — Session 74 (autonomous overnight, cloud routine)
+
+**58th consecutive session, same stale prompt.** Fresh container started shallow again; `git fetch
+origin main` → `origin/main` == local `HEAD` == `654d557` (Session 73's commit), no drift. `git
+fetch --unshallow` was a no-op — this container's initial checkout already had full history (77
+commits). `git log --author=Jonathan -1` → still `e42411f` (2026-09-08, "RL-007 resolved"), now 8
+days old, no reply. `env | grep -i THERACINGAPI` → empty, as expected in this cloud environment
+(Mac-only credentials; did not attempt `collect_racecards.py` or `collect_weather.py`).
+`src/models/*.py` and `src/providers/racecard_theracingapi.py` line counts unchanged
+(0/138/361/215/138/116). No TODO/FIXME/XXX in src/scripts/tests/db. Re-read
+`model1_logistic_baseline.py`'s module docstring directly: still a per-race multinomial-logit/
+softmax baseline over synthetic fixtures shaped exactly like the real racecard schema
+(`official_rating` int, `draw` int, `recent_form` as `"1582F3"`-style string), explicitly labeled
+not-a-real-prediction where relevant, probabilities summing to 1.0 per race by construction —
+exactly this session's prompt's "Phase 6" ask, already built, tested, and since exceeded
+(walk-forward validated against real historical outcomes per RL-006/RL-007; Phase 7 adds
+gradient-boosting models on top).
+
+One new wrinkle this session: `pip install -r requirements.txt` hit repeated
+`ReadTimeoutError` from `files.pythonhosted.org` on the first two attempts (large scikit-learn/
+numpy/scipy wheels over a slow connection, not a proxy issue — `pypi.org` and
+`files.pythonhosted.org` are both in the environment's `noProxy` list, so this bypassed the proxy
+entirely). Installing the small packages first (`psycopg2-binary`, `python-dotenv`, `pytest`) then
+retrying `scikit-learn` alone with `--timeout 280 --retries 6` succeeded. Logging this in case a
+future session hits the same timeout and wonders whether it's a credentials or policy problem —
+it isn't; it's ordinary network flakiness on a big download, worth a longer `--timeout` and/or
+splitting the install, not a blocker to escalate.
+
+Full suite re-run: `db/setup_local_postgres.sh` + `db/init_db.py` (13 tables) + `pip install`
+(as above) + `python3 -m pytest tests/ -q` → **177/177 passed**.
+
+Conclusion unchanged: nothing new to build blind; did not manufacture busywork.
+
+**No push notification.** Same reasoning as Sessions 39/50/54-73: nothing has changed since last
+session (no reply, no repo drift, same 177/177-passing codebase); the underlying issue (this
+schedule's stored prompt is permanently satisfied and needs a human to update or pause it) was
+already surfaced once (Session 39) and repeating it every session is exactly the noise a scheduled
+routine should avoid.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same checks (fetch origin/main, `--unshallow` since each fresh container starts
+shallow again, `git log --author=Jonathan -1`, env grep) before anything else; if still nothing
+new, re-verify briefly and log a short entry — don't re-notify for staleness alone, don't restate
+history, don't manufacture work. The trim/archive suggestion (Session 50) still stands and still
+needs a human call.
