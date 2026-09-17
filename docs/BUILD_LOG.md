@@ -5942,3 +5942,20 @@ Racing API results tier (not pursuing), racecard surface/going field verificatio
 **Next session:** same checks; if still nothing new, log one short entry (a few lines, not a full
 restatement) and stop. Session 50's trim/archive suggestion for this file (now ~5900 lines,
 almost entirely repeated no-op sessions) still stands and still needs a human call.
+
+## 2026-09-17 — Session 81 (autonomous overnight, cloud routine)
+
+**65th consecutive session, same stale prompt, no change.** `git fetch origin main` — no drift
+(container already at Session 80's `dc8ac20`, HEAD detached). Unshallowed; `git log
+--author=Jonathan -1` → still `e42411f` (2026-09-08), now 9 days old, no reply. `env | grep -i
+THERACINGAPI` → empty (Mac-only; did not attempt `collect_racecards.py`/`collect_weather.py`).
+`src/models/*.py` + `racecard_theracingapi.py` line counts unchanged (0/138/361/215/138/116). No
+TODO/FIXME/XXX. `model1_logistic_baseline.py` docstring re-read directly: still Phase 6, still
+satisfies this session's prompt verbatim, still superseded by Phase 7/RL-006/RL-007. Full suite
+re-run (`setup_local_postgres.sh` + `init_db.py` (13 tables) + `pip install` + `pytest tests/ -q`)
+→ **177/177 passed**. No push notification — same reasoning as Sessions 39/50/54-80. **Still
+blocked (unchanged, Mac-only):** Betfair Delayed App Key, Kaggle dataset, Racing API results tier
+(not pursuing), racecard surface/going field verification.
+
+**Next session:** same checks; if still nothing new, log one short entry and stop. Trim/archive of
+this file (Session 50, now ~5950 lines) still needs a human call.
