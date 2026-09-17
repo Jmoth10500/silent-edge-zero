@@ -5959,3 +5959,18 @@ blocked (unchanged, Mac-only):** Betfair Delayed App Key, Kaggle dataset, Racing
 
 **Next session:** same checks; if still nothing new, log one short entry and stop. Trim/archive of
 this file (Session 50, now ~5950 lines) still needs a human call.
+
+## 2026-09-17 — Session 82 (autonomous overnight, cloud routine)
+
+**66th consecutive session, same stale prompt, no change.** `git fetch origin main` — no drift
+(container at Session 81's `198a5a5`, HEAD detached). Unshallowed (container starts shallow each
+time); `git log --author=Jonathan -1` → still `e42411f` (2026-09-08), now 9 days old, no reply.
+`env | grep -i THERACINGAPI` → empty (Mac-only; did not attempt `collect_racecards.py`/
+`collect_weather.py`). `src/models/*.py` + `racecard_theracingapi.py` line counts unchanged
+(0/138/361/215/138/116). `model1_logistic_baseline.py` still satisfies this session's prompt's
+Phase 6 ask verbatim, still superseded by Phase 7/RL-006/RL-007. Full suite re-run
+(`setup_local_postgres.sh` + `init_db.py` (13 tables) + `pip install` + `pytest tests/ -q`) →
+**177/177 passed**. No push notification — same reasoning as Sessions 39/50/54-81.
+
+**Next session:** same checks; if still nothing new, log one short entry and stop. Trim/archive of
+this file (Session 50, now ~5970 lines) still needs a human call.
