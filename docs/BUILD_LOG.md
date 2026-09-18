@@ -6129,3 +6129,28 @@ surface/going field verification (needs a live API call).
 
 **Next session:** same checks; if still nothing new, log one short entry and stop. Trim/archive of
 this file (Session 50, now ~6090 lines) still needs a human call.
+
+## 2026-09-18 — Session 89 (autonomous overnight, cloud routine)
+
+**73rd consecutive session, same stale prompt, no change.** `git fetch origin main` then
+`--unshallow` (fresh container starts shallow) — no drift (`origin/main` == local `HEAD` ==
+`9d5a9aa`, Session 88's commit). `git log --author=Jonathan -1` → still `e42411f` (2026-09-08,
+"RL-007 resolved"), now 10 days old, no reply. `env | grep -i THERACINGAPI` → empty (Mac-only
+credentials; did not attempt `collect_racecards.py`/`collect_weather.py`). `src/models/*.py` +
+`racecard_theracingapi.py` line counts unchanged (0/138/361/215/138/116). No TODO/FIXME/XXX in
+src/scripts/tests/db. `model1_logistic_baseline.py` still satisfies this session's prompt's
+Phase 6 ask verbatim, still superseded by Phase 7/RL-006/RL-007. GitHub checked directly: 0 open
+issues, 0 pull requests. Full suite re-run (`setup_local_postgres.sh` + `init_db.py` (13 tables) +
+`pip install` + `pytest tests/ -q`) → **177/177 passed**.
+
+No push notification — same reasoning as Sessions 39/50/54-88: nothing has changed since last
+session, and the underlying issue (this schedule's stored prompt is permanently satisfied and
+needs a human to update or pause it) was already surfaced multiple times and doesn't need
+repeating every session.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same checks; if still nothing new, log one short entry and stop. Trim/archive of
+this file (Session 50, now ~6110 lines) still needs a human call.
