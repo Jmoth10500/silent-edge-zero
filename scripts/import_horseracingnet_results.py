@@ -79,6 +79,8 @@ HORSERACINGNET_COURSE_SLUGS: dict[str, str] = {
     "pontefract": "pontefract",
     "southwell (aw)": "southwell",
     "southwell": "southwell",
+    "newbury": "newbury",
+    "newton abbot": "newton-abbot",
 }
 
 
