@@ -6154,3 +6154,30 @@ surface/going field verification (needs a live API call).
 
 **Next session:** same checks; if still nothing new, log one short entry and stop. Trim/archive of
 this file (Session 50, now ~6110 lines) still needs a human call.
+
+## 2026-09-18 — Session 90 (autonomous overnight, cloud routine)
+
+**74th consecutive session, same stale prompt, no change.** `git fetch origin main` — no drift
+(`origin/main` == local `HEAD` == `35a5ebb`, Session 89's commit). `env | grep -i THERACINGAPI` →
+empty (Mac-only credentials; did not attempt `collect_racecards.py`/`collect_weather.py`).
+`src/models/*.py` + `racecard_theracingapi.py` line counts unchanged (0/138/361/215/138/116).
+`model1_logistic_baseline.py` docstring re-read directly: still Phase 6 (per-race
+multinomial-logit/softmax baseline, synthetic fixtures shaped like the real racecard schema,
+`official_rating`/`draw` as ints, `recent_form` as `"1582F3"`-style string, probabilities summing
+to 1.0, explicitly labeled not-a-real-prediction), still satisfies this session's prompt verbatim,
+still superseded by Phase 7/RL-006/RL-007 (real Kaggle-trained Model 1, honestly didn't beat the
+market baseline). GitHub checked directly: 0 open issues, 0 open PRs, no activity since Session 88.
+Full suite re-run (`setup_local_postgres.sh` + `init_db.py` (13 tables) + `pip install` +
+`pytest tests/ -q`) → **177/177 passed**.
+
+No push notification — same reasoning as Sessions 39/50/54-89: nothing has changed since last
+session, and the underlying issue (this schedule's stored prompt is permanently satisfied and
+needs a human to update or pause it) was already surfaced multiple times and doesn't need
+repeating every session.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same checks; if still nothing new, log one short entry and stop. Trim/archive of
+this file (Session 50, now ~6130 lines) still needs a human call.
