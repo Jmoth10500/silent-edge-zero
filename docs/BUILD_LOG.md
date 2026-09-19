@@ -6395,3 +6395,38 @@ still nothing new and it's been a meaningful stretch (days, not hours) since Ses
 notification with still no reply, a further notification may be warranted — otherwise log one
 short entry and stop. Trim/archive of this file (Session 50, now ~6385 lines) still needs a human
 call.
+
+## 2026-09-19 — Session 97 (autonomous overnight, cloud routine)
+
+**81st consecutive session, same stale prompt, no change — no notification (Session 91's is same-
+day, still fresh).** `git fetch origin main` then `--unshallow` (fresh container starts shallow) —
+`origin/main` == local `HEAD` == `7162d3c`, Session 96's commit, no drift. `git log --all
+--author="Jonathan"` (unshallowed) → still `e42411f` (2026-09-08, "RL-007 resolved"), still 11
+days old, no reply. `env | grep -i THERACINGAPI` → empty (Mac-only credentials; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's own prompt correction).
+`src/models/*.py` + `racecard_theracingapi.py` line counts unchanged
+(0/138/361/215/138/116). `model1_logistic_baseline.py` docstring re-read directly: still Phase 6
+(per-race multinomial-logit/softmax baseline, synthetic fixtures shaped exactly like the real
+racecard schema — `official_rating`/`draw` as ints, `recent_form` as a `"1582F3"`-style string —
+probabilities summing to ~1.0 per race, explicitly labeled not-a-real-prediction), still satisfies
+this session's prompt verbatim, still superseded by real work (Phase 7 gradient-boosting Model 2,
+RL-006/RL-007's real Kaggle-trained Model 1, which honestly did not beat the de-vigged market
+baseline). GitHub checked directly via `mcp__github__` tools: 0 open issues, 0 pull requests in
+any state, no activity of any kind outside this routine's own commits. Full suite re-run
+(`db/setup_local_postgres.sh` + `python3 db/init_db.py` (13 tables) +
+`pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) → **177/177 passed**.
+
+**No push notification this session.** Same calendar day as Session 91's notification
+(2026-09-19), and nothing has changed since — a second same-day notification for the identical
+unresolved condition would be noise, per Sessions 91-96's own stated threshold ("days, not
+hours").
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same checks. If Jonathan has replied or the prompt has changed, act on that. If
+still nothing new and it's been a meaningful stretch (days, not hours) since Session 91's
+notification with still no reply, a further notification may be warranted — otherwise log one
+short entry and stop. Trim/archive of this file (Session 50, now ~6397 lines) still needs a human
+call.
