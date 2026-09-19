@@ -19,9 +19,11 @@ project previously had no JS charting library at all; every existing
 "chart" on the main dashboard is a CSS div bar.
 
 Sections implemented: KPI cards (16), two donuts — four-way classification
-and top-pick WON/PLACED/UNPLACED/VOID (18) — a cumulative Brier-gap line
-chart, a win-rate-trend line chart, a calibration curve (17, Graphs A/B/D),
-a probability-band grouped bar chart (17, Graph E), and an SE-rank vs
+and top-pick WON/PLACED/UNPLACED/VOID (18) — Graphs A (win-rate trend), B
+(cumulative Brier), C (cumulative P&L with real max drawdown from
+daily_summary), D (calibration curve), E (probability bands), F (win rate
+by agreement — Silent Edge/market and Model1/Model2 kept deliberately
+separate), and G (odds-band breakdown) from Section 17, and an SE-rank vs
 market-rank heat map as a coloured HTML table, not a JS matrix plugin (9,
 19 — kept dependency-free; Chart.js has no first-party matrix chart type
 and pulling in a plugin for one table wasn't worth it). Small-sample
@@ -229,6 +231,80 @@ def agreement_win_rate_splits(races: list[dict], classified: list[dict]) -> dict
     }
 
 
+def cumulative_pnl_series(conn, start: date, end: date) -> dict:
+    """Real cumulative £1 flat-stake profit series (Graph C) plus real
+    maximum drawdown, sourced directly from `daily_summary` — the same
+    persisted, already-correct daily win_profit figures the main
+    dashboard's bank tracker uses (never re-derived independently, so the
+    two can't silently disagree)."""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT race_date, win_profit, win_stake_total FROM daily_summary "
+        "WHERE race_date BETWEEN %s AND %s AND races_settled > 0 ORDER BY race_date",
+        (start, end),
+    )
+    rows = cur.fetchall()
+    cur.close()
+
+    dates, cumulative, running = [], [], 0.0
+    peak, max_drawdown = 0.0, 0.0
+    total_stake = 0.0
+    for race_date, profit, stake in rows:
+        running += float(profit)
+        total_stake += float(stake)
+        dates.append(str(race_date))
+        cumulative.append(round(running, 2))
+        peak = max(peak, running)
+        max_drawdown = min(max_drawdown, running - peak)
+
+    return {
+        "dates": dates, "cumulative_profit": cumulative,
+        "max_drawdown": round(max_drawdown, 2), "total_stake": round(total_stake, 2),
+    }
+
+
+def odds_band_analysis(observations: list[dict]) -> dict:
+    """Real odds-band breakdown (Graph G) — buckets each paired
+    observation by its Silent Edge FAIR decimal odds (1/model_probability),
+    not the raw model probability (that's the probability-band chart
+    already built) — a genuinely different axis, per the brief's own
+    Graph G. Reports selections, winners, and Brier contribution per band;
+    deliberately does NOT compute a combined rate+financial figure on one
+    shared axis (brief: "do not combine rates and financial totals on an
+    unlabeled shared axis") — ROI is reported as its own separate field,
+    not plotted against the win-rate bars."""
+    from src.evaluation.calibration import brier_score
+
+    bands = [(1, 2, "Odds < 2"), (2, 4, "2-4"), (4, 8, "4-8"), (8, 16, "8-16"), (16, float("inf"), "16+")]
+
+    def _band_for(odds: float) -> str:
+        for lo, hi, label in bands:
+            if lo <= odds < hi:
+                return label
+        return bands[-1][2]
+
+    grouped: dict[str, list[dict]] = {}
+    for o in observations:
+        if o["se_probability"] <= 0:
+            continue
+        fair_odds = 1.0 / o["se_probability"]
+        grouped.setdefault(_band_for(fair_odds), []).append(o)
+
+    out = {}
+    for _, _, label in bands:
+        rows = grouped.get(label, [])
+        if not rows:
+            continue
+        n = len(rows)
+        wins = sum(r["outcome"] for r in rows)
+        out[label] = {
+            "n": n, "wins": wins, "win_rate": round(wins / n, 4),
+            "brier_contribution": round(brier_score([r["se_probability"] for r in rows], [r["outcome"] for r in rows]), 6),
+            "small_sample": n < 20,
+        }
+    return out
+
+
 def compute_roi(conn, start: date, end: date) -> dict:
     cur = conn.cursor()
     cur.execute(
@@ -288,7 +364,7 @@ def render_heatmap_table(matrix: dict, max_rank: int = 6) -> str:
 def render_html(start: date, end: date, class_summary: dict, brier_summary, roi: dict,
                  integrity_status: str, series: list[dict], band_analysis: dict,
                  outcome_breakdown: dict, se_calibration: list[dict], market_calibration: list[dict],
-                 rank_matrix: dict, agreement_splits: dict) -> str:
+                 rank_matrix: dict, agreement_splits: dict, pnl_series: dict, odds_bands: dict) -> str:
     donut_labels = ["A: Both correct", "B: Silent Edge only", "C: Market only", "D: Both wrong"]
     donut_data = [class_summary["four_way"][k] for k in ("A", "B", "C", "D")]
 
@@ -326,6 +402,12 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
     }
     agreement_chart_json = json.dumps(agreement_chart_data)
 
+    pnl_json = json.dumps(pnl_series)
+    odds_band_labels = list(odds_bands.keys())
+    odds_band_win_rates = [odds_bands[k]["win_rate"] * 100 for k in odds_band_labels]
+    odds_band_labels_json = json.dumps(odds_band_labels)
+    odds_band_win_rates_json = json.dumps(odds_band_win_rates)
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -356,6 +438,7 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
               color: var(--muted); font-size: 0.85rem; }}
   .not-yet ul {{ margin: 8px 0 0 18px; padding: 0; }}
   canvas {{ max-width: 100%; }}
+  .chart-canvas-wrap {{ position: relative; height: 260px; }}
   .heatmap {{ border-collapse: collapse; width: 100%; font-size: 0.75rem; }}
   .heatmap th {{ color: var(--muted); font-weight: 500; padding: 4px 6px; text-align: center; }}
   .heat-cell {{ text-align: center; padding: 6px 4px; border-radius: 4px; }}
@@ -381,31 +464,39 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
 <div class="charts-grid">
   <div class="chart-panel">
     <h2>Four-way outcome classification (eligible races: {class_summary['n_eligible']})</h2>
-    <canvas id="donutChart"></canvas>
+    <div class="chart-canvas-wrap"><canvas id="donutChart"></canvas></div>
   </div>
   <div class="chart-panel">
     <h2>Cumulative Brier — Silent Edge vs Market (lower is better)</h2>
-    <canvas id="brierChart"></canvas>
+    <div class="chart-canvas-wrap"><canvas id="brierChart"></canvas></div>
   </div>
   <div class="chart-panel">
     <h2>Win-rate trend — Silent Edge top pick vs market favourite</h2>
-    <canvas id="winRateChart"></canvas>
+    <div class="chart-canvas-wrap"><canvas id="winRateChart"></canvas></div>
   </div>
   <div class="chart-panel">
     <h2>Probability bands — expected vs actual win rate</h2>
-    <canvas id="bandChart"></canvas>
+    <div class="chart-canvas-wrap"><canvas id="bandChart"></canvas></div>
   </div>
   <div class="chart-panel">
     <h2>Top-pick outcomes (won / placed / unplaced / void)</h2>
-    <canvas id="outcomeDonutChart"></canvas>
+    <div class="chart-canvas-wrap"><canvas id="outcomeDonutChart"></canvas></div>
   </div>
   <div class="chart-panel">
     <h2>Calibration — predicted probability vs actual win frequency</h2>
-    <canvas id="calibrationChart"></canvas>
+    <div class="chart-canvas-wrap"><canvas id="calibrationChart"></canvas></div>
   </div>
   <div class="chart-panel">
     <h2>Win rate by agreement (two separate, never-conflated measures)</h2>
-    <canvas id="agreementChart"></canvas>
+    <div class="chart-canvas-wrap"><canvas id="agreementChart"></canvas></div>
+  </div>
+  <div class="chart-panel">
+    <h2>Cumulative £1 flat-stake profit (max drawdown: £{pnl_series['max_drawdown']}, total staked: £{pnl_series['total_stake']})</h2>
+    <div class="chart-canvas-wrap"><canvas id="pnlChart"></canvas></div>
+  </div>
+  <div class="chart-panel">
+    <h2>Win rate by odds band (Silent Edge's own fair odds)</h2>
+    <div class="chart-canvas-wrap"><canvas id="oddsBandChart"></canvas></div>
   </div>
 </div>
 
@@ -418,7 +509,6 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
   <strong>Not yet built (real, honest — Phase 3 is not complete):</strong>
   <ul>
     <li>Per-race drill-down / click-through from any chart, donut segment, or heat-map cell.</li>
-    <li>Remaining Graph types C (profitability drawdown) and G (odds-band breakdown).</li>
     <li>Mobile-specific layout polish beyond basic CSS grid responsiveness.</li>
   </ul>
 </div>
@@ -430,7 +520,7 @@ new Chart(document.getElementById('donutChart'), {{
   type: 'doughnut',
   data: {{ labels: donutLabels, datasets: [{{ data: donutData,
     backgroundColor: ['#2fd6b8', '#4f8ff7', '#a679f0', '#f2555a'] }}] }},
-  options: {{ plugins: {{ legend: {{ position: 'bottom', labels: {{ color: '#e8edf5' }} }} }} }}
+  options: {{ maintainAspectRatio: false, plugins: {{ legend: {{ position: 'bottom', labels: {{ color: '#e8edf5' }} }} }} }}
 }});
 
 const series = {series_json};
@@ -441,7 +531,7 @@ new Chart(document.getElementById('brierChart'), {{
     {{ label: 'Silent Edge Brier', data: series.map(s => s.silent_edge_brier), borderColor: '#4f8ff7', tension: 0.2 }},
     {{ label: 'Market Brier', data: series.map(s => s.market_brier), borderColor: '#a679f0', tension: 0.2 }},
   ]}},
-  options: {{ scales: {{ x: {{ ticks: {{ color: '#93a1b8' }} }}, y: {{ ticks: {{ color: '#93a1b8' }} }} }},
+  options: {{ maintainAspectRatio: false, scales: {{ x: {{ ticks: {{ color: '#93a1b8' }} }}, y: {{ ticks: {{ color: '#93a1b8' }} }} }},
     plugins: {{ legend: {{ labels: {{ color: '#e8edf5' }} }} }} }}
 }});
 
@@ -451,7 +541,7 @@ new Chart(document.getElementById('winRateChart'), {{
     {{ label: 'Silent Edge win rate', data: series.map(s => s.silent_edge_win_rate * 100), borderColor: '#2fd6b8', tension: 0.2 }},
     {{ label: 'Market favourite win rate', data: series.map(s => s.market_favourite_win_rate * 100), borderColor: '#f5b942', tension: 0.2 }},
   ]}},
-  options: {{ scales: {{ x: {{ ticks: {{ color: '#93a1b8' }} }},
+  options: {{ maintainAspectRatio: false, scales: {{ x: {{ ticks: {{ color: '#93a1b8' }} }},
     y: {{ ticks: {{ color: '#93a1b8', callback: v => v + '%' }} }} }},
     plugins: {{ legend: {{ labels: {{ color: '#e8edf5' }} }} }} }}
 }});
@@ -462,7 +552,7 @@ new Chart(document.getElementById('bandChart'), {{
     {{ label: 'Expected (avg predicted %)', data: {band_expected_json}, backgroundColor: '#4f8ff7' }},
     {{ label: 'Actual win %', data: {band_actual_json}, backgroundColor: '#2fd6b8' }},
   ]}},
-  options: {{ scales: {{ x: {{ ticks: {{ color: '#93a1b8' }} }},
+  options: {{ maintainAspectRatio: false, scales: {{ x: {{ ticks: {{ color: '#93a1b8' }} }},
     y: {{ ticks: {{ color: '#93a1b8', callback: v => v + '%' }} }} }},
     plugins: {{ legend: {{ labels: {{ color: '#e8edf5' }} }} }} }}
 }});
@@ -471,7 +561,7 @@ new Chart(document.getElementById('outcomeDonutChart'), {{
   type: 'doughnut',
   data: {{ labels: {outcome_labels_json}, datasets: [{{ data: {outcome_data_json},
     backgroundColor: ['#2fd6b8', '#4f8ff7', '#f5b942', '#93a1b8'] }}] }},
-  options: {{ plugins: {{ legend: {{ position: 'bottom', labels: {{ color: '#e8edf5' }} }} }} }}
+  options: {{ maintainAspectRatio: false, plugins: {{ legend: {{ position: 'bottom', labels: {{ color: '#e8edf5' }} }} }} }}
 }});
 
 new Chart(document.getElementById('calibrationChart'), {{
@@ -482,7 +572,7 @@ new Chart(document.getElementById('calibrationChart'), {{
     {{ label: 'Perfect calibration', data: [{{x:0,y:0}},{{x:100,y:100}}], type: 'line', borderColor: '#93a1b8',
        borderDash: [4,4], pointRadius: 0, fill: false }},
   ]}},
-  options: {{ scales: {{
+  options: {{ maintainAspectRatio: false, scales: {{
     x: {{ title: {{ display: true, text: 'Predicted %', color: '#93a1b8' }}, ticks: {{ color: '#93a1b8' }}, min: 0, max: 100 }},
     y: {{ title: {{ display: true, text: 'Actual %', color: '#93a1b8' }}, ticks: {{ color: '#93a1b8' }}, min: 0, max: 100 }},
   }}, plugins: {{ legend: {{ labels: {{ color: '#e8edf5' }} }} }} }}
@@ -495,10 +585,31 @@ new Chart(document.getElementById('agreementChart'), {{
     {{ label: 'Win rate %', data: agreementChartData.rates,
        backgroundColor: ['#2fd6b8', '#f2555a', '#4f8ff7', '#a679f0'] }},
   ]}},
-  options: {{ indexAxis: 'y',
+  options: {{ maintainAspectRatio: false, indexAxis: 'y',
     scales: {{ x: {{ ticks: {{ color: '#93a1b8', callback: v => v + '%' }} }}, y: {{ ticks: {{ color: '#93a1b8' }} }} }},
     plugins: {{ legend: {{ display: false }},
       tooltip: {{ callbacks: {{ afterLabel: ctx => 'n=' + agreementChartData.ns[ctx.dataIndex] }} }} }} }}
+}});
+
+const pnl = {pnl_json};
+new Chart(document.getElementById('pnlChart'), {{
+  type: 'line',
+  data: {{ labels: pnl.dates, datasets: [
+    {{ label: 'Cumulative profit (£)', data: pnl.cumulative_profit, borderColor: '#2fd6b8',
+       backgroundColor: 'rgba(47,214,184,0.15)', fill: true, tension: 0.15 }},
+  ]}},
+  options: {{ maintainAspectRatio: false, scales: {{ x: {{ ticks: {{ color: '#93a1b8' }} }}, y: {{ ticks: {{ color: '#93a1b8' }} }} }},
+    plugins: {{ legend: {{ labels: {{ color: '#e8edf5' }} }} }} }}
+}});
+
+new Chart(document.getElementById('oddsBandChart'), {{
+  type: 'bar',
+  data: {{ labels: {odds_band_labels_json}, datasets: [
+    {{ label: 'Win rate %', data: {odds_band_win_rates_json}, backgroundColor: '#4f8ff7' }},
+  ]}},
+  options: {{ maintainAspectRatio: false, scales: {{ x: {{ ticks: {{ color: '#93a1b8' }} }},
+    y: {{ ticks: {{ color: '#93a1b8', callback: v => v + '%' }} }} }},
+    plugins: {{ legend: {{ display: false }} }} }}
 }});
 </script>
 </body>
@@ -533,15 +644,18 @@ def main():
     rank_matrix = aggregate_rank_matrix(rank_observations)
 
     agreement_splits = agreement_win_rate_splits(all_races, classified)
+    odds_bands = odds_band_analysis(observations)
 
     roi = compute_roi(conn, start, end)
     integrity_result = run_audit(conn, start, end)
     series = daily_series(conn, start, end)
+    pnl_series = cumulative_pnl_series(conn, start, end)
 
     conn.close()
 
     html = render_html(start, end, class_summary, brier_summary, roi, integrity_result["status"], series, band_analysis,
-                        outcome_breakdown, se_calibration, market_calibration, rank_matrix, agreement_splits)
+                        outcome_breakdown, se_calibration, market_calibration, rank_matrix, agreement_splits,
+                        pnl_series, odds_bands)
     OUTPUT_PATH.write_text(html)
     print(f"Research dashboard written to {OUTPUT_PATH} ({len(html)} bytes).")
     print(f"Range: {start} .. {end}  |  {class_summary['n_eligible']} eligible races  |  "

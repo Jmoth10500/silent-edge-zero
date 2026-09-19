@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.generate_research_dashboard import (
     agreement_win_rate_splits,
+    odds_band_analysis,
     render_heatmap_table,
     render_html,
     render_kpi_cards,
@@ -64,6 +65,8 @@ def test_render_html_produces_a_complete_page_with_chart_canvases():
                                       "diff_actual_minus_expected_model": 1.0, "small_sample": False}},
         {"silent_edge_vs_market": {"agree": {"n": 10, "win_rate": 0.4}, "disagree": {"n": 20, "win_rate": 0.2}},
          "model1_vs_model2": {"agree": {"n": 15, "win_rate": 0.3}, "disagree": {"n": 15, "win_rate": 0.15}}},
+        {"dates": ["2026-09-10"], "cumulative_profit": [1.5], "max_drawdown": -0.5, "total_stake": 10.0},
+        {"2-4": {"n": 30, "wins": 8, "win_rate": 0.27, "brier_contribution": 0.15, "small_sample": False}},
     )
     assert "<!DOCTYPE html>" in html
     assert 'id="donutChart"' in html
@@ -73,6 +76,8 @@ def test_render_html_produces_a_complete_page_with_chart_canvases():
     assert 'id="outcomeDonutChart"' in html
     assert 'id="calibrationChart"' in html
     assert 'id="agreementChart"' in html
+    assert 'id="pnlChart"' in html
+    assert 'id="oddsBandChart"' in html
     assert "heatmap" in html
     assert "chart.js" in html.lower()
     assert "2026-09-10" in html
@@ -175,6 +180,36 @@ def test_agreement_splits_none_win_rate_when_no_observations():
     assert result["model1_vs_model2"]["disagree"]["n"] == 0
 
 
+# ---------------------------------------------------------------------------
+# odds_band_analysis — buckets by Silent Edge's own FAIR ODDS, a different
+# axis from the probability-band chart
+# ---------------------------------------------------------------------------
+
+def _obs(se_prob, outcome):
+    return {"se_probability": se_prob, "outcome": outcome}
+
+
+def test_odds_band_buckets_by_fair_odds_not_raw_probability():
+    # fair odds = 1/prob: 0.5 -> 2.0 (band "2-4"), 0.2 -> 5.0 (band "4-8")
+    observations = [_obs(0.5, 1), _obs(0.5, 0), _obs(0.2, 0)]
+    result = odds_band_analysis(observations)
+    assert result["2-4"]["n"] == 2
+    assert result["2-4"]["wins"] == 1
+    assert result["4-8"]["n"] == 1
+
+
+def test_odds_band_skips_zero_probability_without_crashing():
+    observations = [_obs(0.0, 0), _obs(0.5, 1)]
+    result = odds_band_analysis(observations)
+    assert sum(b["n"] for b in result.values()) == 1
+
+
+def test_odds_band_flags_small_samples():
+    observations = [_obs(0.5, 0) for _ in range(5)]
+    result = odds_band_analysis(observations)
+    assert result["2-4"]["small_sample"] is True
+
+
 if __name__ == "__main__":
     tests = [
         test_render_kpi_cards_includes_real_values, test_render_kpi_cards_handles_no_eligible_races_without_crashing,
@@ -182,6 +217,8 @@ if __name__ == "__main__":
         test_outcome_breakdown_classifies_won_placed_unplaced_void,
         test_heatmap_renders_a_dash_for_missing_cells_and_values_for_present_ones,
         test_agreement_splits_are_computed_independently, test_agreement_splits_none_win_rate_when_no_observations,
+        test_odds_band_buckets_by_fair_odds_not_raw_probability, test_odds_band_skips_zero_probability_without_crashing,
+        test_odds_band_flags_small_samples,
     ]
     passed = 0
     for t in tests:
