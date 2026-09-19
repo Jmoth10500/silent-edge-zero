@@ -145,7 +145,21 @@ def missed_winner_probability_bands(missed_races: list[dict], band_width: float 
     `band_width` supports the requested 5-point/10-point toggle (0.05 or
     0.10). Bands with zero real observations are included with n=0 —
     never omitted, so "no missed winners in this band" is visible as a
-    real zero, not a gap a reader might mistake for missing data."""
+    real zero, not a gap a reader might mistake for missing data.
+
+    **Real, honest population note (found live 2026-09-20, Jonathan's own
+    audit):** `n_winners` here counts every real missed winner regardless
+    of whether the winning horse itself had a market price — a winner can
+    lack its own price even when the race overall had enough OTHER priced
+    runners to be de-vig-able. `probability_band_analysis`'s ALL-RUNNERS
+    population additionally requires the SPECIFIC runner to be priced.
+    This means `n_winners` is NOT a strict subset of that population's
+    actual-win count for the same band — comparing the two bare numbers
+    directly is a real, previously undisclosed trap. `n_winners_priced`
+    (a real subset of the ALL-RUNNERS population, since it applies the
+    SAME per-runner pricing requirement) is provided specifically to make
+    a valid, disclosed comparison possible; `n_winners_unpriced` is the
+    named, counted gap, never silently absorbed into the total."""
     def band_key(p: float) -> str:
         lo = min(int(p / band_width) * band_width, 1 - band_width)
         hi = lo + band_width
@@ -165,10 +179,13 @@ def missed_winner_probability_bands(missed_races: list[dict], band_width: float 
     for key in all_keys:
         races = grouped.get(key, [])
         n = len(races)
-        market_probs = [r["winner_market_probability"] for r in races if r["winner_market_probability"] is not None]
+        priced = [r for r in races if r["winner_market_probability"] is not None]
+        market_probs = [r["winner_market_probability"] for r in priced]
         out[key] = {
             "band": key,
             "n_winners": n,
+            "n_winners_priced": len(priced),
+            "n_winners_unpriced": n - len(priced),
             "share_of_all_missed_winners": round(n / total_winners, 4) if total_winners else None,
             "avg_se_probability": round(sum(r["winner_se_probability"] for r in races) / n, 4) if n else None,
             "avg_market_probability": round(sum(market_probs) / len(market_probs), 4) if market_probs else None,

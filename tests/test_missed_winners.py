@@ -138,6 +138,20 @@ def test_bands_handle_missing_market_probability_without_crashing():
     assert result["20%-30%"]["avg_se_probability"] == 0.22
 
 
+def test_bands_report_priced_vs_unpriced_winners_separately():
+    # Real 2026-09-20 bug (Jonathan's audit): n_winners alone is NOT a
+    # valid subset of the ALL-RUNNERS Brier population, since a winner can
+    # lack its own market price even when the race was de-vig-able
+    # overall. n_winners_priced IS a true subset (same per-runner pricing
+    # rule as probability_band_analysis) and must be reported separately.
+    races = [_missed_race(0.05, 0.03), _missed_race(0.08, None), _missed_race(0.02, None)]
+    result = missed_winner_probability_bands(races, band_width=0.10)
+    band = result["0%-10%"]
+    assert band["n_winners"] == 3
+    assert band["n_winners_priced"] == 1
+    assert band["n_winners_unpriced"] == 2
+
+
 def test_five_point_bands_supported():
     result = missed_winner_probability_bands([_missed_race(0.22)], band_width=0.05)
     assert len(result) == 20
@@ -152,6 +166,7 @@ if __name__ == "__main__":
         test_cross_check_attaches_full_population_cell,
         test_bands_are_evenly_spaced_and_cover_zero_to_hundred, test_empty_band_shows_a_real_zero_not_omitted,
         test_bands_group_winners_and_compute_real_averages, test_bands_handle_missing_market_probability_without_crashing,
+        test_bands_report_priced_vs_unpriced_winners_separately,
         test_five_point_bands_supported,
     ]
     passed = 0

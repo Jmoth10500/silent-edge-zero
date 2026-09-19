@@ -47,7 +47,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import psycopg2
 
-from scripts.dashboard_reconciliation import run_reconciliation
+from scripts.dashboard_reconciliation import compute_settled_race_ids, run_reconciliation
 from scripts.data_integrity_audit import run_audit
 from scripts.generate_eod_report import VOID_RESULT_CODES, ew_terms_for_field_size
 from src.evaluation.calibration import calibration_curve
@@ -556,10 +556,18 @@ def build_insights(class_summary: dict, brier_summary: Optional[dict], roi: dict
         insights["missed_winners"] = "No 'both wrong' races in this window yet — nothing to analyse."
     else:
         populated = {k: v for k, v in missed_bands_10pt.items() if v["n_winners"] > 0}
+        total_unpriced = sum(v["n_winners_unpriced"] for v in missed_bands_10pt.values())
         if populated:
             top_band = max(populated, key=lambda k: populated[k]["n_winners"])
             tb = populated[top_band]
             mkt_txt = f"{tb['avg_market_probability']:.1%}" if tb["avg_market_probability"] is not None else "n/a"
+            unpriced_note = (
+                f" {tb['n_winners_unpriced']} of the {top_band} band's {tb['n_winners']} winners had no market "
+                f"price of their own (only {tb['n_winners_priced']} are priced) — do not compare {tb['n_winners']} "
+                f"directly against the Expected vs Actual panel's actual-win counts below, which require a real "
+                f"market price on every runner; compare against {tb['n_winners_priced']} instead."
+                if tb["n_winners_unpriced"] > 0 else ""
+            )
             insights["missed_winners"] = (
                 f"Of {n_missed_winner_races} 'both wrong' races, the {top_band} band produced the most missed "
                 f"winners ({tb['n_winners']}, {tb['share_of_all_missed_winners']:.0%} of all missed winners), "
@@ -567,9 +575,17 @@ def build_insights(class_summary: dict, brier_summary: Optional[dict], roi: dict
                 f"probability. This describes WHERE missed winners cluster by their own probability — it does "
                 f"NOT by itself show Silent Edge underestimates that band; the Expected vs Actual panel below, "
                 f"using ALL eligible runners rather than only the winners we missed, is the real test of that."
+                f"{unpriced_note}"
             )
         else:
             insights["missed_winners"] = f"{n_missed_winner_races} 'both wrong' races, but no band has a real observation yet."
+        if total_unpriced > 0:
+            insights["missed_winners"] += (
+                f" Overall, {total_unpriced} of the {n_missed_winner_races} missed winners across all bands had no "
+                f"market price of their own — these are real winners, but they cannot be matched against the "
+                f"priced-only ALL RUNNERS population used elsewhere on this page, so every band count above is "
+                f"reported both as a total (n_winners) and as a priced subset (n_winners_priced) side by side."
+            )
 
     # --- Expected vs Actual (default population view = ALL RUNNERS) --------
     all_runners_view = rank_views.get("ALL RUNNERS", {"bands": {}})
@@ -699,9 +715,14 @@ def render_missed_race_list(bands: dict) -> str:
         if band["n_winners"] == 0:
             continue
         rows = "".join(_row(r) for r in band["races"])
+        unpriced_note = (
+            f' ({band["n_winners_priced"]} priced, {band["n_winners_unpriced"]} with no market price of their own '
+            f'— compare only the priced count against the Expected vs Actual panel)'
+            if band["n_winners_unpriced"] > 0 else ""
+        )
         parts.append(
             f'<details id="missed-band-{band_key.replace("%","").replace("-","to")}">'
-            f'<summary>{band_key}: {band["n_winners"]} winner(s)</summary>'
+            f'<summary>{band_key}: {band["n_winners"]} winner(s){unpriced_note}</summary>'
             f'<table class="race-list"><thead><tr><th>Date</th><th>Course</th><th>Winner</th>'
             f'<th>SEN prob</th><th>Market prob</th></tr></thead><tbody>{rows}</tbody></table></details>'
         )
@@ -1235,11 +1256,13 @@ def main():
     integrity_result = run_audit(conn, start, end)
     series = daily_series(conn, start, end)
     pnl_series = cumulative_pnl_series(conn, start, end)
+    settled_race_ids = compute_settled_race_ids(conn, start, end)
 
     conn.close()
 
     reconciliation = run_reconciliation(all_races, classified, class_summary, outcome_breakdown, roi,
-                                         agreement_splits, rank_matrix, brier_summary, d_split)
+                                         agreement_splits, rank_matrix, brier_summary, d_split,
+                                         eligible_race_ids, settled_race_ids, missed_bands_10pt, band_analysis)
     print(f"Dashboard reconciliation: {reconciliation['status']} ({len(reconciliation['checks'])} checks)")
     print(f"Missed-winner races (both wrong): {len(missed_races)}")
 

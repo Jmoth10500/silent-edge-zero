@@ -73,10 +73,10 @@ def test_render_html_produces_a_complete_page_with_chart_canvases():
         {"2-4": {"n": 30, "wins": 8, "win_rate": 0.27, "brier_contribution": 0.15, "small_sample": False}},
         {"total": 3, "agree": 1, "disagree": 2},
         [],  # missed_races
-        {"20%-30%": {"n_winners": 0, "share_of_all_missed_winners": None, "avg_se_probability": None,
-                     "avg_market_probability": None, "n_races": 0, "races": []}},  # missed_bands_10pt
-        {"20%-25%": {"n_winners": 0, "share_of_all_missed_winners": None, "avg_se_probability": None,
-                     "avg_market_probability": None, "n_races": 0, "races": []}},  # missed_bands_5pt
+        {"20%-30%": {"n_winners": 0, "n_winners_priced": 0, "n_winners_unpriced": 0, "share_of_all_missed_winners": None,
+                     "avg_se_probability": None, "avg_market_probability": None, "n_races": 0, "races": []}},  # missed_bands_10pt
+        {"20%-25%": {"n_winners": 0, "n_winners_priced": 0, "n_winners_unpriced": 0, "share_of_all_missed_winners": None,
+                     "avg_se_probability": None, "avg_market_probability": None, "n_races": 0, "races": []}},  # missed_bands_5pt
         {"ALL RUNNERS": {"n": 10, "bands": {"0%-10%": {"n_selections": 100, "avg_predicted_probability": 0.05,
                                                         "actual_win_rate": 0.04, "calibration_error": -0.01}}},
          "SEN TOP PICKS": {"n": 0, "bands": {}}, "SEN SECOND CHOICES": {"n": 0, "bands": {}},
@@ -303,10 +303,10 @@ def _full_kwargs(n_eligible=100):
         },
         d_split={"total": 40, "agree": 15, "disagree": 25},
         missed_bands_10pt={
-            "20%-30%": {"n_winners": 5, "share_of_all_missed_winners": 0.5, "avg_se_probability": 0.24,
-                        "avg_market_probability": 0.15, "n_races": 5, "races": []},
-            "0%-10%": {"n_winners": 5, "share_of_all_missed_winners": 0.5, "avg_se_probability": 0.05,
-                       "avg_market_probability": 0.04, "n_races": 5, "races": []},
+            "20%-30%": {"n_winners": 5, "n_winners_priced": 5, "n_winners_unpriced": 0, "share_of_all_missed_winners": 0.5,
+                        "avg_se_probability": 0.24, "avg_market_probability": 0.15, "n_races": 5, "races": []},
+            "0%-10%": {"n_winners": 5, "n_winners_priced": 3, "n_winners_unpriced": 2, "share_of_all_missed_winners": 0.5,
+                       "avg_se_probability": 0.05, "avg_market_probability": 0.04, "n_races": 5, "races": []},
         },
         n_missed_winner_races=10,
         rank_views={
@@ -483,8 +483,8 @@ def test_rank_population_views_all_runners_uses_real_band_analysis():
 
 def test_missed_race_list_skips_empty_bands_and_shows_populated_ones():
     bands = {
-        "0%-10%": {"n_winners": 0, "races": []},
-        "20%-30%": {"n_winners": 1, "races": [
+        "0%-10%": {"n_winners": 0, "n_winners_priced": 0, "n_winners_unpriced": 0, "races": []},
+        "20%-30%": {"n_winners": 1, "n_winners_priced": 1, "n_winners_unpriced": 0, "races": [
             {"date": "2026-09-12", "course": "Bath", "winner_horse_name": "Testwinner",
              "winner_se_probability": 0.24, "winner_market_probability": 0.15},
         ]},
@@ -498,7 +498,7 @@ def test_missed_race_list_skips_empty_bands_and_shows_populated_ones():
 
 
 def test_missed_race_list_handles_missing_market_probability():
-    bands = {"20%-30%": {"n_winners": 1, "races": [
+    bands = {"20%-30%": {"n_winners": 1, "n_winners_priced": 0, "n_winners_unpriced": 1, "races": [
         {"date": "2026-09-12", "course": "Bath", "winner_horse_name": "Testwinner",
          "winner_se_probability": 0.24, "winner_market_probability": None},
     ]}}
@@ -506,8 +506,21 @@ def test_missed_race_list_handles_missing_market_probability():
     assert "n/a" in html
 
 
+def test_missed_race_list_discloses_priced_vs_unpriced_split_in_summary():
+    # Real 2026-09-20 fix: the band summary must show the reader the
+    # priced/unpriced split, not just a bare total that silently compares
+    # unequally against the ALL-RUNNERS population.
+    bands = {"0%-10%": {"n_winners": 5, "n_winners_priced": 3, "n_winners_unpriced": 2, "races": [
+        {"date": "2026-09-12", "course": "Bath", "winner_horse_name": "Testwinner",
+         "winner_se_probability": 0.05, "winner_market_probability": 0.03},
+    ]}}
+    html = render_missed_race_list(bands)
+    assert "3 priced" in html
+    assert "2 with no market price" in html
+
+
 def test_missed_race_list_all_empty_shows_a_real_message():
-    html = render_missed_race_list({"0%-10%": {"n_winners": 0, "races": []}})
+    html = render_missed_race_list({"0%-10%": {"n_winners": 0, "n_winners_priced": 0, "n_winners_unpriced": 0, "races": []}})
     assert "No missed-winner races" in html
 
 
@@ -532,6 +545,7 @@ if __name__ == "__main__":
         test_rank_population_views_splits_by_model_rank_correctly, test_rank_population_views_empty_view_has_no_bands,
         test_rank_population_views_all_runners_uses_real_band_analysis,
         test_missed_race_list_skips_empty_bands_and_shows_populated_ones, test_missed_race_list_handles_missing_market_probability,
+        test_missed_race_list_discloses_priced_vs_unpriced_split_in_summary,
         test_missed_race_list_all_empty_shows_a_real_message,
     ]
     passed = 0
