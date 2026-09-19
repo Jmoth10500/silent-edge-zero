@@ -6181,3 +6181,42 @@ surface/going field verification (needs a live API call).
 
 **Next session:** same checks; if still nothing new, log one short entry and stop. Trim/archive of
 this file (Session 50, now ~6130 lines) still needs a human call.
+
+## 2026-09-19 — Session 91 (autonomous overnight, cloud routine)
+
+**75th consecutive session, same stale prompt, no change — sent a renewed push notification this
+session (first since Session 50, 41 sessions ago).** `git fetch origin main` then `--unshallow`
+(fresh container starts shallow) — no drift (`origin/main` == local `HEAD` == `f0ca80e`, Session
+90's commit). Full history now visible: 94 commits, 85 Claude / 9 Jonathan Nuttall.
+`git log --author="Jonathan Nuttall" -1` → still `e42411f` (2026-09-08, "RL-007 resolved"), now
+**11 days old**, no reply. `env | grep -i THERACINGAPI` → empty (Mac-only credentials; did not
+attempt `collect_racecards.py`/`collect_weather.py`, per this session's own prompt correction).
+`src/models/*.py` + `racecard_theracingapi.py` line counts unchanged (0/138/361/215/138/116). No
+TODO/FIXME/XXX in src/scripts/tests/db. `model1_logistic_baseline.py` docstring re-read directly:
+still Phase 6 (per-race multinomial-logit/softmax baseline, synthetic fixtures shaped exactly like
+the real racecard schema — `official_rating`/`draw` as ints, `recent_form` as a `"1582F3"`-style
+string — probabilities summing to ~1.0 per race, explicitly labeled not-a-real-prediction in its
+own docstring), still satisfies this session's prompt verbatim, still superseded by real work
+(Phase 7 gradient-boosting Model 2, RL-006/RL-007's real Kaggle-trained Model 1, which honestly did
+not beat the de-vigged market baseline). GitHub checked directly: 0 open issues, 0 open or closed
+PRs, no activity of any kind outside this routine's own commits. Full suite re-run
+(`db/setup_local_postgres.sh` + `db/init_db.py` (13 tables) + `pip install -r requirements.txt` +
+`pytest tests/ -q`) → **177/177 passed**.
+
+**Sent one push notification this session.** Rationale: this schedule's stored prompt has now been
+verbatim-satisfied for 75 consecutive sessions with zero human reply for 11 days, and prior
+sessions (24, 50) explicitly flagged "approaching fifty or a hundred consecutive stale sessions"
+as the threshold for a further notification after the first two (Sessions 19, 24) and the third
+(Session 50). We are now 25 sessions past that "fifty" marker with no acknowledgement, so a fourth
+notification — plainly stating the schedule is stuck and asking Jonathan to update or pause the
+prompt, or to confirm he's aware and is fine leaving it as a standing health-check — is overdue
+rather than noise. Did not manufacture busywork or re-touch working code to have something to
+report.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same checks. If Jonathan has replied or the prompt has changed, act on that. If
+still nothing new, log one short entry, skip the notification (this session's is fresh), and stop.
+Trim/archive of this file (Session 50, now ~6165 lines) still needs a human call.
