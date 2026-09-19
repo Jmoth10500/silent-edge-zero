@@ -525,12 +525,18 @@ def build_insights(class_summary: dict, brier_summary: Optional[dict], roi: dict
 
 
 def render_heatmap_table(matrix: dict, max_rank: int = 6) -> str:
-    """Real coloured HTML table — SE rank (rows) vs market rank (columns),
-    each cell showing n/win-rate, coloured by diff_actual_minus_expected_model
-    (teal = Silent Edge underconfident there, red = overconfident there),
-    small-sample cells (n<20) visually dimmed rather than hidden. A cell
-    with no real observations renders as an empty dash, never a
-    fabricated zero."""
+    """Real coloured HTML table — Silent Edge's rank for a runner (rows)
+    against the market's own rank for that SAME runner (columns), one cell
+    per combination. Each cell shows three numbers directly (sample size,
+    real actual win rate, and the win rate Silent Edge's own probabilities
+    implied it SHOULD have been) rather than hiding the comparison behind
+    a hover-only tooltip — the point of the chart is that comparison, so
+    it has to be readable at a glance. Colour is a restatement of the same
+    two numbers (actual minus expected), included for fast visual scanning
+    only, never as the sole source of the information (accessibility: the
+    numbers alone tell the whole story). Small-sample cells (n<20) are
+    dimmed, never hidden; a combination with zero real observations shows
+    a plain dash, never a fabricated value."""
     ranks = [str(r) for r in range(1, max_rank)] + [f"{max_rank}+"]
 
     def cell_color(diff: float, max_abs: float) -> str:
@@ -545,9 +551,11 @@ def render_heatmap_table(matrix: dict, max_rank: int = 6) -> str:
     max_abs_diff = max((abs(d) for d in all_diffs), default=0) or 1
 
     rows_html = []
-    header = "<tr><th></th>" + "".join(f"<th>Mkt {r}</th>" for r in ranks) + "</tr>"
+    header = ('<tr><th></th><th colspan="' + str(len(ranks)) + '" class="heat-axis-title">'
+               '&#8592; Where the market ranked this same horse (1 = market favourite) &#8594;</th></tr>')
+    header += "<tr><th></th>" + "".join(f"<th>Market<br>rank {r}</th>" for r in ranks) + "</tr>"
     for se_rank in ranks:
-        cells = [f"<th>SE {se_rank}</th>"]
+        cells = [f'<th>Silent Edge<br>rank {se_rank}</th>']
         for mkt_rank in ranks:
             key = f"se_rank={se_rank},market_rank={mkt_rank}"
             cell = matrix.get(key)
@@ -556,15 +564,40 @@ def render_heatmap_table(matrix: dict, max_rank: int = 6) -> str:
                 continue
             color = cell_color(cell["diff_actual_minus_expected_model"], max_abs_diff)
             opacity_class = " dim" if cell["small_sample"] else ""
+            expected_rate = cell["expected_wins_model"] / cell["n"] if cell["n"] else 0
             cells.append(
                 f'<td class="heat-cell{opacity_class}" style="background:{color}" '
-                f'title="n={cell["n"]}, actual={cell["actual_wins"]}, expected={cell["expected_wins_model"]}, '
-                f'diff={cell["diff_actual_minus_expected_model"]:+}">'
-                f'<div class="heat-n">{cell["n"]}</div><div class="heat-rate">{cell["actual_win_rate"]:.0%}</div></td>'
+                f'title="{cell["n"]} runners fell into this combination; {cell["actual_wins"]} of them actually won '
+                f'({cell["actual_win_rate"]:.0%}); Silent Edge\'s own probabilities implied {expected_rate:.0%} should '
+                f'have won ({cell["expected_wins_model"]:.1f} expected winners)">'
+                f'<div class="heat-n">n={cell["n"]}</div>'
+                f'<div class="heat-rate">{cell["actual_win_rate"]:.0%} actual</div>'
+                f'<div class="heat-exp">{expected_rate:.0%} expected</div></td>'
             )
         rows_html.append(f"<tr>{''.join(cells)}</tr>")
 
-    return f'<table class="heatmap"><thead>{header}</thead><tbody>{"".join(rows_html)}</tbody></table>'
+    table_html = f'<table class="heatmap"><thead>{header}</thead><tbody>{"".join(rows_html)}</tbody></table>'
+
+    legend = (
+        '<div class="heat-legend">'
+        '<div class="heat-legend-swatch"><span class="heat-swatch-box" style="background:rgba(242,85,90,0.55)"></span>'
+        'Red = Silent Edge was <strong>overconfident</strong> here (actual win rate came in below its own prediction)</div>'
+        '<div class="heat-legend-swatch"><span class="heat-swatch-box" style="background:rgba(47,214,184,0.55)"></span>'
+        'Teal = Silent Edge was <strong>underconfident</strong> here (actual win rate came in above its own prediction)</div>'
+        '<div class="heat-legend-swatch"><span class="heat-swatch-box" style="background:rgba(255,255,255,0.04);border:1px dashed var(--border)"></span>'
+        'Dimmed / greyed text = fewer than 20 runners in that combination — too small a sample to trust the colour</div>'
+        '</div>'
+    )
+    explainer = (
+        '<p class="heat-explainer">Every runner falls into exactly one cell here, based on two independent '
+        'rankings of the SAME race: which place Silent Edge put it in its own list (rows), and which place '
+        'the betting market put it in (columns, 1 = market favourite). A cell reading "119 runners, 40% actual, '
+        '29% expected" means: 119 times a horse was Silent Edge\'s top pick AND the market\'s favourite at once, '
+        'and 40% of those actually won — versus the ~29% Silent Edge itself predicted for that group on '
+        'average. When actual comes in noticeably above expected (teal), Silent Edge is underselling that '
+        'group\'s real chances; noticeably below (red) means it\'s overselling them.</p>'
+    )
+    return explainer + table_html + legend
 
 
 def render_html(start: date, end: date, class_summary: dict, brier_summary, roi: dict,
@@ -661,7 +694,14 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
   .heat-cell.dim {{ opacity: 0.45; }}
   .heat-n {{ font-size: 0.65rem; color: var(--muted); }}
   .heat-rate {{ font-weight: 600; }}
+  .heat-exp {{ font-size: 0.65rem; color: var(--muted); }}
   .heatmap-wrap {{ overflow-x: auto; }}
+  .heat-axis-title {{ color: var(--muted); font-weight: 400; font-size: 0.75rem; padding-bottom: 6px; }}
+  .heatmap th {{ line-height: 1.3; }}
+  .heat-explainer {{ font-size: 0.82rem; color: var(--muted); line-height: 1.5; margin: 0 0 14px; }}
+  .heat-legend {{ display: flex; flex-wrap: wrap; gap: 18px; margin-top: 14px; font-size: 0.75rem; color: var(--muted); }}
+  .heat-legend-swatch {{ display: flex; align-items: center; gap: 6px; }}
+  .heat-swatch-box {{ display: inline-block; width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }}
 </style>
 </head>
 <body>
@@ -726,7 +766,7 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
 </div>
 
 <div class="chart-panel" style="margin-bottom:32px;">
-  <h2>Silent Edge rank vs market rank — win rate, coloured by actual minus expected (teal = Silent Edge underconfident there, red = overconfident)</h2>
+  <h2>Where Silent Edge and the market disagree on ranking — and who's right more often</h2>
   <div class="heatmap-wrap">{heatmap_html}</div>
   <div class="insight"><strong>Analysis:</strong> {insights['heatmap']}</div>
 </div>

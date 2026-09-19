@@ -125,8 +125,22 @@ def test_heatmap_renders_a_dash_for_missing_cells_and_values_for_present_ones():
                                            "diff_actual_minus_expected_model": 1.0, "small_sample": False}}
     html = render_heatmap_table(matrix)
     assert "<table" in html
-    assert "33%" in html
+    assert "33% actual" in html
+    assert "30% expected" in html  # 9.0/30 = 30%
     assert html.count("–") >= 1  # most cells are genuinely empty for this tiny matrix
+    assert "Silent Edge<br>rank 1" in html
+    assert "Market<br>rank 1" in html
+
+
+def test_heatmap_includes_explainer_and_legend():
+    matrix = {"se_rank=1,market_rank=1": {"se_rank": "1", "market_rank": "1", "n": 30, "actual_wins": 10,
+                                           "actual_win_rate": 0.33, "expected_wins_model": 9.0,
+                                           "diff_actual_minus_expected_model": 1.0, "small_sample": False}}
+    html = render_heatmap_table(matrix)
+    assert "heat-explainer" in html
+    assert "heat-legend" in html
+    assert "overconfident" in html.lower()
+    assert "underconfident" in html.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -334,6 +348,7 @@ if __name__ == "__main__":
         test_render_html_produces_a_complete_page_with_chart_canvases,
         test_outcome_breakdown_classifies_won_placed_unplaced_void,
         test_heatmap_renders_a_dash_for_missing_cells_and_values_for_present_ones,
+        test_heatmap_includes_explainer_and_legend,
         test_agreement_splits_are_computed_independently, test_agreement_splits_none_win_rate_when_no_observations,
         test_odds_band_buckets_by_fair_odds_not_raw_probability, test_odds_band_skips_zero_probability_without_crashing,
         test_odds_band_flags_small_samples,
