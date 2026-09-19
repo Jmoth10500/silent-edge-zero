@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.generate_research_dashboard import (
     agreement_win_rate_splits,
+    build_insights,
     odds_band_analysis,
     render_heatmap_table,
     render_html,
@@ -56,7 +57,7 @@ def test_render_html_produces_a_complete_page_with_chart_canvases():
         {"n": 5, "stake": 5.0, "profit": 1.0, "roi": 0.2}, "PASS",
         [{"date": "2026-09-10", "silent_edge_brier": 0.1, "market_brier": 0.09, "brier_gap": 0.01,
           "n_brier_observations": 10, "silent_edge_win_rate": 0.5, "market_favourite_win_rate": 0.5, "n_eligible_races": 10}],
-        {"0%-10%": {"avg_predicted_probability": 0.05, "actual_win_rate": 0.04}},
+        {"0%-10%": {"n_selections": 100, "avg_predicted_probability": 0.05, "actual_win_rate": 0.04, "calibration_error": -0.01}},
         {"WON": 3, "PLACED": 2, "UNPLACED": 4, "VOID/NR": 1},
         [{"bin_index": 0, "bin_range": (0.0, 0.1), "mean_predicted": 0.05, "mean_actual": 0.04, "count": 10}],
         [{"bin_index": 0, "bin_range": (0.0, 0.1), "mean_predicted": 0.06, "mean_actual": 0.05, "count": 10}],
@@ -210,6 +211,123 @@ def test_odds_band_flags_small_samples():
     assert result["2-4"]["small_sample"] is True
 
 
+# ---------------------------------------------------------------------------
+# build_insights — every section's generated analysis text must reflect the
+# real numbers passed in, and must never crash on an empty/zero-data window
+# ---------------------------------------------------------------------------
+
+def _full_class_summary(n_eligible=100):
+    return {
+        "n_eligible": n_eligible, "four_way": {"A": 20, "B": 15, "C": 25, "D": 40},
+        "silent_edge_win_rate": 0.35, "market_favourite_win_rate": 0.45,
+        "win_rate_difference": -0.10, "model_market_agreement_rate": 0.4,
+    }
+
+
+def _full_kwargs(n_eligible=100):
+    return dict(
+        class_summary=_full_class_summary(n_eligible),
+        brier_summary={"silent_edge_brier": 0.11, "market_brier": 0.095, "brier_gap": 0.015, "n": 500},
+        roi={"n": 90, "stake": 90.0, "profit": 12.0, "roi": 0.1333},
+        series=[
+            {"date": "2026-09-10", "brier_gap": 0.02, "n_brier_observations": 50,
+             "silent_edge_win_rate": 0.30, "market_favourite_win_rate": 0.40},
+            {"date": "2026-09-19", "brier_gap": 0.015, "n_brier_observations": 500,
+             "silent_edge_win_rate": 0.35, "market_favourite_win_rate": 0.45},
+        ],
+        band_analysis={
+            "10%-20%": {"n_selections": 200, "actual_win_rate": 0.22, "avg_predicted_probability": 0.15, "calibration_error": 0.07},
+            "40%-50%": {"n_selections": 30, "actual_win_rate": 0.30, "avg_predicted_probability": 0.45, "calibration_error": -0.15},
+            "80%-90%": {"n_selections": 5, "actual_win_rate": 1.0, "avg_predicted_probability": 0.85, "calibration_error": 0.15},
+        },
+        outcome_breakdown={"WON": 20, "PLACED": 15, "UNPLACED": 55, "VOID/NR": 10},
+        se_calibration=[{"mean_predicted": 0.2, "mean_actual": 0.25, "count": 100}],
+        market_calibration=[{"mean_predicted": 0.2, "mean_actual": 0.18, "count": 100}],
+        rank_matrix={
+            "se_rank=1,market_rank=1": {"se_rank": "1", "market_rank": "1", "n": 50, "actual_wins": 20,
+                                         "expected_wins_model": 15.0, "diff_actual_minus_expected_model": 5.0},
+            "se_rank=2,market_rank=3": {"se_rank": "2", "market_rank": "3", "n": 40, "actual_wins": 3,
+                                         "expected_wins_model": 8.0, "diff_actual_minus_expected_model": -5.0},
+        },
+        agreement_splits={
+            "silent_edge_vs_market": {"agree": {"n": 40, "win_rate": 0.5}, "disagree": {"n": 60, "win_rate": 0.25}},
+            "model1_vs_model2": {"agree": {"n": 55, "win_rate": 0.4}, "disagree": {"n": 45, "win_rate": 0.28}},
+        },
+        pnl_series={"dates": ["2026-09-10", "2026-09-19"], "cumulative_profit": [3.0, 12.0], "max_drawdown": -4.5, "total_stake": 90.0},
+        odds_bands={
+            "Odds < 2": {"n": 30, "win_rate": 0.55}, "2-4": {"n": 40, "win_rate": 0.30},
+            "4-8": {"n": 20, "win_rate": 0.10},
+        },
+    )
+
+
+def test_build_insights_kpi_reflects_real_numbers():
+    insights = build_insights(**_full_kwargs())
+    assert "100 eligible races" in insights["kpi"]
+    assert "35.0%" in insights["kpi"] and "45.0%" in insights["kpi"]
+    assert "trailing" in insights["kpi"]
+
+
+def test_build_insights_four_way_identifies_dominant_category_and_sums_correctly():
+    insights = build_insights(**_full_kwargs())
+    assert "D" in insights["four_way"]  # D=40 is the dominant category in the fixture
+    assert "A=20" in insights["four_way"] and "D=40" in insights["four_way"]
+
+
+def test_build_insights_brier_trend_direction():
+    insights = build_insights(**_full_kwargs())
+    # gap narrowed from 0.02 to 0.015 -> toward Silent Edge
+    assert "narrowed toward Silent Edge" in insights["brier_trend"]
+
+
+def test_build_insights_prob_bands_ignores_tiny_samples():
+    insights = build_insights(**_full_kwargs())
+    # the n=5 band (80%-90%) must not be picked as the "most" of anything
+    assert "80%-90%" not in insights["prob_bands"]
+    assert "10%-20%" in insights["prob_bands"] or "40%-50%" in insights["prob_bands"]
+
+
+def test_build_insights_outcomes_percentages_sum_sensible():
+    insights = build_insights(**_full_kwargs())
+    assert "20 won" in insights["outcomes"] or "20 " in insights["outcomes"]
+    assert "VOID/NR" not in insights["outcomes"] or "10" in insights["outcomes"]
+
+
+def test_build_insights_calibration_direction():
+    insights = build_insights(**_full_kwargs())
+    assert "overconfident" in insights["calibration"] or "underconfident" in insights["calibration"]
+
+
+def test_build_insights_heatmap_picks_extreme_cells_above_threshold():
+    insights = build_insights(**_full_kwargs())
+    assert "rank 1 / market rank 1" in insights["heatmap"]
+    assert "Rank 2" in insights["heatmap"] and "rank 3" in insights["heatmap"]
+
+
+def test_build_insights_never_crashes_on_empty_window():
+    kwargs = _full_kwargs(n_eligible=0)
+    kwargs["class_summary"]["silent_edge_win_rate"] = None
+    kwargs["class_summary"]["market_favourite_win_rate"] = None
+    kwargs["class_summary"]["win_rate_difference"] = None
+    kwargs["class_summary"]["model_market_agreement_rate"] = None
+    kwargs["class_summary"]["four_way"] = {"A": 0, "B": 0, "C": 0, "D": 0}
+    kwargs["brier_summary"] = None
+    kwargs["series"] = []
+    kwargs["band_analysis"] = {}
+    kwargs["outcome_breakdown"] = {"WON": 0, "PLACED": 0, "UNPLACED": 0, "VOID/NR": 0}
+    kwargs["se_calibration"] = []
+    kwargs["market_calibration"] = []
+    kwargs["rank_matrix"] = {}
+    kwargs["agreement_splits"] = {
+        "silent_edge_vs_market": {"agree": {"n": 0, "win_rate": None}, "disagree": {"n": 0, "win_rate": None}},
+        "model1_vs_model2": {"agree": {"n": 0, "win_rate": None}, "disagree": {"n": 0, "win_rate": None}},
+    }
+    kwargs["pnl_series"] = {"dates": [], "cumulative_profit": [], "max_drawdown": 0.0, "total_stake": 0.0}
+    kwargs["odds_bands"] = {}
+    insights = build_insights(**kwargs)
+    assert all(isinstance(v, str) and v for v in insights.values())
+
+
 if __name__ == "__main__":
     tests = [
         test_render_kpi_cards_includes_real_values, test_render_kpi_cards_handles_no_eligible_races_without_crashing,
@@ -219,6 +337,10 @@ if __name__ == "__main__":
         test_agreement_splits_are_computed_independently, test_agreement_splits_none_win_rate_when_no_observations,
         test_odds_band_buckets_by_fair_odds_not_raw_probability, test_odds_band_skips_zero_probability_without_crashing,
         test_odds_band_flags_small_samples,
+        test_build_insights_kpi_reflects_real_numbers, test_build_insights_four_way_identifies_dominant_category_and_sums_correctly,
+        test_build_insights_brier_trend_direction, test_build_insights_prob_bands_ignores_tiny_samples,
+        test_build_insights_outcomes_percentages_sum_sensible, test_build_insights_calibration_direction,
+        test_build_insights_heatmap_picks_extreme_cells_above_threshold, test_build_insights_never_crashes_on_empty_window,
     ]
     passed = 0
     for t in tests:

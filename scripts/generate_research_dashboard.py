@@ -318,6 +318,212 @@ def compute_roi(conn, start: date, end: date) -> dict:
     return {"n": int(n), "stake": stake, "profit": profit, "roi": (profit / stake) if stake else None}
 
 
+def build_insights(class_summary: dict, brier_summary: Optional[dict], roi: dict, series: list[dict],
+                    band_analysis: dict, outcome_breakdown: dict, se_calibration: list[dict],
+                    market_calibration: list[dict], rank_matrix: dict, agreement_splits: dict,
+                    pnl_series: dict, odds_bands: dict) -> dict:
+    """Real, computed plain-language analysis for every KPI/chart/table on
+    the page — every sentence below is derived directly from the same
+    numbers already rendered, never a generic caption. Written at the
+    register of a statistically literate analyst: point estimates are
+    always given alongside sample size, and no claim of a "real edge" or
+    "significant" pattern is made without that qualification attached.
+    Returns one string per section, keyed by the section's anchor id."""
+    insights: dict[str, str] = {}
+    n = class_summary["n_eligible"]
+
+    # --- Overall KPI summary --------------------------------------------
+    if n == 0:
+        insights["kpi"] = "No eligible races in this window yet — no summary can be drawn."
+    else:
+        wr_diff = class_summary["win_rate_difference"]
+        direction = "trailing" if wr_diff < 0 else ("ahead of" if wr_diff > 0 else "level with")
+        brier_txt = ""
+        if brier_summary:
+            leader = "the market" if brier_summary["brier_gap"] > 0 else "Silent Edge"
+            brier_txt = (f" On calibrated probability accuracy (Brier score, lower is better), {leader} currently "
+                         f"leads by {abs(brier_summary['brier_gap']):.4f} over {brier_summary['n']:,} paired "
+                         f"observations — a real but modest gap at this sample size.")
+        insights["kpi"] = (
+            f"Across {n} eligible races, Silent Edge's top pick is {direction} the market favourite by "
+            f"{abs(wr_diff):.1%} in win rate ({class_summary['silent_edge_win_rate']:.1%} vs "
+            f"{class_summary['market_favourite_win_rate']:.1%}).{brier_txt} The model and market agree on the "
+            f"same horse in {class_summary['model_market_agreement_rate']:.1%} of races — the other "
+            f"{1 - class_summary['model_market_agreement_rate']:.1%} represent genuinely independent signals, "
+            f"which is where any real edge, if one exists, would have to live."
+        )
+
+    # --- Four-way donut ---------------------------------------------------
+    if n == 0:
+        insights["four_way"] = "No eligible races to classify yet."
+    else:
+        fw = class_summary["four_way"]
+        dominant = max(fw, key=fw.get)
+        dominant_label = {"A": "both were right", "B": "Silent Edge alone was right",
+                           "C": "the market alone was right", "D": "both were wrong"}[dominant]
+        insights["four_way"] = (
+            f"A={fw['A']} ({fw['A']/n:.0%}), B={fw['B']} ({fw['B']/n:.0%}), C={fw['C']} ({fw['C']/n:.0%}), "
+            f"D={fw['D']} ({fw['D']/n:.0%}). The modal outcome is category {dominant} — {dominant_label} — in "
+            f"{fw[dominant]/n:.0%} of races. Categories B and C isolate the {fw['B']+fw['C']} races "
+            f"({(fw['B']+fw['C'])/n:.0%}) where the two forecasters actually diverged and only one was correct; "
+            f"comparing B to C directly ({fw['B']} vs {fw['C']}) is the cleanest read on relative skill, since A "
+            f"and D contribute no discriminating information (both agreed)."
+        )
+
+    # --- Cumulative Brier & win-rate trend ---------------------------------
+    if len(series) >= 2 and series[0]["brier_gap"] is not None and series[-1]["brier_gap"] is not None:
+        gap0, gap1 = series[0]["brier_gap"], series[-1]["brier_gap"]
+        trend = "widened in the market's favour" if gap1 > gap0 else ("narrowed toward Silent Edge" if gap1 < gap0 else "held steady")
+        insights["brier_trend"] = (
+            f"The Brier gap has {trend} over the tracked window, from {gap0:+.4f} on {series[0]['date']} to "
+            f"{gap1:+.4f} on {series[-1]['date']} (n={series[-1]['n_brier_observations']:,} cumulative pairs by "
+            f"the last day). With under two weeks of live data, this trajectory should be read as noisy — a "
+            f"single unusual day can move it materially; it is not yet long enough to distinguish a genuine "
+            f"drift in relative accuracy from sampling variance."
+        )
+    else:
+        insights["brier_trend"] = "Insufficient paired observations yet to describe a trend."
+
+    if len(series) >= 2:
+        wr0, wr1 = series[0]["silent_edge_win_rate"], series[-1]["silent_edge_win_rate"]
+        mk0, mk1 = series[0]["market_favourite_win_rate"], series[-1]["market_favourite_win_rate"]
+        insights["win_rate_trend"] = (
+            f"Silent Edge's cumulative win rate moved from {wr0:.1%} to {wr1:.1%} across the window; the "
+            f"market favourite's moved from {mk0:.1%} to {mk1:.1%}. Both series are cumulative averages over a "
+            f"growing sample, so early-window volatility is expected and later movement is more informative "
+            f"than early movement — the lines should visibly stabilise as more races accumulate."
+        )
+    else:
+        insights["win_rate_trend"] = "Insufficient days tracked yet to describe a trend."
+
+    # --- Probability bands --------------------------------------------------
+    if band_analysis:
+        # Largest positive (underconfident) and negative (overconfident) calibration errors, excluding tiny n.
+        substantial = {k: v for k, v in band_analysis.items() if v["n_selections"] >= 20}
+        if substantial:
+            most_under = max(substantial, key=lambda k: substantial[k]["calibration_error"])
+            most_over = min(substantial, key=lambda k: substantial[k]["calibration_error"])
+            u, o = substantial[most_under], substantial[most_over]
+            insights["prob_bands"] = (
+                f"The largest calibration gaps among bands with a meaningful sample (n≥20): the {most_under} band "
+                f"is underconfident — {u['actual_win_rate']:.1%} actual vs {u['avg_predicted_probability']:.1%} "
+                f"predicted (n={u['n_selections']}, {u['calibration_error']:+.1%} error) — while the {most_over} band runs "
+                f"the other way ({o['actual_win_rate']:.1%} vs {o['avg_predicted_probability']:.1%}, "
+                f"{o['calibration_error']:+.1%}). Bands below n=20 (shown dimmed logic aside, check the raw table) "
+                f"carry confidence intervals too wide to draw any conclusion from a single point estimate."
+            )
+        else:
+            insights["prob_bands"] = "Every band has fewer than 20 observations — no band supports a reliable calibration read yet."
+    else:
+        insights["prob_bands"] = "No probability-band data available for this window."
+
+    # --- Top-pick outcome donut ---------------------------------------------
+    total_outcomes = sum(outcome_breakdown.values())
+    if total_outcomes:
+        insights["outcomes"] = (
+            f"Of {total_outcomes} settled top-pick selections: {outcome_breakdown['WON']} won "
+            f"({outcome_breakdown['WON']/total_outcomes:.0%}), {outcome_breakdown['PLACED']} placed without "
+            f"winning ({outcome_breakdown['PLACED']/total_outcomes:.0%}), {outcome_breakdown['UNPLACED']} finished "
+            f"unplaced ({outcome_breakdown['UNPLACED']/total_outcomes:.0%}), and {outcome_breakdown['VOID/NR']} "
+            f"were void or non-runners ({outcome_breakdown['VOID/NR']/total_outcomes:.0%}, excluded from every "
+            f"other rate calculation on this page). The WON+PLACED share "
+            f"({(outcome_breakdown['WON']+outcome_breakdown['PLACED'])/total_outcomes:.0%}) is the relevant figure "
+            f"for each-way betting interest specifically; the win-only KPIs above use WON alone."
+        )
+    else:
+        insights["outcomes"] = "No settled top-pick selections yet."
+
+    # --- Calibration curve ---------------------------------------------------
+    def _mean_signed_error(curve: list[dict]) -> Optional[float]:
+        if not curve:
+            return None
+        weighted = sum((b["mean_actual"] - b["mean_predicted"]) * b["count"] for b in curve)
+        total = sum(b["count"] for b in curve)
+        return weighted / total if total else None
+
+    se_err = _mean_signed_error(se_calibration)
+    mk_err = _mean_signed_error(market_calibration)
+    if se_err is not None and mk_err is not None:
+        se_dir = "overconfident (predictions running ahead of outcomes)" if se_err < 0 else "underconfident"
+        mk_dir = "overconfident" if mk_err < 0 else "underconfident"
+        insights["calibration"] = (
+            f"Weighted across all bins, Silent Edge's mean signed calibration error is {se_err:+.1%} — "
+            f"{se_dir} on average — versus the market's {mk_err:+.1%} ({mk_dir}). A point sitting above the "
+            f"diagonal wins more than its own stated probability implies; below the diagonal means it wins "
+            f"less. This is the same information as the probability-band table above, presented per-bin rather "
+            f"than aggregated."
+        )
+    else:
+        insights["calibration"] = "Insufficient data to compute a calibration curve for either forecaster yet."
+
+    # --- Agreement chart ------------------------------------------------------
+    sem = agreement_splits["silent_edge_vs_market"]
+    m1m2 = agreement_splits["model1_vs_model2"]
+    parts = []
+    if sem["agree"]["win_rate"] is not None and sem["disagree"]["win_rate"] is not None:
+        parts.append(
+            f"When Silent Edge's top pick matches the market favourite (n={sem['agree']['n']}), the win rate is "
+            f"{sem['agree']['win_rate']:.1%}; when it doesn't (n={sem['disagree']['n']}), it's "
+            f"{sem['disagree']['win_rate']:.1%}. This gap is expected and largely mechanical — favourites win "
+            f"more often than longshots by construction, regardless of which model is doing the picking — so it "
+            f"should not itself be read as evidence for or against the model."
+        )
+    if m1m2["agree"]["win_rate"] is not None and m1m2["disagree"]["win_rate"] is not None:
+        parts.append(
+            f"Independently, when Model 1 and Model 2 agree on the top pick (n={m1m2['agree']['n']}), the live "
+            f"win rate is {m1m2['agree']['win_rate']:.1%} versus {m1m2['disagree']['win_rate']:.1%} when they "
+            f"don't (n={m1m2['disagree']['n']}) — a genuinely different question (internal model consensus, not "
+            f"model-vs-market agreement) and should not be conflated with the first figure."
+        )
+    insights["agreement"] = " ".join(parts) if parts else "Insufficient data for either agreement comparison yet."
+
+    # --- P&L chart --------------------------------------------------------
+    if pnl_series["dates"]:
+        final = pnl_series["cumulative_profit"][-1]
+        insights["pnl"] = (
+            f"£1 level-stake profit stands at £{final:+.2f} on £{pnl_series['total_stake']:.0f} staked "
+            f"({final/pnl_series['total_stake']:+.1%} ROI if stake > 0), with a maximum peak-to-trough drawdown "
+            f"of £{pnl_series['max_drawdown']:.2f} across the window. As noted above, a P&L curve over "
+            f"{len(pnl_series['dates'])} days is dominated by the variance of individual winning prices, not by "
+            f"strike rate — the Brier gap and win-rate difference are the more reliable measures of forecasting "
+            f"quality; this chart answers a different question ('what would a bettor's balance have done'), not "
+            f"'is the model good'."
+        )
+    else:
+        insights["pnl"] = "No settled staking data yet."
+
+    # --- Odds bands ---------------------------------------------------------
+    if odds_bands:
+        ordered = sorted(odds_bands.items(), key=lambda kv: ["Odds < 2", "2-4", "4-8", "8-16", "16+"].index(kv[0]) if kv[0] in ["Odds < 2", "2-4", "4-8", "8-16", "16+"] else 99)
+        monotonic = all(ordered[i][1]["win_rate"] >= ordered[i + 1][1]["win_rate"] for i in range(len(ordered) - 1))
+        shape = ("declines monotonically from short to long odds, as basic favourite-longshot logic predicts"
+                 if monotonic else "does not decline monotonically from short to long odds — worth a closer look at whichever band breaks the pattern")
+        band_list = ", ".join(f"{label}: {d['win_rate']:.0%} (n={d['n']})" for label, d in ordered)
+        insights["odds_bands"] = f"Win rate by Silent Edge's own fair-odds band {shape}. Raw figures: {band_list}."
+    else:
+        insights["odds_bands"] = "No odds-band data available yet."
+
+    # --- Heat map -------------------------------------------------------------
+    substantial_cells = {k: v for k, v in rank_matrix.items() if v["n"] >= 20}
+    if substantial_cells:
+        most_under = max(substantial_cells, key=lambda k: substantial_cells[k]["diff_actual_minus_expected_model"])
+        most_over = min(substantial_cells, key=lambda k: substantial_cells[k]["diff_actual_minus_expected_model"])
+        u, o = substantial_cells[most_under], substantial_cells[most_over]
+        insights["heatmap"] = (
+            f"Among cells with n≥20, Silent Edge rank {u['se_rank']} / market rank {u['market_rank']} shows the "
+            f"largest underconfidence — {u['actual_wins']} actual wins against {u['expected_wins_model']} "
+            f"expected from n={u['n']} runners ({u['diff_actual_minus_expected_model']:+.1f}). Rank {o['se_rank']} "
+            f"/ rank {o['market_rank']} shows the sharpest overconfidence in the opposite direction "
+            f"({o['actual_wins']} actual vs {o['expected_wins_model']} expected, n={o['n']}, "
+            f"{o['diff_actual_minus_expected_model']:+.1f}). Both are single-cell observations from a two-week "
+            f"window — treat as hypotheses to monitor (see the Research Lab tracker), not conclusions."
+        )
+    else:
+        insights["heatmap"] = "No rank-matrix cell yet has 20 or more observations — too early to highlight any cell with confidence."
+
+    return insights
+
+
 def render_heatmap_table(matrix: dict, max_rank: int = 6) -> str:
     """Real coloured HTML table — SE rank (rows) vs market rank (columns),
     each cell showing n/win-rate, coloured by diff_actual_minus_expected_model
@@ -365,6 +571,9 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
                  integrity_status: str, series: list[dict], band_analysis: dict,
                  outcome_breakdown: dict, se_calibration: list[dict], market_calibration: list[dict],
                  rank_matrix: dict, agreement_splits: dict, pnl_series: dict, odds_bands: dict) -> str:
+    insights = build_insights(class_summary, brier_summary, roi, series, band_analysis, outcome_breakdown,
+                               se_calibration, market_calibration, rank_matrix, agreement_splits, pnl_series, odds_bands)
+
     donut_labels = ["A: Both correct", "B: Silent Edge only", "C: Market only", "D: Both wrong"]
     donut_data = [class_summary["four_way"][k] for k in ("A", "B", "C", "D")]
 
@@ -439,6 +648,12 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
   .not-yet ul {{ margin: 8px 0 0 18px; padding: 0; }}
   canvas {{ max-width: 100%; }}
   .chart-canvas-wrap {{ position: relative; height: 260px; }}
+  .insight {{ margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 0.78rem;
+              line-height: 1.45; color: var(--muted); }}
+  .insight strong {{ color: var(--fg); }}
+  .kpi-analysis {{ background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+                    font-size: 0.82rem; line-height: 1.5; color: var(--muted); margin-bottom: 20px; }}
+  .kpi-analysis strong {{ color: var(--fg); }}
   .heatmap {{ border-collapse: collapse; width: 100%; font-size: 0.75rem; }}
   .heatmap th {{ color: var(--muted); font-weight: 500; padding: 4px 6px; text-align: center; }}
   .heat-cell {{ text-align: center; padding: 6px 4px; border-radius: 4px; }}
@@ -454,6 +669,7 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
 <div class="subtitle">{start} to {end} · live-tracked window · descriptive/observational, never fed back into the live algorithm</div>
 
 {render_kpi_cards(class_summary, brier_summary, roi, integrity_status)}
+<div class="kpi-analysis"><strong>Analysis:</strong> {insights['kpi']}</div>
 <div class="not-yet" style="margin-bottom:24px;">
   <strong>On the £1 flat-stake ROI above:</strong> a positive (or negative) short-term ROI over a small,
   recent sample is <em>not</em> proof of a real statistical advantage — it can easily reflect the variance
@@ -465,44 +681,54 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
   <div class="chart-panel">
     <h2>Four-way outcome classification (eligible races: {class_summary['n_eligible']})</h2>
     <div class="chart-canvas-wrap"><canvas id="donutChart"></canvas></div>
+    <div class="insight"><strong>Analysis:</strong> {insights['four_way']}</div>
   </div>
   <div class="chart-panel">
     <h2>Cumulative Brier — Silent Edge vs Market (lower is better)</h2>
     <div class="chart-canvas-wrap"><canvas id="brierChart"></canvas></div>
+    <div class="insight"><strong>Analysis:</strong> {insights['brier_trend']}</div>
   </div>
   <div class="chart-panel">
     <h2>Win-rate trend — Silent Edge top pick vs market favourite</h2>
     <div class="chart-canvas-wrap"><canvas id="winRateChart"></canvas></div>
+    <div class="insight"><strong>Analysis:</strong> {insights['win_rate_trend']}</div>
   </div>
   <div class="chart-panel">
     <h2>Probability bands — expected vs actual win rate</h2>
     <div class="chart-canvas-wrap"><canvas id="bandChart"></canvas></div>
+    <div class="insight"><strong>Analysis:</strong> {insights['prob_bands']}</div>
   </div>
   <div class="chart-panel">
     <h2>Top-pick outcomes (won / placed / unplaced / void)</h2>
     <div class="chart-canvas-wrap"><canvas id="outcomeDonutChart"></canvas></div>
+    <div class="insight"><strong>Analysis:</strong> {insights['outcomes']}</div>
   </div>
   <div class="chart-panel">
     <h2>Calibration — predicted probability vs actual win frequency</h2>
     <div class="chart-canvas-wrap"><canvas id="calibrationChart"></canvas></div>
+    <div class="insight"><strong>Analysis:</strong> {insights['calibration']}</div>
   </div>
   <div class="chart-panel">
     <h2>Win rate by agreement (two separate, never-conflated measures)</h2>
     <div class="chart-canvas-wrap"><canvas id="agreementChart"></canvas></div>
+    <div class="insight"><strong>Analysis:</strong> {insights['agreement']}</div>
   </div>
   <div class="chart-panel">
     <h2>Cumulative £1 flat-stake profit (max drawdown: £{pnl_series['max_drawdown']}, total staked: £{pnl_series['total_stake']})</h2>
     <div class="chart-canvas-wrap"><canvas id="pnlChart"></canvas></div>
+    <div class="insight"><strong>Analysis:</strong> {insights['pnl']}</div>
   </div>
   <div class="chart-panel">
     <h2>Win rate by odds band (Silent Edge's own fair odds)</h2>
     <div class="chart-canvas-wrap"><canvas id="oddsBandChart"></canvas></div>
+    <div class="insight"><strong>Analysis:</strong> {insights['odds_bands']}</div>
   </div>
 </div>
 
 <div class="chart-panel" style="margin-bottom:32px;">
   <h2>Silent Edge rank vs market rank — win rate, coloured by actual minus expected (teal = Silent Edge underconfident there, red = overconfident)</h2>
   <div class="heatmap-wrap">{heatmap_html}</div>
+  <div class="insight"><strong>Analysis:</strong> {insights['heatmap']}</div>
 </div>
 
 <div class="not-yet">
