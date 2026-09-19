@@ -197,6 +197,44 @@ CREATE TABLE IF NOT EXISTS market_snapshot (
 -- didn't actually check).
 ALTER TABLE market_snapshot ADD COLUMN IF NOT EXISTS price_quality TEXT NOT NULL DEFAULT 'ok';
 
+-- Research V2 brief, Phase 5/6 (Sections 12B, 14): real historical
+-- multi-point Betfair price data from the Kaggle betfair_mapping CSVs
+-- (data/kaggle_historical/betfair/), previously loaded into the repo but
+-- never imported. Only covers 2026-03-01 to 2026-04-29 (confirmed via the
+-- CSVs themselves — the dataset's own README claim of broader coverage
+-- does not hold for this file), worldwide courses (filtered to GB at
+-- import time by scripts/load_kaggle_betfair_historical.py). A genuinely
+-- separate table from `market_snapshot` (which is a live, point-in-time
+-- order-book time series) because this source's own fields have
+-- different real semantics — morning/pre-off/in-play RANGES, not
+-- individual timestamped snapshots.
+--
+-- LEAKAGE WARNING, real and load-bearing: ip_min/ip_max are IN-PLAY prices
+-- — recorded strictly AFTER the race started. They must never be used as
+-- an input to any pre-race feature or historical simulated forecast
+-- (brief Section 12B: "never use later prices as inputs to an earlier
+-- simulated forecast"). Only sp, bsp, wap, morning_wap, pre_min, pre_max
+-- are genuinely pre-race-knowable.
+CREATE TABLE IF NOT EXISTS historical_betfair_price (
+    id              SERIAL PRIMARY KEY,
+    race_id         INT NOT NULL REFERENCES race(id),
+    horse_id        INT NOT NULL REFERENCES horse(id),
+    starting_price  NUMERIC,        -- decimal SP, converted from the CSV's fractional string
+    bsp             NUMERIC,        -- Betfair Starting Price
+    wap             NUMERIC,        -- volume-weighted average price, whole market
+    morning_wap     NUMERIC,        -- pre-race-knowable
+    pre_min         NUMERIC,        -- pre-race-knowable
+    pre_max         NUMERIC,        -- pre-race-knowable
+    ip_min          NUMERIC,        -- IN-PLAY — post-off, never pre-race-knowable, see warning above
+    ip_max          NUMERIC,        -- IN-PLAY — post-off, never pre-race-knowable, see warning above
+    morning_vol     NUMERIC,
+    pre_vol         NUMERIC,
+    ip_vol          NUMERIC,
+    source_id       INT REFERENCES data_source(id),
+    ingested_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (race_id, horse_id)
+);
+
 -- Weather snapshot per course per day — feature input, not a race-specific record.
 CREATE TABLE IF NOT EXISTS weather_snapshot (
     id                  SERIAL PRIMARY KEY,
