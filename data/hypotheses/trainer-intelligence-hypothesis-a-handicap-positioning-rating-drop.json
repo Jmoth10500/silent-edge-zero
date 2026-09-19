@@ -1,0 +1,40 @@
+{
+  "slug": "trainer-intelligence-hypothesis-a-handicap-positioning-rating-drop",
+  "name": "Trainer Intelligence Hypothesis A - handicap positioning rating drop",
+  "description": "Tests whether horses returning off a rating at least 5lb below their career-best mark, with a real previous win somewhere in their history, outperform the market's own de-vigged implied probability -- the brief's Section 12A handicap-positioning hypothesis. Backtested over the FULL historical bootstrap (2023-01-01 to present, 313,182 rated runs with a real prior run, 45,396 distinct horse names, matched by name to sidestep the known horse.id dedup bug).",
+  "rule_definition": "QUALIFYING: rating_drop (prior_max_official_rating - current_official_rating) >= 5.0 AND has_previous_win == true. CONTROL: everyone else with a known outcome and a de-vig-able race (>=2 runners with a real starting_price). Compared via actual_wins vs sum-of-market-probability expected_wins for each group separately.",
+  "source_finding": "scripts/trainer_intelligence_a_report.py, full-history backtest run 2026-09-19",
+  "historical_evidence": {
+    "window": "2023-01-01 to 2026-09-19 (full historical bootstrap)",
+    "rating_drop_threshold": 5.0,
+    "n_races_excluded_insufficient_market_data": 3237,
+    "qualifying_group": {
+      "n": 71521,
+      "actual_wins": 7001,
+      "actual_win_rate": 0.098,
+      "market_expected_wins": 7341.04,
+      "diff": -340.04,
+      "relative_shortfall_vs_market": -0.0463
+    },
+    "control_group": {
+      "n": 234544,
+      "actual_wins": 25851,
+      "actual_win_rate": 0.11,
+      "market_expected_wins": 29545.96,
+      "diff": -3694.96,
+      "relative_shortfall_vs_market": -0.1251
+    },
+    "conclusion": "NEGATIVE RESULT (initial cut): the qualifying group tracks the market's own expectation MORE closely (-4.6% relative shortfall) than the control group does (-12.5% relative shortfall) -- i.e. no edge over the market was found for this specific rule at this threshold. Statistical caveat: pooled at runner level, not race-level resampled (brief Section 24) -- read as descriptive/suggestive, not a validated test. Worth noting both groups show the market itself slightly overpredicting relative to realised outcomes across this whole population, a separate observation from the hypothesis itself.",
+    "statistical_caveat": "Pooled at runner level, NOT race-level resampled -- observations within the same race are not independent."
+  },
+  "created_at": "2026-09-19T14:40:33.830972+00:00",
+  "prospective_test_start_date": null,
+  "status": "prospective_rejected",
+  "prospective_results": [
+    {
+      "n": 306065,
+      "note": "already backtested against the full historical population in historical_evidence; no separate prospective run needed unless the rule is revised",
+      "recorded_at": "2026-09-19T14:40:33.861327+00:00"
+    }
+  ]
+}
