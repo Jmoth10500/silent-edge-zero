@@ -13,7 +13,7 @@ site/index.html
 # Pre-phase DB backups (research V2 brief, Phase 0) — large, local only
 backups/
 
-# Per-run Data Integrity Audit output (research V2 brief, Phase 1) — a
-# diagnostic snapshot each run, not a versioned artifact like the freeze
-# manifest/snapshot below.
+# Per-run diagnostic report output (research V2 brief) — a snapshot each
+# run, not a versioned artifact like the freeze manifest/snapshot below.
 data/integrity_audit_*.json
+data/market_vs_model_*.json
