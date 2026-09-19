@@ -11,7 +11,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.generate_research_dashboard import render_heatmap_table, render_html, render_kpi_cards, top_pick_outcome_breakdown
+from scripts.generate_research_dashboard import (
+    agreement_win_rate_splits,
+    render_heatmap_table,
+    render_html,
+    render_kpi_cards,
+    top_pick_outcome_breakdown,
+)
 
 
 def _class_summary(n_eligible=10, n_unresolved=1):
@@ -56,6 +62,8 @@ def test_render_html_produces_a_complete_page_with_chart_canvases():
         {"se_rank=1,market_rank=1": {"se_rank": "1", "market_rank": "1", "n": 30, "actual_wins": 10,
                                       "actual_win_rate": 0.33, "expected_wins_model": 9.0,
                                       "diff_actual_minus_expected_model": 1.0, "small_sample": False}},
+        {"silent_edge_vs_market": {"agree": {"n": 10, "win_rate": 0.4}, "disagree": {"n": 20, "win_rate": 0.2}},
+         "model1_vs_model2": {"agree": {"n": 15, "win_rate": 0.3}, "disagree": {"n": 15, "win_rate": 0.15}}},
     )
     assert "<!DOCTYPE html>" in html
     assert 'id="donutChart"' in html
@@ -64,6 +72,7 @@ def test_render_html_produces_a_complete_page_with_chart_canvases():
     assert 'id="bandChart"' in html
     assert 'id="outcomeDonutChart"' in html
     assert 'id="calibrationChart"' in html
+    assert 'id="agreementChart"' in html
     assert "heatmap" in html
     assert "chart.js" in html.lower()
     assert "2026-09-10" in html
@@ -114,12 +123,65 @@ def test_heatmap_renders_a_dash_for_missing_cells_and_values_for_present_ones():
     assert html.count("–") >= 1  # most cells are genuinely empty for this tiny matrix
 
 
+# ---------------------------------------------------------------------------
+# agreement_win_rate_splits — the two agreement notions must stay separate
+# ---------------------------------------------------------------------------
+
+def _race_full(race_id, top_pick_id, favourite_ids, winner_id, category, runners):
+    return {
+        "classified": {"race_id": race_id, "category": category, "top_pick_horse_id": top_pick_id, "favourite_horse_ids": favourite_ids},
+        "race": {"race": {"race_id": race_id}, "top_pick_horse_id": top_pick_id, "runners": runners},
+    }
+
+
+def _m_runner(horse_id, other_model_prob, finishing_position=None, result_note=None):
+    return {
+        "horse": {"horse_id": horse_id},
+        "silent_edge": {"other_model_probability": other_model_prob},
+        "result": {"finishing_position": finishing_position, "result_note": result_note},
+    }
+
+
+def test_agreement_splits_are_computed_independently():
+    # Race 1: SE top pick (1) == market favourite (1), SE wins -> category A -> SE/market AGREE, win.
+    # Model 1's own top pick (by other_model_probability) is horse 2, DISAGREEING with Model 2's pick (1).
+    race1 = _race_full(1, 1, [1], 1, "A", [
+        _m_runner(1, other_model_prob=0.3, finishing_position=1),
+        _m_runner(2, other_model_prob=0.5, finishing_position=2),
+    ])
+    # Race 2: SE top pick (3) != market favourite (4) -> category B (SE wins, market doesn't) -> SE/market DISAGREE, win.
+    # Model 1 also picks horse 3 here -> Model1/Model2 AGREE.
+    race2 = _race_full(2, 3, [4], 3, "B", [
+        _m_runner(3, other_model_prob=0.6, finishing_position=1),
+        _m_runner(4, other_model_prob=0.2, finishing_position=2),
+    ])
+    races = [race1["race"], race2["race"]]
+    classified = [race1["classified"], race2["classified"]]
+
+    result = agreement_win_rate_splits(races, classified)
+
+    sem = result["silent_edge_vs_market"]
+    assert sem["agree"]["n"] == 1 and sem["agree"]["win_rate"] == 1.0     # race 1
+    assert sem["disagree"]["n"] == 1 and sem["disagree"]["win_rate"] == 1.0  # race 2 (SE won despite disagreeing)
+
+    m1m2 = result["model1_vs_model2"]
+    assert m1m2["disagree"]["n"] == 1 and m1m2["disagree"]["win_rate"] == 1.0  # race 1: Model2 won even though Model1 disagreed
+    assert m1m2["agree"]["n"] == 1 and m1m2["agree"]["win_rate"] == 1.0        # race 2: both models agreed
+
+
+def test_agreement_splits_none_win_rate_when_no_observations():
+    result = agreement_win_rate_splits([], [])
+    assert result["silent_edge_vs_market"]["agree"]["win_rate"] is None
+    assert result["model1_vs_model2"]["disagree"]["n"] == 0
+
+
 if __name__ == "__main__":
     tests = [
         test_render_kpi_cards_includes_real_values, test_render_kpi_cards_handles_no_eligible_races_without_crashing,
         test_render_html_produces_a_complete_page_with_chart_canvases,
         test_outcome_breakdown_classifies_won_placed_unplaced_void,
         test_heatmap_renders_a_dash_for_missing_cells_and_values_for_present_ones,
+        test_agreement_splits_are_computed_independently, test_agreement_splits_none_win_rate_when_no_observations,
     ]
     passed = 0
     for t in tests:

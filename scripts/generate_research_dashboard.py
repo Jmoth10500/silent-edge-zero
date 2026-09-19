@@ -39,6 +39,7 @@ import json
 import sys
 from datetime import date, timedelta
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -157,6 +158,77 @@ def top_pick_outcome_breakdown(races: list[dict]) -> dict:
     return counts
 
 
+def agreement_win_rate_splits(races: list[dict], classified: list[dict]) -> dict:
+    """Real win-rate comparison for two DELIBERATELY SEPARATE agreement
+    notions (brief Section 17, Graph F: "do not confuse the two agreement
+    measurements"):
+
+    1. Silent Edge vs MARKET agreement — does the top pick's win rate
+       differ depending on whether it also happened to be the market
+       favourite (reuses market_vs_model.classify_races' own
+       favourite_horse_ids, never re-derived).
+    2. MODEL 1 vs MODEL 2 agreement — does Model 2's (the live/display
+       model) top pick win more often when Model 1 independently agreed
+       with it, using each runner's own `other_model_probability` (Model
+       1's probability for that horse) already carried on the dataset.
+
+    Both splits report n and win rate for AGREE/DISAGREE; a group with
+    zero races reports None rather than a fabricated rate."""
+    def _rate(hits: int, n: int) -> Optional[float]:
+        return round(hits / n, 4) if n else None
+
+    # Split 1: Silent Edge vs market.
+    se_market_agree_n, se_market_agree_wins = 0, 0
+    se_market_disagree_n, se_market_disagree_wins = 0, 0
+    by_race_id = {c["race_id"]: c for c in classified}
+    for race in races:
+        c = by_race_id.get(race["race"]["race_id"])
+        if c is None or c["category"] == "UNRESOLVED":
+            continue
+        top_pick_won = c["category"] in ("A", "B")
+        agrees = c["top_pick_horse_id"] in c["favourite_horse_ids"]
+        if agrees:
+            se_market_agree_n += 1
+            se_market_agree_wins += int(top_pick_won)
+        else:
+            se_market_disagree_n += 1
+            se_market_disagree_wins += int(top_pick_won)
+
+    # Split 2: Model 1 vs Model 2, entirely independent of the above.
+    m1_m2_agree_n, m1_m2_agree_wins = 0, 0
+    m1_m2_disagree_n, m1_m2_disagree_wins = 0, 0
+    for race in races:
+        runners = race["runners"]
+        m2_top = race.get("top_pick_horse_id")
+        if m2_top is None:
+            continue
+        with_m1 = [r for r in runners if r["silent_edge"].get("other_model_probability") is not None]
+        if not with_m1:
+            continue
+        m1_top = max(with_m1, key=lambda r: r["silent_edge"]["other_model_probability"])["horse"]["horse_id"]
+        m2_runner = next((r for r in runners if r["horse"]["horse_id"] == m2_top), None)
+        if m2_runner is None or m2_runner["result"]["finishing_position"] is None and m2_runner["result"]["result_note"] is None:
+            continue  # pending
+        m2_won = m2_runner["result"]["finishing_position"] == 1
+        if m1_top == m2_top:
+            m1_m2_agree_n += 1
+            m1_m2_agree_wins += int(m2_won)
+        else:
+            m1_m2_disagree_n += 1
+            m1_m2_disagree_wins += int(m2_won)
+
+    return {
+        "silent_edge_vs_market": {
+            "agree": {"n": se_market_agree_n, "win_rate": _rate(se_market_agree_wins, se_market_agree_n)},
+            "disagree": {"n": se_market_disagree_n, "win_rate": _rate(se_market_disagree_wins, se_market_disagree_n)},
+        },
+        "model1_vs_model2": {
+            "agree": {"n": m1_m2_agree_n, "win_rate": _rate(m1_m2_agree_wins, m1_m2_agree_n)},
+            "disagree": {"n": m1_m2_disagree_n, "win_rate": _rate(m1_m2_disagree_wins, m1_m2_disagree_n)},
+        },
+    }
+
+
 def compute_roi(conn, start: date, end: date) -> dict:
     cur = conn.cursor()
     cur.execute(
@@ -216,7 +288,7 @@ def render_heatmap_table(matrix: dict, max_rank: int = 6) -> str:
 def render_html(start: date, end: date, class_summary: dict, brier_summary, roi: dict,
                  integrity_status: str, series: list[dict], band_analysis: dict,
                  outcome_breakdown: dict, se_calibration: list[dict], market_calibration: list[dict],
-                 rank_matrix: dict) -> str:
+                 rank_matrix: dict, agreement_splits: dict) -> str:
     donut_labels = ["A: Both correct", "B: Silent Edge only", "C: Market only", "D: Both wrong"]
     donut_data = [class_summary["four_way"][k] for k in ("A", "B", "C", "D")]
 
@@ -241,6 +313,18 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
     se_cal_points_json = json.dumps(se_cal_points)
     market_cal_points_json = json.dumps(market_cal_points)
     heatmap_html = render_heatmap_table(rank_matrix)
+
+    sem = agreement_splits["silent_edge_vs_market"]
+    m1m2 = agreement_splits["model1_vs_model2"]
+    agreement_chart_data = {
+        "labels": ["SE vs Market: Agree", "SE vs Market: Disagree", "Model1 vs Model2: Agree", "Model1 vs Model2: Disagree"],
+        "rates": [
+            (sem["agree"]["win_rate"] or 0) * 100, (sem["disagree"]["win_rate"] or 0) * 100,
+            (m1m2["agree"]["win_rate"] or 0) * 100, (m1m2["disagree"]["win_rate"] or 0) * 100,
+        ],
+        "ns": [sem["agree"]["n"], sem["disagree"]["n"], m1m2["agree"]["n"], m1m2["disagree"]["n"]],
+    }
+    agreement_chart_json = json.dumps(agreement_chart_data)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -319,6 +403,10 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
     <h2>Calibration — predicted probability vs actual win frequency</h2>
     <canvas id="calibrationChart"></canvas>
   </div>
+  <div class="chart-panel">
+    <h2>Win rate by agreement (two separate, never-conflated measures)</h2>
+    <canvas id="agreementChart"></canvas>
+  </div>
 </div>
 
 <div class="chart-panel" style="margin-bottom:32px;">
@@ -330,8 +418,7 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
   <strong>Not yet built (real, honest — Phase 3 is not complete):</strong>
   <ul>
     <li>Per-race drill-down / click-through from any chart, donut segment, or heat-map cell.</li>
-    <li>Remaining Graph types C (profitability drawdown) and F (agreement win-rate split), and odds-band
-        breakdown (Graph G).</li>
+    <li>Remaining Graph types C (profitability drawdown) and G (odds-band breakdown).</li>
     <li>Mobile-specific layout polish beyond basic CSS grid responsiveness.</li>
   </ul>
 </div>
@@ -400,6 +487,19 @@ new Chart(document.getElementById('calibrationChart'), {{
     y: {{ title: {{ display: true, text: 'Actual %', color: '#93a1b8' }}, ticks: {{ color: '#93a1b8' }}, min: 0, max: 100 }},
   }}, plugins: {{ legend: {{ labels: {{ color: '#e8edf5' }} }} }} }}
 }});
+
+const agreementChartData = {agreement_chart_json};
+new Chart(document.getElementById('agreementChart'), {{
+  type: 'bar',
+  data: {{ labels: agreementChartData.labels, datasets: [
+    {{ label: 'Win rate %', data: agreementChartData.rates,
+       backgroundColor: ['#2fd6b8', '#f2555a', '#4f8ff7', '#a679f0'] }},
+  ]}},
+  options: {{ indexAxis: 'y',
+    scales: {{ x: {{ ticks: {{ color: '#93a1b8', callback: v => v + '%' }} }}, y: {{ ticks: {{ color: '#93a1b8' }} }} }},
+    plugins: {{ legend: {{ display: false }},
+      tooltip: {{ callbacks: {{ afterLabel: ctx => 'n=' + agreementChartData.ns[ctx.dataIndex] }} }} }} }}
+}});
 </script>
 </body>
 </html>
@@ -432,6 +532,8 @@ def main():
     rank_observations = build_rank_observations(all_races)
     rank_matrix = aggregate_rank_matrix(rank_observations)
 
+    agreement_splits = agreement_win_rate_splits(all_races, classified)
+
     roi = compute_roi(conn, start, end)
     integrity_result = run_audit(conn, start, end)
     series = daily_series(conn, start, end)
@@ -439,7 +541,7 @@ def main():
     conn.close()
 
     html = render_html(start, end, class_summary, brier_summary, roi, integrity_result["status"], series, band_analysis,
-                        outcome_breakdown, se_calibration, market_calibration, rank_matrix)
+                        outcome_breakdown, se_calibration, market_calibration, rank_matrix, agreement_splits)
     OUTPUT_PATH.write_text(html)
     print(f"Research dashboard written to {OUTPUT_PATH} ({len(html)} bytes).")
     print(f"Range: {start} .. {end}  |  {class_summary['n_eligible']} eligible races  |  "
