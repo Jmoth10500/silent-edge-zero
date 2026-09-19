@@ -17,3 +17,5 @@ backups/
 # run, not a versioned artifact like the freeze manifest/snapshot below.
 data/integrity_audit_*.json
 data/market_vs_model_*.json
+data/brier_live_*.json
+data/missed_winners_*.json
