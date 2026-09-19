@@ -68,12 +68,27 @@ def _runner_outcome_known(result: dict) -> Optional[int]:
 
 def build_rank_observations(races: list[dict], price_source: str = "at_lock") -> list[dict]:
     """One dict per runner with a known Silent Edge rank, a known market
-    rank, and a known outcome — the full eligible population the matrix is
-    built from (every runner, not just missed-winner races). Also carries
-    a real de-vigged `market_probability` (None when the race couldn't be
-    de-vigged — fewer than 2 real priced runners, same rule as
-    src/research/brier_live.py), so the matrix can report BOTH model- and
-    market-expected wins per cell without a second pass over the DB."""
+    rank, a known outcome, AND a real de-vigged `market_probability` — the
+    full eligible population the matrix is built from (every runner, not
+    just missed-winner races).
+
+    **Deliberately matches src/research/brier_live.py::compute_paired_observations'
+    population exactly, by construction — a real, previously-existing bug
+    fixed 2026-09-19:** `rank_by_market` will trivially assign a market
+    rank to a runner even when it's the ONLY priced runner in the race
+    (rank 1 by default, nothing to compare against), but a market
+    PROBABILITY needs at least 2 real priced runners to de-vig at all
+    (`normalized_market_probabilities` returns `{}` below that). The
+    earlier version of this function kept such a runner in the rank
+    matrix (with `market_probability=None`) while brier_live correctly
+    excluded the whole race — found live 2026-09-19 via Jonathan's own
+    audit: the heat map's total runner count (2,229) didn't reconcile
+    against the Brier chart's paired-observation count (2,225), traced to
+    4 exact runners (races 57687, 58181, 58196, 58197) each the sole
+    priced runner in a field of 10-12. Now excluded here too, so the two
+    counts can never silently drift apart again (see
+    scripts/dashboard_reconciliation.py, which asserts this at generation
+    time and blocks publishing the page if it ever doesn't hold)."""
     from src.analysis.edge_metrics import normalized_market_probabilities
 
     observations = []
@@ -85,12 +100,15 @@ def build_rank_observations(races: list[dict], price_source: str = "at_lock") ->
             if r["market"].get(price_source) and r["market"][price_source]["exchange_back"] is not None
         }
         market_probs = normalized_market_probabilities(odds_by_horse)  # {} if < 2 priced runners
+        if not market_probs:
+            continue  # whole race not de-vig-able — excluded entirely, matching brier_live.py
 
         for r in race["runners"]:
             se_rank = r["silent_edge"].get("model_rank")
             market_rank = market_ranks.get(r["horse"]["horse_id"])
             outcome = _runner_outcome_known(r["result"])
-            if se_rank is None or market_rank is None or outcome is None:
+            market_probability = market_probs.get(r["horse"]["horse_id"])
+            if se_rank is None or market_rank is None or outcome is None or market_probability is None:
                 continue
             observations.append({
                 "race_id": race["race"]["race_id"],
@@ -98,7 +116,7 @@ def build_rank_observations(races: list[dict], price_source: str = "at_lock") ->
                 "se_rank": se_rank,
                 "market_rank": market_rank,
                 "se_probability": r["silent_edge"]["model_probability"],
-                "market_probability": market_probs.get(r["horse"]["horse_id"]),  # None if not de-vig-able
+                "market_probability": market_probability,
                 "outcome": outcome,
             })
     return observations

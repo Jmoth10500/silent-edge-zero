@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+"""
+Dashboard reconciliation — Silent Edge Zero V2 brief. Built directly in
+response to Jonathan's own audit (2026-09-19) of the research dashboard,
+which found four real cross-panel numeric inconsistencies and two
+inaccurate narrative claims. Every check here asserts a SPECIFIC,
+understood relationship between two numbers already shown on the page —
+never "these should probably match", always "these must equal X because
+of Y, and here's the exact race IDs behind any gap."
+
+This is a hard gate: scripts/generate_research_dashboard.py calls
+`run_reconciliation()` before writing the HTML file and refuses to
+publish if any check fails (raises `ReconciliationError`). A failure here
+means two panels on the same page would tell a reader two different,
+unexplained numbers for what looks like the same thing — exactly the
+defect this module exists to catch before anyone sees it.
+
+**The four original discrepancies, root cause, and resolution:**
+
+1. Four-way A+B (80) vs top-pick-outcome WON (81) — race 57666 (Chester,
+   2026-09-12) won but had no usable market price at lock time, so it was
+   UNRESOLVED in the four-way classification (excluded from A/B) while
+   still counted as WON by the outcome breakdown (which never needed
+   market data). FIXED: `top_pick_outcome_breakdown` now takes the same
+   eligible race-id set the four-way classification uses, so A+B and WON
+   are computed over the identical population and must match exactly —
+   checked below.
+
+2. "n=293 staked races" (297 in the reproduction) vs £271/£277 actually
+   staked — the KPI card was labelling `races_settled` (every race with a
+   known top-pick result, including 19 void/non-runner top picks and 1
+   with no market price at all) as if it were the count of races that
+   actually carried a real £1 stake. FIXED: `compute_roi` now returns
+   both `n_settled` and `n_staked` separately, and the KPI card shows the
+   real staked count with an explicit note about how many had no stake
+   and why. Checked below: `n_staked` must equal `round(stake)` exactly
+   (every real stake is a flat £1).
+
+3. "124 model-market agreements" vs "119" in the SE-rank-1/market-rank-1
+   heat-map cell — a genuine SEMANTIC difference, not a bug: agreement is
+   a pre-race property (which horse each side picked, before anything
+   happens), so a void/non-runner top pick can still count as "agreed"
+   even though it never produced a real win/loss outcome for the heat
+   map to score. The exact races behind the gap are non-runner top picks
+   in an otherwise-agreeing pair. NOT collapsed to one number — both stay
+   on the page, but the gap is now checked and must equal exactly the
+   count of agreeing races whose top pick was void/non-runner.
+
+4. Heat-map runner-population sum (2,229) vs Brier paired-observation
+   count (2,225) — a real bug: `rank_by_market` trivially assigns a rank
+   even to the SOLE priced runner in a field (nothing to rank against),
+   but a market PROBABILITY needs >=2 real priced runners to de-vig at
+   all. `ranking_matrix.build_rank_observations` used to keep such a
+   runner in the population (with `market_probability=None`) while
+   `brier_live.compute_paired_observations` correctly excluded the whole
+   race. FIXED: `build_rank_observations` now requires the race to be
+   de-vig-able at all, matching brier_live's population exactly. Checked
+   below: the two totals must now be identical.
+
+**The two narrative corrections** (Jonathan's own wording):
+- "Both wrong" (category D) does NOT mean "they agreed" — they can pick
+  two different losing horses. Fixed in build_insights' four-way text,
+  which now reports the real split of D into genuine-agreement-that-lost
+  vs genuine-disagreement-that-both-lost (`split_both_wrong_by_agreement`).
+- "Disagreement" does NOT establish statistical independence — picking
+  different horses says nothing about whether the two forecasting
+  processes are independent in any formal sense. Fixed in the KPI
+  summary text.
+"""
+from scripts.generate_eod_report import VOID_RESULT_CODES
+
+
+class ReconciliationError(Exception):
+    """Raised when the dashboard's own numbers don't reconcile. Blocks
+    publication — main() must not write the HTML file if this is raised."""
+
+
+def count_void_agree_races_from_races(races: list[dict], classified: list[dict]) -> dict:
+    """Real count of races where Silent Edge and the market agreed on the
+    top pick (pre-race) but that horse was a void/non-runner — the exact
+    accounting for discrepancy #3 above. Needs the raw `races` list (not
+    just `classified`) since agreement/classification data alone doesn't
+    carry the top pick's own result note."""
+    by_race_id = {c["race_id"]: c for c in classified}
+    void_agree_ids = []
+    for race in races:
+        c = by_race_id.get(race["race"]["race_id"])
+        if c is None or c["category"] == "UNRESOLVED":
+            continue
+        top_pick_id = c["top_pick_horse_id"]
+        if top_pick_id not in c["favourite_horse_ids"]:
+            continue  # not agreement
+        top_pick_runner = next((r for r in race["runners"] if r["horse"]["horse_id"] == top_pick_id), None)
+        if top_pick_runner is None:
+            continue
+        note = top_pick_runner["result"]["result_note"]
+        if note in VOID_RESULT_CODES:
+            void_agree_ids.append(race["race"]["race_id"])
+    return {"n": len(void_agree_ids), "race_ids": void_agree_ids}
+
+
+def run_reconciliation(all_races: list[dict], classified: list[dict], class_summary: dict,
+                        outcome_breakdown: dict, roi: dict, agreement_splits: dict,
+                        rank_matrix: dict, brier_summary: dict | None, d_split: dict) -> dict:
+    """Runs every reconciliation check. Returns a detail dict regardless
+    of outcome; raises ReconciliationError (never returns a "FAIL" status
+    silently) if any check does not hold, so a caller cannot accidentally
+    ignore a failure."""
+    checks = []
+
+    # Check 1: four-way A+B must equal outcome-breakdown WON exactly,
+    # now that both are computed over the identical eligible population.
+    fw = class_summary["four_way"]
+    ab = fw["A"] + fw["B"]
+    won = outcome_breakdown["WON"]
+    checks.append({
+        "name": "four_way_AB_equals_outcome_WON",
+        "passed": ab == won,
+        "detail": f"four-way A+B={ab}, outcome-breakdown WON={won}",
+    })
+
+    # Check 2: n_staked must equal round(stake) exactly (flat £1 stakes).
+    checks.append({
+        "name": "roi_n_staked_equals_rounded_stake",
+        "passed": roi["n_staked"] == round(roi["stake"]),
+        "detail": f"n_staked={roi['n_staked']}, round(stake)={round(roi['stake'])}",
+    })
+    checks.append({
+        "name": "roi_n_staked_le_n_settled",
+        "passed": roi["n_staked"] <= roi["n_settled"],
+        "detail": f"n_staked={roi['n_staked']}, n_settled={roi['n_settled']}",
+    })
+
+    # Check 3: SE-vs-market "agree" count must equal the heat-map's
+    # rank1/rank1 cell population PLUS the exact count of agreeing races
+    # whose top pick was a void/non-runner (a real, named, counted gap —
+    # never an unexplained one).
+    void_agree = count_void_agree_races_from_races(all_races, classified)
+    cell_11 = rank_matrix.get("se_rank=1,market_rank=1")
+    cell_11_n = cell_11["n"] if cell_11 else 0
+    agree_n = agreement_splits["silent_edge_vs_market"]["agree"]["n"]
+    checks.append({
+        "name": "agreement_reconciles_with_heatmap_cell_via_void_top_picks",
+        "passed": agree_n == cell_11_n + void_agree["n"],
+        "detail": (f"agree={agree_n}, heat-map cell(1,1)={cell_11_n}, "
+                   f"void-top-pick-agree={void_agree['n']} (race ids {void_agree['race_ids']})"),
+    })
+
+    # Check 4: heat-map total runner population must equal the Brier
+    # paired-observation count exactly (both now require the same
+    # de-vig-able-race population, by construction after the fix).
+    heatmap_total_n = sum(c["n"] for c in rank_matrix.values())
+    brier_n = brier_summary["n"] if brier_summary else 0
+    checks.append({
+        "name": "heatmap_population_equals_brier_population",
+        "passed": heatmap_total_n == brier_n,
+        "detail": f"heat-map total n={heatmap_total_n}, Brier n={brier_n}",
+    })
+
+    # Check 5: the D-split (both-wrong-agree + both-wrong-disagree) must
+    # sum back to the four-way D count exactly — a sanity check on the
+    # new split itself, not just the numbers it's built from.
+    checks.append({
+        "name": "d_split_sums_to_four_way_D",
+        "passed": d_split["agree"] + d_split["disagree"] == fw["D"],
+        "detail": f"d_split agree+disagree={d_split['agree']+d_split['disagree']}, four-way D={fw['D']}",
+    })
+
+    failures = [c for c in checks if not c["passed"]]
+    result = {"status": "FAIL" if failures else "PASS", "checks": checks}
+
+    if failures:
+        lines = "\n".join(f"  - {c['name']}: {c['detail']}" for c in failures)
+        raise ReconciliationError(
+            f"Dashboard reconciliation FAILED — refusing to publish. {len(failures)} check(s) failed:\n{lines}"
+        )
+
+    return result

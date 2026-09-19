@@ -18,6 +18,7 @@ from scripts.generate_research_dashboard import (
     render_heatmap_table,
     render_html,
     render_kpi_cards,
+    split_both_wrong_by_agreement,
     top_pick_outcome_breakdown,
 )
 
@@ -33,8 +34,8 @@ def _class_summary(n_eligible=10, n_unresolved=1):
 
 def test_render_kpi_cards_includes_real_values():
     html = render_kpi_cards(_class_summary(), {"silent_edge_brier": 0.1, "market_brier": 0.09, "brier_gap": 0.01, "n": 10},
-                             {"n": 5, "stake": 5.0, "profit": 1.0, "roi": 0.2}, "PASS")
-    assert "TOTAL SETTLED RACES" in html
+                             {"n_settled": 6, "n_staked": 5, "stake": 5.0, "profit": 1.0, "roi": 0.2}, "PASS")
+    assert "ELIGIBLE RACES" in html
     assert "10" in html
     assert "PASS" in html
     assert "+20.0%" in html  # ROI
@@ -46,7 +47,7 @@ def test_render_kpi_cards_handles_no_eligible_races_without_crashing():
     summary["market_favourite_win_rate"] = None
     summary["win_rate_difference"] = None
     summary["model_market_agreement_rate"] = None
-    html = render_kpi_cards(summary, None, {"n": 0, "stake": 0.0, "profit": 0.0, "roi": None}, "WARNING")
+    html = render_kpi_cards(summary, None, {"n_settled": 0, "n_staked": 0, "stake": 0.0, "profit": 0.0, "roi": None}, "WARNING")
     assert "n/a" in html
     assert "WARNING" in html
 
@@ -54,7 +55,7 @@ def test_render_kpi_cards_handles_no_eligible_races_without_crashing():
 def test_render_html_produces_a_complete_page_with_chart_canvases():
     html = render_html(
         date(2026, 9, 10), date(2026, 9, 19), _class_summary(), {"silent_edge_brier": 0.1, "market_brier": 0.09, "brier_gap": 0.01, "n": 10},
-        {"n": 5, "stake": 5.0, "profit": 1.0, "roi": 0.2}, "PASS",
+        {"n_settled": 6, "n_staked": 5, "stake": 5.0, "profit": 1.0, "roi": 0.2}, "PASS",
         [{"date": "2026-09-10", "silent_edge_brier": 0.1, "market_brier": 0.09, "brier_gap": 0.01,
           "n_brier_observations": 10, "silent_edge_win_rate": 0.5, "market_favourite_win_rate": 0.5, "n_eligible_races": 10}],
         {"0%-10%": {"n_selections": 100, "avg_predicted_probability": 0.05, "actual_win_rate": 0.04, "calibration_error": -0.01}},
@@ -68,6 +69,7 @@ def test_render_html_produces_a_complete_page_with_chart_canvases():
          "model1_vs_model2": {"agree": {"n": 15, "win_rate": 0.3}, "disagree": {"n": 15, "win_rate": 0.15}}},
         {"dates": ["2026-09-10"], "cumulative_profit": [1.5], "max_drawdown": -0.5, "total_stake": 10.0},
         {"2-4": {"n": 30, "wins": 8, "win_rate": 0.27, "brier_contribution": 0.15, "small_sample": False}},
+        {"total": 3, "agree": 1, "disagree": 2},
     )
     assert "<!DOCTYPE html>" in html
     assert 'id="donutChart"' in html
@@ -113,6 +115,20 @@ def test_outcome_breakdown_classifies_won_placed_unplaced_void():
     assert breakdown["UNPLACED"] == 1
     assert breakdown["VOID/NR"] == 1
     assert sum(breakdown.values()) == 4  # the pending race contributes nothing
+
+
+def test_outcome_breakdown_restricts_to_eligible_race_ids_when_given():
+    # Real 2026-09-19 bug (Jonathan's audit): a race whose top pick won
+    # but had no usable market data was UNRESOLVED in the four-way
+    # classification (excluded from A+B) yet still counted as WON here,
+    # making the two "wins" totals on the page disagree (81 vs 80).
+    races = [
+        _race_with_top_pick(1, 1, [_runner(1, finishing_position=1), _runner(2, finishing_position=2)]),  # eligible, WON
+        _race_with_top_pick(2, 3, [_runner(3, finishing_position=1), _runner(4, finishing_position=2)]),  # NOT eligible, WON
+    ]
+    breakdown = top_pick_outcome_breakdown(races, eligible_race_ids={1})
+    assert breakdown["WON"] == 1  # race 2 excluded even though its top pick also won
+    assert sum(breakdown.values()) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -242,7 +258,7 @@ def _full_kwargs(n_eligible=100):
     return dict(
         class_summary=_full_class_summary(n_eligible),
         brier_summary={"silent_edge_brier": 0.11, "market_brier": 0.095, "brier_gap": 0.015, "n": 500},
-        roi={"n": 90, "stake": 90.0, "profit": 12.0, "roi": 0.1333},
+        roi={"n_settled": 95, "n_staked": 90, "stake": 90.0, "profit": 12.0, "roi": 0.1333},
         series=[
             {"date": "2026-09-10", "brier_gap": 0.02, "n_brier_observations": 50,
              "silent_edge_win_rate": 0.30, "market_favourite_win_rate": 0.40},
@@ -272,6 +288,7 @@ def _full_kwargs(n_eligible=100):
             "Odds < 2": {"n": 30, "win_rate": 0.55}, "2-4": {"n": 40, "win_rate": 0.30},
             "4-8": {"n": 20, "win_rate": 0.10},
         },
+        d_split={"total": 40, "agree": 15, "disagree": 25},
     )
 
 
@@ -338,8 +355,44 @@ def test_build_insights_never_crashes_on_empty_window():
     }
     kwargs["pnl_series"] = {"dates": [], "cumulative_profit": [], "max_drawdown": 0.0, "total_stake": 0.0}
     kwargs["odds_bands"] = {}
+    kwargs["d_split"] = {"total": 0, "agree": 0, "disagree": 0}
     insights = build_insights(**kwargs)
     assert all(isinstance(v, str) and v for v in insights.values())
+
+
+# ---------------------------------------------------------------------------
+# split_both_wrong_by_agreement — the real fix for the "both wrong means
+# they agreed" narrative bug Jonathan flagged
+# ---------------------------------------------------------------------------
+
+def test_d_split_separates_agreement_from_disagreement():
+    classified = [
+        # Both wrong, SAME horse picked by both (real agreement that lost)
+        {"category": "D", "top_pick_horse_id": 1, "favourite_horse_ids": [1]},
+        # Both wrong, DIFFERENT horses picked (real disagreement, both lost)
+        {"category": "D", "top_pick_horse_id": 2, "favourite_horse_ids": [3]},
+        {"category": "D", "top_pick_horse_id": 4, "favourite_horse_ids": [5]},
+        # Not category D at all -- must not be counted either way
+        {"category": "A", "top_pick_horse_id": 6, "favourite_horse_ids": [6]},
+    ]
+    result = split_both_wrong_by_agreement(classified)
+    assert result["total"] == 3
+    assert result["agree"] == 1
+    assert result["disagree"] == 2
+
+
+def test_d_split_handles_joint_favourites_correctly():
+    # Real agreement even with a joint favourite -- top pick is ONE of
+    # several tied market favourites.
+    classified = [{"category": "D", "top_pick_horse_id": 1, "favourite_horse_ids": [1, 9]}]
+    result = split_both_wrong_by_agreement(classified)
+    assert result["agree"] == 1
+    assert result["disagree"] == 0
+
+
+def test_d_split_empty_when_no_d_races():
+    result = split_both_wrong_by_agreement([{"category": "A", "top_pick_horse_id": 1, "favourite_horse_ids": [1]}])
+    assert result == {"total": 0, "agree": 0, "disagree": 0}
 
 
 if __name__ == "__main__":
@@ -356,6 +409,9 @@ if __name__ == "__main__":
         test_build_insights_brier_trend_direction, test_build_insights_prob_bands_ignores_tiny_samples,
         test_build_insights_outcomes_percentages_sum_sensible, test_build_insights_calibration_direction,
         test_build_insights_heatmap_picks_extreme_cells_above_threshold, test_build_insights_never_crashes_on_empty_window,
+        test_outcome_breakdown_restricts_to_eligible_race_ids_when_given,
+        test_d_split_separates_agreement_from_disagreement, test_d_split_handles_joint_favourites_correctly,
+        test_d_split_empty_when_no_d_races,
     ]
     passed = 0
     for t in tests:

@@ -76,6 +76,21 @@ def test_build_observations_carries_devigged_market_probability():
     assert abs(winner["market_probability"] - (0.5 / (0.5 + 1 / 3))) < 1e-9
 
 
+def test_build_observations_excludes_whole_race_when_only_one_runner_priced():
+    # Real 2026-09-19 bug (Jonathan's audit): rank_by_market trivially
+    # assigns the sole priced runner market_rank=1, but a market
+    # PROBABILITY needs >=2 priced runners to de-vig at all. Must be
+    # excluded entirely here, matching brier_live.py's population exactly
+    # -- this is what previously caused the heat map (2,229 runners) and
+    # the Brier chart (2,225 paired observations) to silently disagree.
+    race = _race(1, [
+        _runner(1, 0.4, 1, at_lock_back=2.0, finishing_position=1),
+        _runner(2, 0.6, 2, at_lock_back=None, finishing_position=2),  # no real price
+        _runner(3, 0.3, 3, at_lock_back=None, finishing_position=3),  # no real price
+    ])
+    assert build_rank_observations([race]) == []
+
+
 # ---------------------------------------------------------------------------
 # aggregate_rank_matrix — real sum-of-probabilities expected wins, never a
 # fabricated n * midpoint
@@ -131,6 +146,7 @@ if __name__ == "__main__":
         test_rank_by_market_simple_ordering, test_rank_by_market_joint_favourites_share_rank_and_next_skips,
         test_rank_by_market_none_for_unpriced_runner,
         test_build_observations_excludes_pending_and_unranked, test_build_observations_carries_devigged_market_probability,
+        test_build_observations_excludes_whole_race_when_only_one_runner_priced,
         test_expected_wins_is_a_real_sum_not_a_count_times_midpoint,
         test_ranks_beyond_max_rank_are_pooled_into_a_plus_bucket,
         test_small_sample_flagged, test_market_expectation_none_when_no_runner_in_cell_has_a_price,

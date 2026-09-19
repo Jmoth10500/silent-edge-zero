@@ -47,6 +47,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import psycopg2
 
+from scripts.dashboard_reconciliation import run_reconciliation
 from scripts.data_integrity_audit import run_audit
 from scripts.generate_eod_report import VOID_RESULT_CODES, ew_terms_for_field_size
 from src.evaluation.calibration import calibration_curve
@@ -113,7 +114,11 @@ def render_kpi_cards(class_summary: dict, brier_summary: dict | None, roi: dict,
     integrity_color = {"PASS": "var(--teal)", "WARNING": "var(--amber)", "FAIL": "var(--red)"}.get(integrity_status, "var(--fg)")
 
     cards = [
-        card("TOTAL SETTLED RACES", str(n), f"{class_summary['n_unresolved']} unresolved"),
+        card("ELIGIBLE RACES (WIN COMPARISON)", str(n),
+             f"{class_summary['n_unresolved']} excluded — no usable market data or no clear winner. "
+             f"A different, real count appears elsewhere on this page: daily_summary's own 'settled' figure "
+             f"(used by the ROI card) requires only that the TOP PICK's own result is known, not full market "
+             f"data — the two counts measure genuinely different things and will not always match."),
         card("SILENT EDGE WIN RATE", f"{class_summary['silent_edge_win_rate']:.1%}" if n else "n/a", "top pick"),
         card("MARKET FAVOURITE WIN RATE", f"{class_summary['market_favourite_win_rate']:.1%}" if n else "n/a", "lock-time favourite"),
         card("WIN-RATE DIFFERENCE", f"{class_summary['win_rate_difference']:+.1%}" if n else "n/a",
@@ -122,21 +127,36 @@ def render_kpi_cards(class_summary: dict, brier_summary: dict | None, roi: dict,
         card("MARKET BRIER", f"{brier_summary['market_brier']:.4f}" if brier_summary else "n/a", "lower is better"),
         card("BRIER GAP", f"{brier_summary['brier_gap']:+.4f}" if brier_summary else "n/a",
              "positive = market leading", "var(--red)" if brier_summary and brier_summary['brier_gap'] > 0 else "var(--teal)"),
-        card("£1 FLAT-STAKE ROI", f"{roi['roi']:+.1%}" if roi["n"] else "n/a", f"n={roi['n']} staked races"),
+        card("£1 FLAT-STAKE ROI", f"{roi['roi']:+.1%}" if roi["n_staked"] else "n/a",
+             f"n={roi['n_staked']} genuinely staked races ({roi['n_settled']} settled in total, "
+             f"{roi['n_settled']-roi['n_staked']} had no stake — void/non-runner top pick or no market price)"),
         card("MODEL AGREEMENT", f"{class_summary['model_market_agreement_rate']:.1%}" if n else "n/a", "top pick == favourite"),
         card("DATA INTEGRITY STATUS", integrity_status, "see audit detail below", integrity_color),
     ]
     return f'<div class="kpi-grid">{"".join(cards)}</div>'
 
 
-def top_pick_outcome_breakdown(races: list[dict]) -> dict:
+def top_pick_outcome_breakdown(races: list[dict], eligible_race_ids: Optional[set] = None) -> dict:
     """Real WON/PLACED/UNPLACED/VOID breakdown for each race's top pick
     only (Section 18's second donut) — pending races are excluded
     entirely, never counted into any settled-outcome bucket (the brief's
     own instruction: "do not mix pending races into settled-result
-    percentages")."""
+    percentages").
+
+    `eligible_race_ids`, when given, restricts this to the SAME race
+    population the four-way classification uses (real fix, 2026-09-19,
+    for a bug Jonathan's own audit found: WON here previously totalled 81
+    while the four-way donut's A+B totalled 80 for the exact same window
+    — traced to race 57666, where the top pick won but had no usable
+    market price at lock time, so it was UNRESOLVED in the four-way
+    classification yet still counted here since this function never
+    needed market data at all). Restricting both to one shared population
+    means A+B and WON can never silently drift apart again — enforced at
+    generation time by scripts/dashboard_reconciliation.py."""
     counts = {"WON": 0, "PLACED": 0, "UNPLACED": 0, "VOID/NR": 0}
     for race in races:
+        if eligible_race_ids is not None and race["race"]["race_id"] not in eligible_race_ids:
+            continue
         top_pick_id = race.get("top_pick_horse_id")
         if top_pick_id is None:
             continue
@@ -158,6 +178,25 @@ def top_pick_outcome_breakdown(races: list[dict]) -> dict:
         else:
             counts["UNPLACED"] += 1  # a real non-finish code (PU/F/UR/...) — ran, didn't place
     return counts
+
+
+def split_both_wrong_by_agreement(classified: list[dict]) -> dict:
+    """Real split of category D ("both wrong") races by whether Silent
+    Edge and the market actually agreed on the (losing) horse.
+
+    This distinction matters and was previously conflated on this
+    dashboard: categories A/B/C are unambiguous about agreement (A is
+    necessarily agreement — same horse, and it won; B and C are
+    necessarily disagreement, since if the two forecasts shared a horse
+    and it lost that pair would be D, not B or C). Category D alone is
+    ambiguous — it covers BOTH "they agreed on a horse and it lost" AND
+    "they picked two different horses and both lost". Collapsing those
+    into one category and calling it "agreement" (as this dashboard's
+    text previously did) was a real, wrong claim to correct."""
+    d_races = [c for c in classified if c["category"] == "D"]
+    agree = sum(1 for c in d_races if c["top_pick_horse_id"] in c["favourite_horse_ids"])
+    disagree = len(d_races) - agree
+    return {"total": len(d_races), "agree": agree, "disagree": disagree}
 
 
 def agreement_win_rate_splits(races: list[dict], classified: list[dict]) -> dict:
@@ -306,22 +345,39 @@ def odds_band_analysis(observations: list[dict]) -> dict:
 
 
 def compute_roi(conn, start: date, end: date) -> dict:
+    """Real ROI over the window. Returns BOTH `n_settled` (every race
+    where the top pick's result is known, regardless of whether a real
+    stake could be placed — void/non-runner top picks and top picks with
+    no real market price at all are still "settled") and `n_staked` (only
+    races that actually contributed a real £1 to `stake`, i.e.
+    win_stake_total). These are genuinely different counts and a real
+    bug, found in Jonathan's own audit 2026-09-19, was labelling the KPI
+    card with `n_settled` under the words "staked races" — e.g. 297
+    settled vs a real £277 staked (19 void top picks + 1 top pick with no
+    market price at all, exact race IDs in
+    scripts/dashboard_reconciliation.py's own check). `n_staked` is
+    computed as `round(stake)` — exact because every real stake is a flat
+    £1, so the two must be integers that agree by construction; the
+    reconciliation check asserts this holds rather than assuming it."""
     cur = conn.cursor()
     cur.execute(
         "SELECT COALESCE(SUM(win_stake_total),0), COALESCE(SUM(win_profit),0), COALESCE(SUM(races_settled),0) "
         "FROM daily_summary WHERE race_date BETWEEN %s AND %s",
         (start, end),
     )
-    stake, profit, n = cur.fetchone()
+    stake, profit, n_settled = cur.fetchone()
     cur.close()
     stake, profit = float(stake), float(profit)
-    return {"n": int(n), "stake": stake, "profit": profit, "roi": (profit / stake) if stake else None}
+    return {
+        "n_settled": int(n_settled), "n_staked": int(round(stake)),
+        "stake": stake, "profit": profit, "roi": (profit / stake) if stake else None,
+    }
 
 
 def build_insights(class_summary: dict, brier_summary: Optional[dict], roi: dict, series: list[dict],
                     band_analysis: dict, outcome_breakdown: dict, se_calibration: list[dict],
                     market_calibration: list[dict], rank_matrix: dict, agreement_splits: dict,
-                    pnl_series: dict, odds_bands: dict) -> dict:
+                    pnl_series: dict, odds_bands: dict, d_split: dict) -> dict:
     """Real, computed plain-language analysis for every KPI/chart/table on
     the page — every sentence below is derived directly from the same
     numbers already rendered, never a generic caption. Written at the
@@ -349,8 +405,10 @@ def build_insights(class_summary: dict, brier_summary: Optional[dict], roi: dict
             f"{abs(wr_diff):.1%} in win rate ({class_summary['silent_edge_win_rate']:.1%} vs "
             f"{class_summary['market_favourite_win_rate']:.1%}).{brier_txt} The model and market agree on the "
             f"same horse in {class_summary['model_market_agreement_rate']:.1%} of races — the other "
-            f"{1 - class_summary['model_market_agreement_rate']:.1%} represent genuinely independent signals, "
-            f"which is where any real edge, if one exists, would have to live."
+            f"{1 - class_summary['model_market_agreement_rate']:.1%} are races where the two forecasts genuinely "
+            f"diverge (NOT the same thing as statistical independence — disagreement just means a different pick, "
+            f"it says nothing about whether the two processes are independent). It's this divergent subset where "
+            f"any real edge, if one exists, would have to be found — see categories B and C below."
         )
 
     # --- Four-way donut ---------------------------------------------------
@@ -361,13 +419,22 @@ def build_insights(class_summary: dict, brier_summary: Optional[dict], roi: dict
         dominant = max(fw, key=fw.get)
         dominant_label = {"A": "both were right", "B": "Silent Edge alone was right",
                            "C": "the market alone was right", "D": "both were wrong"}[dominant]
+        d_note = ""
+        if d_split["total"]:
+            d_note = (
+                f" Category D is NOT the same as 'they agreed' — of its {d_split['total']} races, "
+                f"{d_split['agree']} ({d_split['agree']/d_split['total']:.0%}) were genuine agreement (same horse, "
+                f"and it lost), while {d_split['disagree']} ({d_split['disagree']/d_split['total']:.0%}) were real "
+                f"disagreement (two different horses picked, both lost). Agreement and correctness are separate "
+                f"questions — only category A guarantees agreement; A is not the only route to a shared miss."
+            )
         insights["four_way"] = (
             f"A={fw['A']} ({fw['A']/n:.0%}), B={fw['B']} ({fw['B']/n:.0%}), C={fw['C']} ({fw['C']/n:.0%}), "
             f"D={fw['D']} ({fw['D']/n:.0%}). The modal outcome is category {dominant} — {dominant_label} — in "
             f"{fw[dominant]/n:.0%} of races. Categories B and C isolate the {fw['B']+fw['C']} races "
-            f"({(fw['B']+fw['C'])/n:.0%}) where the two forecasters actually diverged and only one was correct; "
-            f"comparing B to C directly ({fw['B']} vs {fw['C']}) is the cleanest read on relative skill, since A "
-            f"and D contribute no discriminating information (both agreed)."
+            f"({(fw['B']+fw['C'])/n:.0%}) where the two forecasters necessarily diverged and only one was correct "
+            f"(a shared pick that lost is impossible in B/C by construction); comparing B to C directly "
+            f"({fw['B']} vs {fw['C']}) is the cleanest read on relative skill.{d_note}"
         )
 
     # --- Cumulative Brier & win-rate trend ---------------------------------
@@ -603,9 +670,11 @@ def render_heatmap_table(matrix: dict, max_rank: int = 6) -> str:
 def render_html(start: date, end: date, class_summary: dict, brier_summary, roi: dict,
                  integrity_status: str, series: list[dict], band_analysis: dict,
                  outcome_breakdown: dict, se_calibration: list[dict], market_calibration: list[dict],
-                 rank_matrix: dict, agreement_splits: dict, pnl_series: dict, odds_bands: dict) -> str:
+                 rank_matrix: dict, agreement_splits: dict, pnl_series: dict, odds_bands: dict,
+                 d_split: dict) -> str:
     insights = build_insights(class_summary, brier_summary, roi, series, band_analysis, outcome_breakdown,
-                               se_calibration, market_calibration, rank_matrix, agreement_splits, pnl_series, odds_bands)
+                               se_calibration, market_calibration, rank_matrix, agreement_splits, pnl_series,
+                               odds_bands, d_split)
 
     donut_labels = ["A: Both correct", "B: Silent Edge only", "C: Market only", "D: Both wrong"]
     donut_data = [class_summary["four_way"][k] for k in ("A", "B", "C", "D")]
@@ -904,13 +973,15 @@ def main():
     se_calibration = calibration_curve([o["se_probability"] for o in observations], [o["outcome"] for o in observations]) if observations else []
     market_calibration = calibration_curve([o["market_probability"] for o in observations], [o["outcome"] for o in observations]) if observations else []
 
-    outcome_breakdown = top_pick_outcome_breakdown(all_races)
+    eligible_race_ids = {c["race_id"] for c in classified if c["category"] != "UNRESOLVED"}
+    outcome_breakdown = top_pick_outcome_breakdown(all_races, eligible_race_ids=eligible_race_ids)
 
     rank_observations = build_rank_observations(all_races)
     rank_matrix = aggregate_rank_matrix(rank_observations)
 
     agreement_splits = agreement_win_rate_splits(all_races, classified)
     odds_bands = odds_band_analysis(observations)
+    d_split = split_both_wrong_by_agreement(classified)
 
     roi = compute_roi(conn, start, end)
     integrity_result = run_audit(conn, start, end)
@@ -919,9 +990,13 @@ def main():
 
     conn.close()
 
+    reconciliation = run_reconciliation(all_races, classified, class_summary, outcome_breakdown, roi,
+                                         agreement_splits, rank_matrix, brier_summary, d_split)
+    print(f"Dashboard reconciliation: {reconciliation['status']} ({len(reconciliation['checks'])} checks)")
+
     html = render_html(start, end, class_summary, brier_summary, roi, integrity_result["status"], series, band_analysis,
                         outcome_breakdown, se_calibration, market_calibration, rank_matrix, agreement_splits,
-                        pnl_series, odds_bands)
+                        pnl_series, odds_bands, d_split)
     OUTPUT_PATH.write_text(html)
     print(f"Research dashboard written to {OUTPUT_PATH} ({len(html)} bytes).")
     print(f"Range: {start} .. {end}  |  {class_summary['n_eligible']} eligible races  |  "
