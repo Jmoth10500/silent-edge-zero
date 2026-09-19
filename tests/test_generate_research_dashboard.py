@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.generate_research_dashboard import render_html, render_kpi_cards
+from scripts.generate_research_dashboard import render_heatmap_table, render_html, render_kpi_cards, top_pick_outcome_breakdown
 
 
 def _class_summary(n_eligible=10, n_unresolved=1):
@@ -50,20 +50,76 @@ def test_render_html_produces_a_complete_page_with_chart_canvases():
         [{"date": "2026-09-10", "silent_edge_brier": 0.1, "market_brier": 0.09, "brier_gap": 0.01,
           "n_brier_observations": 10, "silent_edge_win_rate": 0.5, "market_favourite_win_rate": 0.5, "n_eligible_races": 10}],
         {"0%-10%": {"avg_predicted_probability": 0.05, "actual_win_rate": 0.04}},
+        {"WON": 3, "PLACED": 2, "UNPLACED": 4, "VOID/NR": 1},
+        [{"bin_index": 0, "bin_range": (0.0, 0.1), "mean_predicted": 0.05, "mean_actual": 0.04, "count": 10}],
+        [{"bin_index": 0, "bin_range": (0.0, 0.1), "mean_predicted": 0.06, "mean_actual": 0.05, "count": 10}],
+        {"se_rank=1,market_rank=1": {"se_rank": "1", "market_rank": "1", "n": 30, "actual_wins": 10,
+                                      "actual_win_rate": 0.33, "expected_wins_model": 9.0,
+                                      "diff_actual_minus_expected_model": 1.0, "small_sample": False}},
     )
     assert "<!DOCTYPE html>" in html
     assert 'id="donutChart"' in html
     assert 'id="brierChart"' in html
     assert 'id="winRateChart"' in html
     assert 'id="bandChart"' in html
+    assert 'id="outcomeDonutChart"' in html
+    assert 'id="calibrationChart"' in html
+    assert "heatmap" in html
     assert "chart.js" in html.lower()
     assert "2026-09-10" in html
+
+
+# ---------------------------------------------------------------------------
+# top_pick_outcome_breakdown
+# ---------------------------------------------------------------------------
+
+def _race_with_top_pick(race_id, top_pick_id, runners, field_size=None):
+    return {
+        "race": {"race_id": race_id, "field_size_declared": field_size or len(runners)},
+        "top_pick_horse_id": top_pick_id, "runners": runners,
+    }
+
+
+def _runner(horse_id, finishing_position=None, result_note=None):
+    return {"horse": {"horse_id": horse_id}, "result": {"finishing_position": finishing_position, "result_note": result_note}}
+
+
+def test_outcome_breakdown_classifies_won_placed_unplaced_void():
+    races = [
+        _race_with_top_pick(1, 1, [_runner(1, finishing_position=1), _runner(2, finishing_position=2)]),
+        _race_with_top_pick(2, 3, [_runner(3, finishing_position=2), _runner(4, finishing_position=1)], field_size=9),  # 1/5, 3 places -> placed
+        _race_with_top_pick(3, 5, [_runner(5, finishing_position=8), _runner(6, finishing_position=1)], field_size=9),  # unplaced
+        _race_with_top_pick(4, 7, [_runner(7, finishing_position=None, result_note="NR")]),
+        _race_with_top_pick(5, 9, [_runner(9, finishing_position=None, result_note=None)]),  # pending -> excluded
+    ]
+    breakdown = top_pick_outcome_breakdown(races)
+    assert breakdown["WON"] == 1
+    assert breakdown["PLACED"] == 1
+    assert breakdown["UNPLACED"] == 1
+    assert breakdown["VOID/NR"] == 1
+    assert sum(breakdown.values()) == 4  # the pending race contributes nothing
+
+
+# ---------------------------------------------------------------------------
+# render_heatmap_table
+# ---------------------------------------------------------------------------
+
+def test_heatmap_renders_a_dash_for_missing_cells_and_values_for_present_ones():
+    matrix = {"se_rank=1,market_rank=1": {"se_rank": "1", "market_rank": "1", "n": 30, "actual_wins": 10,
+                                           "actual_win_rate": 0.33, "expected_wins_model": 9.0,
+                                           "diff_actual_minus_expected_model": 1.0, "small_sample": False}}
+    html = render_heatmap_table(matrix)
+    assert "<table" in html
+    assert "33%" in html
+    assert html.count("–") >= 1  # most cells are genuinely empty for this tiny matrix
 
 
 if __name__ == "__main__":
     tests = [
         test_render_kpi_cards_includes_real_values, test_render_kpi_cards_handles_no_eligible_races_without_crashing,
         test_render_html_produces_a_complete_page_with_chart_canvases,
+        test_outcome_breakdown_classifies_won_placed_unplaced_void,
+        test_heatmap_renders_a_dash_for_missing_cells_and_values_for_present_ones,
     ]
     passed = 0
     for t in tests:
