@@ -3,7 +3,7 @@
 Every source used by this system is documented here before being wired into code.
 Status is honest, not aspirational — "BLOCKED" means real code cannot use it yet.
 
-Last verified: 2026-09-08 (live checks run this session, see notes per source)
+Last verified: 2026-09-19 (RaceIQ research + historical Betfair load added this session; other entries as previously dated per source)
 
 ---
 
@@ -126,6 +126,26 @@ Last verified: 2026-09-08 (live checks run this session, see notes per source)
 
 ---
 
+## 2b. Historical Betfair prices — same Kaggle dataset, previously unloaded (loaded 2026-09-19)
+
+- **File:** `data/kaggle_historical/betfair/betfair/betfair_mapping_2026_part_{i,ii}.csv` — shipped with the same Kaggle download as source 2, sat unloaded for over a week.
+- **Real, honest coverage correction:** despite being part of a dataset whose other files span 2015-2025, these two files themselves cover **2026-03-01 to 2026-04-29 only** — confirmed directly from the CSVs, not assumed from the dataset's own README. Worldwide courses (GB, Ireland, France, Hong Kong, and others).
+- **Data supplied:** real `sp`/`bsp`/`wap`/`morning_wap`/`pre_min`/`pre_max`/`ip_min`/`ip_max` plus volumes, per race/horse. **`morning_wap` and `wap` are 0% populated across all 27,637 rows** — discovered live before building Hypothesis B's price-movement research on top of this data, not assumed from the column existing.
+- **Loaded:** `scripts/load_kaggle_betfair_historical.py` — matches this CSV's own course/off/horse strings directly against existing `race`/`horse` rows (verified identical naming convention to source 2's raceform loader before writing the matcher). 27,637/27,637 rows matched and loaded, 0 skipped.
+- **Status: LOADED into `historical_betfair_price`.** Real load-bearing leakage warning: `ip_min`/`ip_max` are in-play (post-off) prices — never usable for a pre-race feature or simulated forecast (see that table's own schema comment, `db/schema.sql`).
+
+---
+
+## 7. Racing TV RaceIQ — sectional/GPS data (researched 2026-09-19, previously never evaluated)
+
+- **URL:** https://raceiq.com/ , metrics viewable free at https://www.racingtv.com/
+- **Data supplied:** GPS-tracked sectional times (18 data points/second per horse), covering real GB racing back to March 2023 and Irish racing back to January 2024 — genuinely overlapping this project's own backtest window.
+- **Real access model, checked directly (not assumed):** RaceIQ metrics are free to VIEW on racingtv.com/the RaceIQ portal, but the RaceIQ site itself carries **no documented API, no licensing terms, and no technical integration docs** — only a "request more info" contact form for commercial/broadcast partners (ITV, Racing TV, etc.).
+- **Real conclusion, per this project's own rule ("do not assume free viewing permits scraping"):** this is NOT a usable free data source for automated ingestion as it stands. Using it would require either (a) building a scraper against a consumer-facing viewing page with no stated terms permitting that — explicitly against this project's own discipline — or (b) contacting RaceIQ directly for a commercial data licence, price unknown, not requested.
+- **Status: RESEARCHED, NOT INTEGRATED.** This closes brief Section 14's outstanding "RaceIQ never evaluated" gap with a real answer rather than leaving it silently unresearched. Revisit only if Jonathan wants to pursue a commercial enquiry — not something to build around speculatively.
+
+---
+
 ## Summary — what's actually live vs blocked right now
 
 | Source | Status | Blocker |
@@ -139,5 +159,7 @@ Last verified: 2026-09-08 (live checks run this session, see notes per source)
 | Smarkets Exchange (market prices) | **LIVE** | none — in daily use since RL-era odds work |
 | Betfair Exchange (market prices) | BLOCKED | account suspended even after identity verification |
 | BHA official ratings | Reference only | scraping permission not checked, deliberately deferred |
+| Kaggle historical Betfair prices (2026-03/04) | **LOADED 2026-09-19** | none — done; real coverage limited to 2 months, morning_wap 0% populated |
+| Racing TV RaceIQ (sectional/GPS) | Researched, NOT integrated | no documented API/licence terms; scraping would violate this project's own rule |
 
 **2026-09-13 update:** the original "sign up for The Racing API" recommendation above is now out of date — racecards, results, and odds are all live via other real sources (The Racing API free tier, horseracing.net/Racing Post, and Smarkets respectively). **The one real open decision now: whether The Racing API's Basic Plan (£27.99/mo, confirmed live) is worth it to REPLACE the scraped results sources with an official API**, given how much real engineering time has gone into working around Racing Post's and (to a lesser extent) horseracing.net's scraping fragility this week.

@@ -25,11 +25,11 @@ python3 -m pytest tests/ -v        # every test, all real, none skipped
 - `docs/RESEARCH_LAB.md` — every modelling hypothesis, tested or not
 - `docs/BUILD_LOG.md` — session-by-session log so an autonomous continuation always knows where it left off
 
-## What's blocking full functionality right now
+## What's actually blocking things right now (updated 2026-09-19 — the section above was stale)
 
-Three free account signups, all yours to do (can't be done on your behalf):
-1. **The Racing API** (theracingapi.com) — highest priority, unlocks racecards/results/odds
-2. **Kaggle** (kaggle.com) — free account + API token, unlocks historical bootstrap data
-3. **Betfair Developer Program** (developer.betfair.com) — free Delayed App Key, unlocks market prices
+All three original signups are done. Real, current open items:
+1. **Betfair Exchange** — account created, Delayed App Key issued, but login still returns `LIMITED_ACCESS`/`SUSPENDED` even after identity verification. Smarkets (no auth needed) is the live substitute for market prices.
+2. **The Racing API's paid tiers** — an open decision, not a blocker: results/odds are gated behind Basic (£27.99/mo) / Standard (£59.99/mo+); horseracing.net + Smarkets cover the same need for free today.
+3. **Racing TV RaceIQ** (sectional/GPS data) — researched 2026-09-19: no documented API, only a commercial contact form. Not integrated; would need a real licensing conversation, not a scraper.
 
-See `docs/FREE_DATA_SOURCES.md` for exact steps on each.
+See `docs/FREE_DATA_SOURCES.md` for the full, current per-source status.
