@@ -21,3 +21,4 @@ data/brier_live_*.json
 data/missed_winners_*.json
 data/probability_bands_*.json
 data/trainer_intelligence_a_*.json
+data/trainer_intelligence_b_*.json

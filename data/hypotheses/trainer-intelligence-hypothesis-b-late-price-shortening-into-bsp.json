@@ -1,0 +1,37 @@
+{
+  "slug": "trainer-intelligence-hypothesis-b-late-price-shortening-into-bsp",
+  "name": "Trainer Intelligence Hypothesis B - late price shortening into BSP",
+  "description": "Tests whether a runner whose price shortens by 15%+ between the widest pre-off price (pre_max) and the final Betfair Starting Price (BSP) outperforms what pre_max's own de-vigged implied probability predicted -- brief Section 12B's market-behaviour hypothesis. IMPORTANT CAVEAT this hypothesis itself surfaces: BSP is the price at the actual off, essentially the market's own final, most-informed estimate -- so a positive result here is expected/mechanical (markets get more accurate closer to the event) rather than necessarily evidence of an EARLY, actionable signal. It does not by itself demonstrate exploitable pre-race timing information; morning_wap, which would have let this be tested against a genuinely early decision point, is 0% populated in this dataset (see the module's own data-coverage correction).",
+  "rule_definition": "QUALIFYING: (pre_max - bsp) / pre_max >= 0.15 (price shortened 15%+ into the off). CONTROL: everyone else. Compared via actual_wins vs sum-of-pre_max-implied-probability expected_wins for each group.",
+  "source_finding": "scripts/trainer_intelligence_b_report.py, full run over historical_betfair_price (2026-03-01 to 2026-04-29)",
+  "historical_evidence": {
+    "window": "2026-03-01 to 2026-04-29",
+    "shorten_threshold": 0.15,
+    "qualifying_group": {
+      "n": 12858,
+      "actual_wins": 1276,
+      "actual_win_rate": 0.099,
+      "expected_wins_from_early_price": 1103.88,
+      "diff": 172.12
+    },
+    "control_group": {
+      "n": 11481,
+      "actual_wins": 1257,
+      "actual_win_rate": 0.109,
+      "expected_wins_from_early_price": 1425.12,
+      "diff": -168.12
+    },
+    "conclusion": "Directionally consistent with 'markets get more accurate closer to the off' -- qualifying group beat its early-price expectation, control group fell short of its own. Read as a mechanical confirmation of market efficiency near the off, NOT as an early, actionable trading signal, since BSP is essentially final. A genuinely early decision-time test (morning price vs pre-off) is not possible with this dataset -- morning_wap is 0% populated. Would need either a different historical source with real morning prices, or the live Smarkets collector accumulating enough real forward data.",
+    "statistical_caveat": "Pooled at runner level, NOT race-level resampled -- observations within the same race are not independent."
+  },
+  "created_at": "2026-09-19T14:48:35.584186+00:00",
+  "prospective_test_start_date": null,
+  "status": "descriptive",
+  "prospective_results": [
+    {
+      "n": 24339,
+      "note": "mechanical near-off-accuracy confirmation, not an early actionable signal per the hypothesis's own caveat; needs real early-snapshot data (live Smarkets accumulation or a different historical source) before this can be tested properly",
+      "recorded_at": "2026-09-19T14:48:35.617029+00:00"
+    }
+  ]
+}
