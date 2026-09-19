@@ -174,11 +174,11 @@ def insert_snapshots(conn, source_id: int, race_id: int, matched: list[tuple[int
             """
             INSERT INTO market_snapshot
                 (race_id, horse_id, exchange_back, exchange_lay, midprice, spread,
-                 observed_at, available_at, source_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 observed_at, available_at, source_id, price_quality)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (race_id, horse_id, price.exchange_back, price.exchange_lay, price.midprice,
-             price.spread, now, now, source_id),
+             price.spread, now, now, source_id, price.price_quality),
         )
         n += 1
     conn.commit()

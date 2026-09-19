@@ -1,0 +1,20 @@
+{
+  "frozen_at": "2026-09-19T09:47:51.727724+00:00",
+  "frozen_at_commit": "dd313f06063fb3e6ccd76857a13c73eb3c26952e",
+  "files": {
+    "scripts/predict_todays_races.py": "35db1d9468d0d7feb243ee629b3f97b6567902105be94932230092b52c93bb10",
+    "scripts/train_model1.py": "14ccca04505e2281f99fdffa5960f22c0fda9ab7ccf1a06b52e55b6b15d1da38",
+    "scripts/train_model2.py": "5408ad6291b2fdf46e042f37b4c743dda27761969674962268a517e39f72dd32",
+    "src/models/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/models/model0_market_baseline.py": "5c9c7f17ed1eae0e644c337b203bbc5510bffa840bed404d9de75c3709a1ed68",
+    "src/models/model1_logistic_baseline.py": "594f5d4cd8885acd1da167cce74095375bf4099881a6d9170c97a131209c57d7",
+    "src/models/model2_gradient_boosting.py": "eea489f9af90491a84e60ec7ac33ee1b74809ff19b2cc68a53a3d69b3bd6e923",
+    "src/features/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/features/connections_strike_rate.py": "f0403be5b7ff0ef82ff3d23c94ba8e4d8d7a02ccb0b906c8623f611481c1ead1",
+    "src/features/draw_bias_history.py": "a641fda17e9fe8ad8bd689395cce6f89463a3524192faf8f4da9600b2dec7e7d",
+    "src/features/feature_vector.py": "f9caa441969fd4145a171eef8b3efe89c1c740d2ded7352ac3c1c9b64334cb28",
+    "src/features/going_affinity.py": "610d1f4ee1ea2a042a42c0467997030d21d6d675d5b60b6d0ff4663ff8632284",
+    "src/features/runner_features.py": "c78f35a7cf1d57ea10fa8741afe9c6c531b4966f1bb92880acf9e6cefae3ad70",
+    "db/schema.sql#model_version+prediction+trigger": "d4d3d1136c4feec081a8021e3e45f730f8ff97de2ac4ed8c3e29c2f875f38ad6"
+  }
+}

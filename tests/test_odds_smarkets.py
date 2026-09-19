@@ -14,7 +14,9 @@ import requests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.providers.odds_smarkets import (
+    MIN_QUANTITY_FOR_OK,
     _get_with_retry,
+    classify_price_quality,
     get_runner_prices,
     get_win_market_id,
     is_gb_course,
@@ -58,9 +60,12 @@ REAL_CONTRACTS_RESPONSE = {
     ]
 }
 REAL_QUOTES_RESPONSE = {
-    "451148090": {"bids": [{"price": 571, "quantity": 1}], "offers": [{"price": 1087, "quantity": 1}]},
-    "451148091": {"bids": [{"price": 1562, "quantity": 1}, {"price": 909, "quantity": 1}],
-                  "offers": [{"price": 1613, "quantity": 1}, {"price": 1786, "quantity": 1}]},
+    # Real observed quantity scale (Chester, 2026-09-19 live check) is in
+    # the hundreds of thousands — using a comfortably-above-threshold value
+    # here so these existing fixtures stay classified 'ok'.
+    "451148090": {"bids": [{"price": 571, "quantity": 250000}], "offers": [{"price": 1087, "quantity": 250000}]},
+    "451148091": {"bids": [{"price": 1562, "quantity": 250000}, {"price": 909, "quantity": 250000}],
+                  "offers": [{"price": 1613, "quantity": 250000}, {"price": 1786, "quantity": 250000}]},
     # "999999999" deliberately absent — no real bids/offers yet
 }
 
@@ -159,11 +164,15 @@ def test_get_runner_prices_computes_real_probabilities_and_odds():
     mid_prob = (0.0571 + 0.1087) / 2
     assert abs(arbaawy.midprice - 1 / mid_prob) < 1e-9
     assert abs(arbaawy.spread - (0.1087 - 0.0571)) < 1e-9
+    assert arbaawy.best_back_quantity == 250000
+    assert arbaawy.best_lay_quantity == 250000
+    assert arbaawy.price_quality == "ok"
 
     # multiple bids/offers -> best (highest bid, lowest offer) is used
     eastern_veil = by_name["Eastern Veil"]
     assert eastern_veil.best_back_prob == 0.1562  # max(0.1562, 0.0909)
     assert eastern_veil.best_lay_prob == 0.1613   # min(0.1613, 0.1786)
+    assert eastern_veil.price_quality == "ok"
 
 
 def test_get_runner_prices_no_real_book_yet_is_none_not_guessed():
@@ -179,6 +188,43 @@ def test_get_runner_prices_no_real_book_yet_is_none_not_guessed():
     assert no_book.exchange_lay is None
     assert no_book.midprice is None
     assert no_book.spread is None
+    assert no_book.price_quality == "thin_book"  # no real two-sided book at all
+
+
+# ---------------------------------------------------------------------------
+# classify_price_quality — the real fix for the 2026-09-18 "Hellion" bug:
+# a Smarkets back price of decimal 10000.0 (implied probability 0.01%) was
+# displayed as "BEST VALUE, EV +1954%" with nothing checking whether real
+# liquidity or a sane spread stood behind it.
+# ---------------------------------------------------------------------------
+
+def test_classify_price_quality_ok_for_a_liquid_two_sided_book():
+    assert classify_price_quality(0.196, 0.204, 250000, 250000) == "ok"
+
+
+def test_classify_price_quality_thin_book_when_a_side_is_missing():
+    assert classify_price_quality(None, 0.204, None, 250000) == "thin_book"
+    assert classify_price_quality(0.196, None, 250000, None) == "thin_book"
+
+
+def test_classify_price_quality_thin_book_when_quantity_too_low():
+    assert classify_price_quality(0.196, 0.204, MIN_QUANTITY_FOR_OK - 1, 250000) == "thin_book"
+    assert classify_price_quality(0.196, 0.204, 250000, MIN_QUANTITY_FOR_OK - 1) == "thin_book"
+
+
+def test_classify_price_quality_wide_spread_when_both_sides_real_but_far_apart():
+    # both sides clear the liquidity bar, but implied probabilities are
+    # 30 percentage points apart — no real shared market yet.
+    assert classify_price_quality(0.10, 0.40, 250000, 250000) == "wide_spread"
+
+
+def test_classify_price_quality_flags_the_real_hellion_regression_case():
+    # Real 2026-09-18 case: back decimal odds 10000.0 (prob 0.0001), lay
+    # decimal odds 38.0 (prob ~0.0263). A near-worthless stub bid, not a
+    # real market. Must never come back 'ok'.
+    back_prob = 1 / 10000.0
+    lay_prob = 1 / 38.0
+    assert classify_price_quality(back_prob, lay_prob, 1, 250000) == "thin_book"
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +304,11 @@ if __name__ == "__main__":
         test_get_win_market_id_returns_none_when_no_winner_market,
         test_get_runner_prices_computes_real_probabilities_and_odds,
         test_get_runner_prices_no_real_book_yet_is_none_not_guessed,
+        test_classify_price_quality_ok_for_a_liquid_two_sided_book,
+        test_classify_price_quality_thin_book_when_a_side_is_missing,
+        test_classify_price_quality_thin_book_when_quantity_too_low,
+        test_classify_price_quality_wide_spread_when_both_sides_real_but_far_apart,
+        test_classify_price_quality_flags_the_real_hellion_regression_case,
         test_get_with_retry_succeeds_first_try,
         test_get_with_retry_retries_past_a_real_429,
         test_get_with_retry_honours_real_retry_after_header,

@@ -185,6 +185,18 @@ CREATE TABLE IF NOT EXISTS market_snapshot (
     source_id           INT REFERENCES data_source(id)
 );
 
+-- Research V2 brief, Phase 1: real price-quality flag, added after a live
+-- 2026-09-18 finding — a Smarkets back price of 10000.0 (a near-worthless
+-- stub bid with no real liquidity) was being treated identically to a
+-- genuine market price, producing a nonsensical "BEST VALUE, EV +1954%"
+-- display. 'ok' / 'thin_book' / 'wide_spread', set by
+-- scripts/collect_smarkets_prices.py at insert time — see that script and
+-- src/providers/odds_smarkets.py for the real classification rule.
+-- Existing rows default to 'ok': they predate this check and were not
+-- re-evaluated retroactively (never invent a quality judgement for data we
+-- didn't actually check).
+ALTER TABLE market_snapshot ADD COLUMN IF NOT EXISTS price_quality TEXT NOT NULL DEFAULT 'ok';
+
 -- Weather snapshot per course per day — feature input, not a race-specific record.
 CREATE TABLE IF NOT EXISTS weather_snapshot (
     id                  SERIAL PRIMARY KEY,

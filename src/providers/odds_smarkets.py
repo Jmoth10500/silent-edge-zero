@@ -97,6 +97,49 @@ class SmarketsRunnerPrice:
     exchange_lay: Optional[float]     # decimal odds, 1/best_lay_prob
     midprice: Optional[float]         # decimal odds at the midpoint probability
     spread: Optional[float]           # best_lay_prob - best_back_prob (probability space)
+    best_back_quantity: Optional[int] # real stake available at the best bid, Smarkets' own minor-unit quantity
+    best_lay_quantity: Optional[int]  # real stake available at the best offer, same units
+    price_quality: str                # 'ok' / 'thin_book' / 'wide_spread' — see classify_price_quality()
+
+
+# Real, live-verified minimums — a 2026-09-18 finding on Hellion (Wolverhampton)
+# showed a back price of decimal 10000.0 (implied probability 0.01%) getting
+# treated as a genuine market price and driving a nonsensical "BEST VALUE,
+# EV +1954%" display. Real cause: the code took the single best bid/offer
+# price with no check on how much real stake stood behind it, nor on how far
+# apart the two sides were — a lone stub order at an absurd price was
+# indistinguishable from a real, liquid two-sided market. These thresholds
+# are a first-pass heuristic (Research V2 brief, Phase 1), not empirically
+# tuned against a large sample of confirmed-thin books — worth revisiting
+# once scripts/data_integrity_audit.py has accumulated real evidence of
+# where they under/over-fire.
+MIN_QUANTITY_FOR_OK = 200          # Smarkets' own quantity units (minor currency unit); a live example carried ~250,000+
+MAX_SANE_SPREAD_PROBABILITY = 0.20  # 20 percentage points between best back/lay implied probability
+
+
+def classify_price_quality(
+    back_prob: Optional[float], lay_prob: Optional[float],
+    back_quantity: Optional[int], lay_quantity: Optional[int],
+) -> str:
+    """Real, conservative price-quality flag — never silently drops a
+    snapshot, only labels it so downstream analysis (and the Data Integrity
+    Audit) can exclude or discount it explicitly. A missing side (no back or
+    no lay quote at all) or a real quantity below MIN_QUANTITY_FOR_OK on
+    either present side means there's no genuine two-sided market backing
+    this price — 'thin_book'. A present two-sided book with an implausibly
+    wide gap between the two implied probabilities means the two sides
+    aren't really quoting the same market yet — 'wide_spread'. Checked in
+    that order: a thin one-sided stub book is the more direct explanation
+    for an absurd price than a "wide spread" framing that assumes both
+    sides are real."""
+    if back_prob is None or lay_prob is None:
+        return "thin_book"
+    if (back_quantity is not None and back_quantity < MIN_QUANTITY_FOR_OK) or \
+       (lay_quantity is not None and lay_quantity < MIN_QUANTITY_FOR_OK):
+        return "thin_book"
+    if (lay_prob - back_prob) > MAX_SANE_SPREAD_PROBABILITY:
+        return "wide_spread"
+    return "ok"
 
 
 def is_gb_course(venue_name: str) -> bool:
@@ -168,8 +211,12 @@ def get_runner_prices(market_id: str) -> list[SmarketsRunnerPrice]:
         bids = q.get("bids", [])
         offers = q.get("offers", [])
 
-        best_bid = max((b["price"] for b in bids), default=None)
-        best_offer = min((o["price"] for o in offers), default=None)
+        best_bid_entry = max(bids, key=lambda b: b["price"], default=None)
+        best_offer_entry = min(offers, key=lambda o: o["price"], default=None)
+        best_bid = best_bid_entry["price"] if best_bid_entry else None
+        best_offer = best_offer_entry["price"] if best_offer_entry else None
+        best_back_quantity = best_bid_entry["quantity"] if best_bid_entry else None
+        best_lay_quantity = best_offer_entry["quantity"] if best_offer_entry else None
 
         back_prob = best_bid / 10000 if best_bid else None
         lay_prob = best_offer / 10000 if best_offer else None
@@ -188,5 +235,7 @@ def get_runner_prices(market_id: str) -> list[SmarketsRunnerPrice]:
             best_back_prob=back_prob, best_lay_prob=lay_prob,
             exchange_back=exchange_back, exchange_lay=exchange_lay,
             midprice=midprice, spread=spread,
+            best_back_quantity=best_back_quantity, best_lay_quantity=best_lay_quantity,
+            price_quality=classify_price_quality(back_prob, lay_prob, best_back_quantity, best_lay_quantity),
         ))
     return out
