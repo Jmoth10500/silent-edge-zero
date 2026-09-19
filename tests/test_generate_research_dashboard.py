@@ -311,6 +311,25 @@ def test_build_insights_brier_trend_direction():
     assert "narrowed toward Silent Edge" in insights["brier_trend"]
 
 
+def test_build_insights_handles_a_leading_day_with_no_eligible_races():
+    # Real 2026-09-19 bug: the first tracked day (before Smarkets market-price
+    # collection began) has zero eligible races, so its win rate / brier gap
+    # are None -- must not crash, and must correctly skip to the first real day.
+    kwargs = _full_kwargs()
+    kwargs["series"] = [
+        {"date": "2026-09-09", "brier_gap": None, "n_brier_observations": 0,
+         "silent_edge_win_rate": None, "market_favourite_win_rate": None},
+        {"date": "2026-09-10", "brier_gap": 0.02, "n_brier_observations": 50,
+         "silent_edge_win_rate": 0.30, "market_favourite_win_rate": 0.40},
+        {"date": "2026-09-19", "brier_gap": 0.015, "n_brier_observations": 500,
+         "silent_edge_win_rate": 0.35, "market_favourite_win_rate": 0.45},
+    ]
+    insights = build_insights(**kwargs)
+    assert "2026-09-10" in insights["win_rate_trend"]  # first REAL day, not the None day
+    assert "1 earlier day(s)" in insights["win_rate_trend"]
+    assert "2026-09-10" in insights["brier_trend"]
+
+
 def test_build_insights_prob_bands_ignores_tiny_samples():
     insights = build_insights(**_full_kwargs())
     # the n=5 band (80%-90%) must not be picked as the "most" of anything
@@ -406,7 +425,8 @@ if __name__ == "__main__":
         test_odds_band_buckets_by_fair_odds_not_raw_probability, test_odds_band_skips_zero_probability_without_crashing,
         test_odds_band_flags_small_samples,
         test_build_insights_kpi_reflects_real_numbers, test_build_insights_four_way_identifies_dominant_category_and_sums_correctly,
-        test_build_insights_brier_trend_direction, test_build_insights_prob_bands_ignores_tiny_samples,
+        test_build_insights_brier_trend_direction, test_build_insights_handles_a_leading_day_with_no_eligible_races,
+        test_build_insights_prob_bands_ignores_tiny_samples,
         test_build_insights_outcomes_percentages_sum_sensible, test_build_insights_calibration_direction,
         test_build_insights_heatmap_picks_extreme_cells_above_threshold, test_build_insights_never_crashes_on_empty_window,
         test_outcome_breakdown_restricts_to_eligible_race_ids_when_given,

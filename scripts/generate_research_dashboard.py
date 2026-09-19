@@ -59,7 +59,10 @@ from src.research.ranking_matrix import aggregate_rank_matrix, build_rank_observ
 
 REPO_ROOT = Path(__file__).parent.parent
 OUTPUT_PATH = REPO_ROOT / "research_dashboard.html"
-LIVE_TRACKING_START = date(2026, 9, 10)
+LIVE_TRACKING_START = date(2026, 9, 9)  # earliest real locked gbm_v1 predictions exist (verified live, 2026-09-19 audit).
+# Real limitation, not fixed by this constant: Smarkets market-price collection only started 2026-09-10,
+# so 2026-09-09's races are real (results genuinely recovered) but will show UNRESOLVED for every
+# market-comparison metric on this page (no de-vig-able price ever existed for that day).
 
 
 def load_all_races(conn, start: date, end: date) -> list[dict]:
@@ -438,30 +441,44 @@ def build_insights(class_summary: dict, brier_summary: Optional[dict], roi: dict
         )
 
     # --- Cumulative Brier & win-rate trend ---------------------------------
-    if len(series) >= 2 and series[0]["brier_gap"] is not None and series[-1]["brier_gap"] is not None:
-        gap0, gap1 = series[0]["brier_gap"], series[-1]["brier_gap"]
+    days_with_brier = [s for s in series if s["brier_gap"] is not None]
+    if len(days_with_brier) >= 2:
+        first, last = days_with_brier[0], days_with_brier[-1]
+        gap0, gap1 = first["brier_gap"], last["brier_gap"]
         trend = "widened in the market's favour" if gap1 > gap0 else ("narrowed toward Silent Edge" if gap1 < gap0 else "held steady")
         insights["brier_trend"] = (
-            f"The Brier gap has {trend} over the tracked window, from {gap0:+.4f} on {series[0]['date']} to "
-            f"{gap1:+.4f} on {series[-1]['date']} (n={series[-1]['n_brier_observations']:,} cumulative pairs by "
-            f"the last day). With under two weeks of live data, this trajectory should be read as noisy — a "
+            f"The Brier gap has {trend} over the tracked window, from {gap0:+.4f} on {first['date']} to "
+            f"{gap1:+.4f} on {last['date']} (n={last['n_brier_observations']:,} cumulative pairs by the last "
+            f"day with data). With under two weeks of live data, this trajectory should be read as noisy — a "
             f"single unusual day can move it materially; it is not yet long enough to distinguish a genuine "
             f"drift in relative accuracy from sampling variance."
         )
     else:
         insights["brier_trend"] = "Insufficient paired observations yet to describe a trend."
 
-    if len(series) >= 2:
-        wr0, wr1 = series[0]["silent_edge_win_rate"], series[-1]["silent_edge_win_rate"]
-        mk0, mk1 = series[0]["market_favourite_win_rate"], series[-1]["market_favourite_win_rate"]
+    # A day with zero eligible races (e.g. before market-price collection began)
+    # reports None for these fields — find the first/last day that actually has
+    # a real value rather than assuming series[0]/series[-1] are populated.
+    days_with_win_rate = [s for s in series if s["silent_edge_win_rate"] is not None]
+    if len(days_with_win_rate) >= 2:
+        first, last = days_with_win_rate[0], days_with_win_rate[-1]
+        wr0, wr1 = first["silent_edge_win_rate"], last["silent_edge_win_rate"]
+        mk0, mk1 = first["market_favourite_win_rate"], last["market_favourite_win_rate"]
+        excluded_note = ""
+        n_excluded = len(series) - len(days_with_win_rate)
+        if n_excluded:
+            excluded_note = (f" ({n_excluded} earlier day(s) in the window had zero eligible races for this "
+                              f"comparison — e.g. before market-price collection began — and are excluded from "
+                              f"this specific trend, though their real results still count elsewhere on this page.)")
         insights["win_rate_trend"] = (
-            f"Silent Edge's cumulative win rate moved from {wr0:.1%} to {wr1:.1%} across the window; the "
-            f"market favourite's moved from {mk0:.1%} to {mk1:.1%}. Both series are cumulative averages over a "
-            f"growing sample, so early-window volatility is expected and later movement is more informative "
-            f"than early movement — the lines should visibly stabilise as more races accumulate."
+            f"Silent Edge's cumulative win rate moved from {wr0:.1%} ({first['date']}) to {wr1:.1%} "
+            f"({last['date']}); the market favourite's moved from {mk0:.1%} to {mk1:.1%}. Both series are "
+            f"cumulative averages over a growing sample, so early-window volatility is expected and later "
+            f"movement is more informative than early movement — the lines should visibly stabilise as more "
+            f"races accumulate.{excluded_note}"
         )
     else:
-        insights["win_rate_trend"] = "Insufficient days tracked yet to describe a trend."
+        insights["win_rate_trend"] = "Insufficient days with eligible races yet to describe a trend."
 
     # --- Probability bands --------------------------------------------------
     if band_analysis:
