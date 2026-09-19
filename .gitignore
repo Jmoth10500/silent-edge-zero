@@ -6,6 +6,8 @@ data/kaggle_historical/
 *.log
 dashboard.html
 site/index.html
+research_dashboard.html
+site/research_dashboard.html
 
 # Local Netlify folder
 .netlify
