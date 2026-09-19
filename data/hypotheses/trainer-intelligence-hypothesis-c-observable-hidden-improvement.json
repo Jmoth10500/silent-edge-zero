@@ -1,0 +1,39 @@
+{
+  "slug": "trainer-intelligence-hypothesis-c-observable-hidden-improvement",
+  "name": "Trainer Intelligence Hypothesis C - observable hidden improvement",
+  "description": "Tests whether horses showing an improving beaten-length trend (finished closer last time than the time before) combined with a real equipment change or a return from a 60+ day break outperform the market's own de-vigged implied probability -- brief Section 12C. Speed figures and sectional times (the brief's other suggested candidates) do not exist anywhere in this project's schema and were not attempted -- see the module's own data-availability correction. Backtested over the full historical bootstrap (2023-01-01 to present, 421,180 runs with at least two strictly prior runs, matched by horse name).",
+  "rule_definition": "QUALIFYING: improving_beaten_length_trend == true AND (equipment_change == true OR days_since_last_run >= 60). CONTROL: everyone else with a known trend value and a de-vig-able race. Compared via actual_wins vs sum-of-market-probability expected_wins.",
+  "source_finding": "scripts/trainer_intelligence_c_report.py, full-history backtest run 2026-09-19",
+  "historical_evidence": {
+    "window": "2023-01-01 to 2026-09-19 (full historical bootstrap)",
+    "n_races_excluded_insufficient_market_data": 2848,
+    "qualifying_group": {
+      "n": 48430,
+      "actual_wins": 4596,
+      "actual_win_rate": 0.095,
+      "market_expected_wins": 5882.03,
+      "diff": -1286.03,
+      "relative_shortfall_vs_market": -0.2187
+    },
+    "control_group": {
+      "n": 335457,
+      "actual_wins": 36782,
+      "actual_win_rate": 0.11,
+      "market_expected_wins": 44837.97,
+      "diff": -8055.97,
+      "relative_shortfall_vs_market": -0.1797
+    },
+    "conclusion": "NEGATIVE RESULT: the qualifying group underperforms the market's own expectation MORE (-21.9% relative shortfall) than the control group does (-18.0%) -- no edge found; if anything a slight negative signal, though both groups show the market itself overpredicting relative to realised outcomes across this whole population (a separate, general observation also seen in Hypothesis A's backtest, worth its own investigation as to why the market as scored here is systematically overconfident across nearly all cells).",
+    "statistical_caveat": "Pooled at runner level, NOT race-level resampled -- observations within the same race are not independent."
+  },
+  "created_at": "2026-09-19T14:51:30.538073+00:00",
+  "prospective_test_start_date": null,
+  "status": "prospective_rejected",
+  "prospective_results": [
+    {
+      "n": 383887,
+      "note": "already backtested against the full historical population; no separate prospective run needed unless the rule is revised",
+      "recorded_at": "2026-09-19T14:51:30.566983+00:00"
+    }
+  ]
+}
