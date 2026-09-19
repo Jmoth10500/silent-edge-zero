@@ -1,0 +1,40 @@
+{
+  "slug": "20-40-percent-probability-band-underconfidence",
+  "name": "20-40 percent probability band underconfidence",
+  "description": "Silent Edge selections in the 20-40% predicted-probability range appear to win more often than the model's own average predicted probability in that range, over the live 2026-09-05..18 window -- a real calibration gap distinct from the already-known RL-012 overconfidence finding at higher (40%+) bands.",
+  "rule_definition": "Among paired observations with se_probability in [0.20, 0.40), actual_win_rate exceeds avg_predicted_probability by a real positive margin (calibration_error > 0), with a Wilson 95% CI that does not comfortably straddle zero.",
+  "source_finding": "scripts/probability_band_report.py, live run 2026-09-05..18",
+  "historical_evidence": {
+    "window_start": "2026-09-05",
+    "window_end": "2026-09-18",
+    "price_source": "at_lock",
+    "bands": {
+      "20%-30%": {
+        "n": 103,
+        "expected_wins": 24.6,
+        "actual_wins": 33,
+        "actual_win_rate": 0.32,
+        "calibration_error": 0.081,
+        "win_rate_ci": [
+          0.24,
+          0.42
+        ]
+      },
+      "30%-40%": {
+        "n": 33,
+        "expected_wins": 11.2,
+        "actual_wins": 14,
+        "actual_win_rate": 0.424,
+        "calibration_error": 0.085,
+        "win_rate_ci": [
+          0.27,
+          0.59
+        ]
+      }
+    }
+  },
+  "created_at": "2026-09-19T14:36:19.811822+00:00",
+  "prospective_test_start_date": "2026-09-20",
+  "status": "awaiting_prospective_test",
+  "prospective_results": []
+}

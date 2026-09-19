@@ -1,0 +1,22 @@
+{
+  "slug": "se-rank-2-vs-market-rank-2-underconfidence",
+  "name": "SE rank 2 vs market rank 2 underconfidence",
+  "description": "Runners that are Silent Edge's 2nd-most-fancied AND the market's 2nd favourite (by lock-time exchange_back) appear to win more often than Silent Edge's own stated probabilities imply, over the live 2026-09-05..18 window.",
+  "rule_definition": "Among runners with se_rank == 2 and market_rank == 2 (competition ranking, lock-time market price), actual win count exceeds the sum of Silent Edge's own model_probability for that group by a real, non-trivial margin.",
+  "source_finding": "scripts/missed_winners_report.py / src/research/ranking_matrix.py, live run 2026-09-05..18 (see docs/BUILD_LOG.md or the Research V2 plan for context)",
+  "historical_evidence": {
+    "window_start": "2026-09-05",
+    "window_end": "2026-09-18",
+    "price_source": "at_lock",
+    "n_runners": 45,
+    "actual_wins": 13,
+    "expected_wins_model": 8.41,
+    "diff_actual_minus_expected": 4.59,
+    "actual_win_rate": 0.2889,
+    "avg_model_probability": 0.1869
+  },
+  "created_at": "2026-09-19T14:36:19.786232+00:00",
+  "prospective_test_start_date": "2026-09-20",
+  "status": "awaiting_prospective_test",
+  "prospective_results": []
+}
