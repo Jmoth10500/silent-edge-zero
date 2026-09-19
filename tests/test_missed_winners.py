@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.research.missed_winners import (
     cross_check_against_full_population,
     find_missed_winner_races,
+    missed_winner_probability_bands,
     summarise_missed_winner_rank_combinations,
 )
 
@@ -97,12 +98,61 @@ def test_cross_check_attaches_full_population_cell():
     assert cell["actual_wins"] == 1
 
 
+# ---------------------------------------------------------------------------
+# missed_winner_probability_bands — brief Section 7
+# ---------------------------------------------------------------------------
+
+def _missed_race(winner_se_prob, winner_market_prob=None):
+    return {"winner_se_probability": winner_se_prob, "winner_market_probability": winner_market_prob}
+
+
+def test_bands_are_evenly_spaced_and_cover_zero_to_hundred():
+    result = missed_winner_probability_bands([], band_width=0.10)
+    assert list(result.keys()) == [
+        "0%-10%", "10%-20%", "20%-30%", "30%-40%", "40%-50%",
+        "50%-60%", "60%-70%", "70%-80%", "80%-90%", "90%-100%",
+    ]
+
+
+def test_empty_band_shows_a_real_zero_not_omitted():
+    result = missed_winner_probability_bands([_missed_race(0.05)], band_width=0.10)
+    assert result["50%-60%"]["n_winners"] == 0
+    assert result["50%-60%"]["avg_se_probability"] is None
+
+
+def test_bands_group_winners_and_compute_real_averages():
+    races = [_missed_race(0.22, 0.10), _missed_race(0.27, 0.20), _missed_race(0.05, 0.03)]
+    result = missed_winner_probability_bands(races, band_width=0.10)
+    band = result["20%-30%"]
+    assert band["n_winners"] == 2
+    assert abs(band["avg_se_probability"] - (0.22 + 0.27) / 2) < 1e-9
+    assert abs(band["avg_market_probability"] - (0.10 + 0.20) / 2) < 1e-9
+    assert band["share_of_all_missed_winners"] == round(2 / 3, 4)
+    assert len(band["races"]) == 2
+
+
+def test_bands_handle_missing_market_probability_without_crashing():
+    races = [_missed_race(0.22, None)]
+    result = missed_winner_probability_bands(races, band_width=0.10)
+    assert result["20%-30%"]["avg_market_probability"] is None
+    assert result["20%-30%"]["avg_se_probability"] == 0.22
+
+
+def test_five_point_bands_supported():
+    result = missed_winner_probability_bands([_missed_race(0.22)], band_width=0.05)
+    assert len(result) == 20
+    assert result["20%-25%"]["n_winners"] == 1
+
+
 if __name__ == "__main__":
     tests = [
         test_finds_only_category_d_races,
         test_skips_a_real_dead_heat_rather_than_guessing_the_winner,
         test_summary_counts_combinations_and_shares,
         test_cross_check_attaches_full_population_cell,
+        test_bands_are_evenly_spaced_and_cover_zero_to_hundred, test_empty_band_shows_a_real_zero_not_omitted,
+        test_bands_group_winners_and_compute_real_averages, test_bands_handle_missing_market_probability_without_crashing,
+        test_five_point_bands_supported,
     ]
     passed = 0
     for t in tests:

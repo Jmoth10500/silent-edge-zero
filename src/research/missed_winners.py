@@ -60,6 +60,7 @@ def find_missed_winner_races(races: list[dict], price_source: str = "at_lock") -
             "going": race["race"].get("going"),
             "field_size_declared": race["race"].get("field_size_declared"),
             "winner_horse_id": winner_horse_id,
+            "winner_horse_name": winner["horse"].get("name"),
             "winner_trainer": winner["horse"].get("trainer"),
             "winner_jockey": winner["horse"].get("jockey"),
             "winner_se_rank": winner["silent_edge"].get("model_rank"),
@@ -126,4 +127,52 @@ def cross_check_against_full_population(missed_summary: dict, races: list[dict],
         mkt_bucket = bucket(entry["market_rank"])
         full_key = f"se_rank={se_bucket},market_rank={mkt_bucket}"
         out[key] = {**entry, "full_population_cell": full_matrix.get(full_key)}
+    return out
+
+
+def missed_winner_probability_bands(missed_races: list[dict], band_width: float = 0.05) -> dict:
+    """Real grouping of missed-winner races (category D — see
+    find_missed_winner_races) by the actual winner's ORIGINAL locked
+    Silent Edge probability — brief Section 7, "What probability did SEN
+    give the actual winner?". Purely descriptive, per this module's own
+    docstring: never compared against expectation here (that comparison
+    lives in the full-population probability-band chart,
+    src/research/probability_bands.py, which uses ALL eligible runners,
+    not just missed winners — the two must never be conflated, per the
+    brief's own repeated warning against drawing conclusions from a
+    selected sample alone).
+
+    `band_width` supports the requested 5-point/10-point toggle (0.05 or
+    0.10). Bands with zero real observations are included with n=0 —
+    never omitted, so "no missed winners in this band" is visible as a
+    real zero, not a gap a reader might mistake for missing data."""
+    def band_key(p: float) -> str:
+        lo = min(int(p / band_width) * band_width, 1 - band_width)
+        hi = lo + band_width
+        return f"{lo:.0%}-{hi:.0%}"
+
+    # Real, evenly-spaced, non-overlapping band boundaries covering 0-100%.
+    n_bands = int(round(1.0 / band_width))
+    all_keys = [band_key(i * band_width) for i in range(n_bands)]
+
+    grouped: dict[str, list[dict]] = {k: [] for k in all_keys}
+    for race in missed_races:
+        p = race["winner_se_probability"]
+        grouped.setdefault(band_key(p), []).append(race)
+
+    total_winners = len(missed_races)
+    out = {}
+    for key in all_keys:
+        races = grouped.get(key, [])
+        n = len(races)
+        market_probs = [r["winner_market_probability"] for r in races if r["winner_market_probability"] is not None]
+        out[key] = {
+            "band": key,
+            "n_winners": n,
+            "share_of_all_missed_winners": round(n / total_winners, 4) if total_winners else None,
+            "avg_se_probability": round(sum(r["winner_se_probability"] for r in races) / n, 4) if n else None,
+            "avg_market_probability": round(sum(market_probs) / len(market_probs), 4) if market_probs else None,
+            "n_races": n,  # one winner per race here (dead heats already excluded upstream)
+            "races": races,
+        }
     return out

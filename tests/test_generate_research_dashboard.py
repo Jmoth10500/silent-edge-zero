@@ -15,7 +15,9 @@ from scripts.generate_research_dashboard import (
     agreement_win_rate_splits,
     build_insights,
     odds_band_analysis,
+    rank_population_views,
     render_heatmap_table,
+    render_missed_race_list,
     render_html,
     render_kpi_cards,
     split_both_wrong_by_agreement,
@@ -70,6 +72,15 @@ def test_render_html_produces_a_complete_page_with_chart_canvases():
         {"dates": ["2026-09-10"], "cumulative_profit": [1.5], "max_drawdown": -0.5, "total_stake": 10.0},
         {"2-4": {"n": 30, "wins": 8, "win_rate": 0.27, "brier_contribution": 0.15, "small_sample": False}},
         {"total": 3, "agree": 1, "disagree": 2},
+        [],  # missed_races
+        {"20%-30%": {"n_winners": 0, "share_of_all_missed_winners": None, "avg_se_probability": None,
+                     "avg_market_probability": None, "n_races": 0, "races": []}},  # missed_bands_10pt
+        {"20%-25%": {"n_winners": 0, "share_of_all_missed_winners": None, "avg_se_probability": None,
+                     "avg_market_probability": None, "n_races": 0, "races": []}},  # missed_bands_5pt
+        {"ALL RUNNERS": {"n": 10, "bands": {"0%-10%": {"n_selections": 100, "avg_predicted_probability": 0.05,
+                                                        "actual_win_rate": 0.04, "calibration_error": -0.01}}},
+         "SEN TOP PICKS": {"n": 0, "bands": {}}, "SEN SECOND CHOICES": {"n": 0, "bands": {}},
+         "SEN THIRD CHOICES": {"n": 0, "bands": {}}},  # rank_views
     )
     assert "<!DOCTYPE html>" in html
     assert 'id="donutChart"' in html
@@ -81,6 +92,8 @@ def test_render_html_produces_a_complete_page_with_chart_canvases():
     assert 'id="agreementChart"' in html
     assert 'id="pnlChart"' in html
     assert 'id="oddsBandChart"' in html
+    assert 'id="missedWinnerChart"' in html
+    assert 'id="expectedActualChart"' in html
     assert "heatmap" in html
     assert "chart.js" in html.lower()
     assert "2026-09-10" in html
@@ -289,6 +302,20 @@ def _full_kwargs(n_eligible=100):
             "4-8": {"n": 20, "win_rate": 0.10},
         },
         d_split={"total": 40, "agree": 15, "disagree": 25},
+        missed_bands_10pt={
+            "20%-30%": {"n_winners": 5, "share_of_all_missed_winners": 0.5, "avg_se_probability": 0.24,
+                        "avg_market_probability": 0.15, "n_races": 5, "races": []},
+            "0%-10%": {"n_winners": 5, "share_of_all_missed_winners": 0.5, "avg_se_probability": 0.05,
+                       "avg_market_probability": 0.04, "n_races": 5, "races": []},
+        },
+        n_missed_winner_races=10,
+        rank_views={
+            "ALL RUNNERS": {"n": 100, "bands": {"20%-30%": {"n_selections": 30, "actual_win_rate": 0.35,
+                                                             "avg_predicted_probability": 0.25, "calibration_error": 0.10}}},
+            "SEN TOP PICKS": {"n": 20, "bands": {}},
+            "SEN SECOND CHOICES": {"n": 20, "bands": {}},
+            "SEN THIRD CHOICES": {"n": 20, "bands": {}},
+        },
     )
 
 
@@ -375,6 +402,10 @@ def test_build_insights_never_crashes_on_empty_window():
     kwargs["pnl_series"] = {"dates": [], "cumulative_profit": [], "max_drawdown": 0.0, "total_stake": 0.0}
     kwargs["odds_bands"] = {}
     kwargs["d_split"] = {"total": 0, "agree": 0, "disagree": 0}
+    kwargs["missed_bands_10pt"] = {}
+    kwargs["n_missed_winner_races"] = 0
+    kwargs["rank_views"] = {"ALL RUNNERS": {"n": 0, "bands": {}}, "SEN TOP PICKS": {"n": 0, "bands": {}},
+                             "SEN SECOND CHOICES": {"n": 0, "bands": {}}, "SEN THIRD CHOICES": {"n": 0, "bands": {}}}
     insights = build_insights(**kwargs)
     assert all(isinstance(v, str) and v for v in insights.values())
 
@@ -414,6 +445,72 @@ def test_d_split_empty_when_no_d_races():
     assert result == {"total": 0, "agree": 0, "disagree": 0}
 
 
+# ---------------------------------------------------------------------------
+# rank_population_views — missed-winner brief Section 8's switchable views
+# ---------------------------------------------------------------------------
+
+def _paired_obs(model_rank, se_prob=0.2, market_prob=0.15, outcome=0):
+    return {"model_rank": model_rank, "se_probability": se_prob, "market_probability": market_prob, "outcome": outcome}
+
+
+def test_rank_population_views_splits_by_model_rank_correctly():
+    observations = [
+        _paired_obs(1), _paired_obs(1), _paired_obs(2), _paired_obs(3), _paired_obs(4),
+    ]
+    views = rank_population_views(observations)
+    assert views["ALL RUNNERS"]["n"] == 5
+    assert views["SEN TOP PICKS"]["n"] == 2
+    assert views["SEN SECOND CHOICES"]["n"] == 1
+    assert views["SEN THIRD CHOICES"]["n"] == 1
+
+
+def test_rank_population_views_empty_view_has_no_bands():
+    views = rank_population_views([_paired_obs(1)])
+    assert views["SEN SECOND CHOICES"]["n"] == 0
+    assert views["SEN SECOND CHOICES"]["bands"] == {}
+
+
+def test_rank_population_views_all_runners_uses_real_band_analysis():
+    observations = [_paired_obs(1, se_prob=0.25, outcome=1) for _ in range(25)]
+    views = rank_population_views(observations)
+    assert "20%-30%" in views["ALL RUNNERS"]["bands"]
+    assert views["ALL RUNNERS"]["bands"]["20%-30%"]["n_selections"] == 25
+
+
+# ---------------------------------------------------------------------------
+# render_missed_race_list — accessible fallback for chart bar clicks
+# ---------------------------------------------------------------------------
+
+def test_missed_race_list_skips_empty_bands_and_shows_populated_ones():
+    bands = {
+        "0%-10%": {"n_winners": 0, "races": []},
+        "20%-30%": {"n_winners": 1, "races": [
+            {"date": "2026-09-12", "course": "Bath", "winner_horse_name": "Testwinner",
+             "winner_se_probability": 0.24, "winner_market_probability": 0.15},
+        ]},
+    }
+    html = render_missed_race_list(bands)
+    assert "0%-10%" not in html  # empty band never rendered as a fake entry
+    assert "20%-30%" in html
+    assert "Testwinner" in html
+    assert "24.0%" in html
+    assert "15.0%" in html
+
+
+def test_missed_race_list_handles_missing_market_probability():
+    bands = {"20%-30%": {"n_winners": 1, "races": [
+        {"date": "2026-09-12", "course": "Bath", "winner_horse_name": "Testwinner",
+         "winner_se_probability": 0.24, "winner_market_probability": None},
+    ]}}
+    html = render_missed_race_list(bands)
+    assert "n/a" in html
+
+
+def test_missed_race_list_all_empty_shows_a_real_message():
+    html = render_missed_race_list({"0%-10%": {"n_winners": 0, "races": []}})
+    assert "No missed-winner races" in html
+
+
 if __name__ == "__main__":
     tests = [
         test_render_kpi_cards_includes_real_values, test_render_kpi_cards_handles_no_eligible_races_without_crashing,
@@ -432,6 +529,10 @@ if __name__ == "__main__":
         test_outcome_breakdown_restricts_to_eligible_race_ids_when_given,
         test_d_split_separates_agreement_from_disagreement, test_d_split_handles_joint_favourites_correctly,
         test_d_split_empty_when_no_d_races,
+        test_rank_population_views_splits_by_model_rank_correctly, test_rank_population_views_empty_view_has_no_bands,
+        test_rank_population_views_all_runners_uses_real_band_analysis,
+        test_missed_race_list_skips_empty_bands_and_shows_populated_ones, test_missed_race_list_handles_missing_market_probability,
+        test_missed_race_list_all_empty_shows_a_real_message,
     ]
     passed = 0
     for t in tests:

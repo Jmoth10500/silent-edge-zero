@@ -53,6 +53,7 @@ from scripts.generate_eod_report import VOID_RESULT_CODES, ew_terms_for_field_si
 from src.evaluation.calibration import calibration_curve
 from src.research.brier_live import compute_paired_observations, coverage_report, paired_brier_summary
 from src.research.market_vs_model import classify_races, summarise_classification
+from src.research.missed_winners import find_missed_winner_races, missed_winner_probability_bands
 from src.research.probability_bands import probability_band_analysis
 from src.research.race_dataset import attach_market_data, load_race_dataset
 from src.research.ranking_matrix import aggregate_rank_matrix, build_rank_observations
@@ -305,6 +306,24 @@ def cumulative_pnl_series(conn, start: date, end: date) -> dict:
     }
 
 
+def rank_population_views(observations: list[dict], band_analysis_fn=probability_band_analysis) -> dict:
+    """Missed-winner brief Section 8's switchable population views:
+    ALL RUNNERS, SEN TOP PICKS (model_rank==1), SEN SECOND CHOICES
+    (model_rank==2), SEN THIRD CHOICES (model_rank==3) — each a
+    genuinely separate, correctly-scoped population fed through the SAME
+    `probability_band_analysis` function everything else on this page
+    uses, so the expected-wins-by-summation discipline is identical
+    across every view. A view with zero real observations returns an
+    empty band dict, never fabricated bands."""
+    views = {
+        "ALL RUNNERS": observations,
+        "SEN TOP PICKS": [o for o in observations if o.get("model_rank") == 1],
+        "SEN SECOND CHOICES": [o for o in observations if o.get("model_rank") == 2],
+        "SEN THIRD CHOICES": [o for o in observations if o.get("model_rank") == 3],
+    }
+    return {name: {"n": len(obs), "bands": band_analysis_fn(obs) if obs else {}} for name, obs in views.items()}
+
+
 def odds_band_analysis(observations: list[dict]) -> dict:
     """Real odds-band breakdown (Graph G) — buckets each paired
     observation by its Silent Edge FAIR decimal odds (1/model_probability),
@@ -377,10 +396,41 @@ def compute_roi(conn, start: date, end: date) -> dict:
     }
 
 
+def _band_extremes_sentence(bands: dict, population_label: str) -> str:
+    """Shared logic behind the probability-band insight text — extracted
+    so the main 'all runners' chart and each of the switchable population
+    views (missed-winner brief Section 8) describe themselves the same,
+    correct way rather than duplicating (and risking drifting) the
+    under/overconfidence-finding logic."""
+    substantial = {k: v for k, v in bands.items() if v["n_selections"] >= 20}
+    if not substantial:
+        return f"{population_label}: every band has fewer than 20 observations — no reliable calibration read yet."
+    most_under = max(substantial, key=lambda k: substantial[k]["calibration_error"])
+    most_over = min(substantial, key=lambda k: substantial[k]["calibration_error"])
+    u, o = substantial[most_under], substantial[most_over]
+    return (
+        f"{population_label}: the {most_under} band is the most underconfident (n={u['n_selections']}, "
+        f"{u['actual_win_rate']:.1%} actual vs {u['avg_predicted_probability']:.1%} predicted, "
+        f"{u['calibration_error']:+.1%}); the {most_over} band the most overconfident (n={o['n_selections']}, "
+        f"{o['actual_win_rate']:.1%} vs {o['avg_predicted_probability']:.1%}, {o['calibration_error']:+.1%})."
+    )
+
+
+def build_population_insights(rank_views: dict) -> dict:
+    """One insight sentence per switchable population view (missed-winner
+    brief Section 8) — 'All runners' reuses the exact same extraction
+    logic as the main probability-band chart, so the two never silently
+    disagree about which band is most notable for the same population."""
+    return {name: _band_extremes_sentence(view["bands"], name) if view["bands"]
+            else f"{name}: no eligible observations in this window yet."
+            for name, view in rank_views.items()}
+
+
 def build_insights(class_summary: dict, brier_summary: Optional[dict], roi: dict, series: list[dict],
                     band_analysis: dict, outcome_breakdown: dict, se_calibration: list[dict],
                     market_calibration: list[dict], rank_matrix: dict, agreement_splits: dict,
-                    pnl_series: dict, odds_bands: dict, d_split: dict) -> dict:
+                    pnl_series: dict, odds_bands: dict, d_split: dict, missed_bands_10pt: dict,
+                    n_missed_winner_races: int, rank_views: dict) -> dict:
     """Real, computed plain-language analysis for every KPI/chart/table on
     the page — every sentence below is derived directly from the same
     numbers already rendered, never a generic caption. Written at the
@@ -501,6 +551,30 @@ def build_insights(class_summary: dict, brier_summary: Optional[dict], roi: dict
     else:
         insights["prob_bands"] = "No probability-band data available for this window."
 
+    # --- Missed-winner probability bands (both wrong only) -----------------
+    if n_missed_winner_races == 0:
+        insights["missed_winners"] = "No 'both wrong' races in this window yet — nothing to analyse."
+    else:
+        populated = {k: v for k, v in missed_bands_10pt.items() if v["n_winners"] > 0}
+        if populated:
+            top_band = max(populated, key=lambda k: populated[k]["n_winners"])
+            tb = populated[top_band]
+            mkt_txt = f"{tb['avg_market_probability']:.1%}" if tb["avg_market_probability"] is not None else "n/a"
+            insights["missed_winners"] = (
+                f"Of {n_missed_winner_races} 'both wrong' races, the {top_band} band produced the most missed "
+                f"winners ({tb['n_winners']}, {tb['share_of_all_missed_winners']:.0%} of all missed winners), "
+                f"averaging {tb['avg_se_probability']:.1%} original Silent Edge probability and {mkt_txt} market "
+                f"probability. This describes WHERE missed winners cluster by their own probability — it does "
+                f"NOT by itself show Silent Edge underestimates that band; the Expected vs Actual panel below, "
+                f"using ALL eligible runners rather than only the winners we missed, is the real test of that."
+            )
+        else:
+            insights["missed_winners"] = f"{n_missed_winner_races} 'both wrong' races, but no band has a real observation yet."
+
+    # --- Expected vs Actual (default population view = ALL RUNNERS) --------
+    all_runners_view = rank_views.get("ALL RUNNERS", {"bands": {}})
+    insights["expected_vs_actual"] = _band_extremes_sentence(all_runners_view["bands"], "All runners")
+
     # --- Top-pick outcome donut ---------------------------------------------
     total_outcomes = sum(outcome_breakdown.values())
     if total_outcomes:
@@ -608,6 +682,32 @@ def build_insights(class_summary: dict, brier_summary: Optional[dict], roi: dict
     return insights
 
 
+def render_missed_race_list(bands: dict) -> str:
+    """Real, accessible fallback for 'click a bar to see the underlying
+    races' (Section 7) — native <details>/<summary> per band, works
+    without JavaScript and on any device. Chart.js bar clicks (wired in
+    the page's own <script> block) additionally open the matching
+    <details> element for a nicer interaction, but the information is
+    never gated behind that — every race is already in the page."""
+    def _row(r: dict) -> str:
+        market_cell = f'{r["winner_market_probability"]:.1%}' if r["winner_market_probability"] is not None else "n/a"
+        return (f'<tr><td>{r["date"]}</td><td>{r["course"]}</td><td>{r["winner_horse_name"] or "—"}</td>'
+                f'<td>{r["winner_se_probability"]:.1%}</td><td>{market_cell}</td></tr>')
+
+    parts = []
+    for band_key, band in bands.items():
+        if band["n_winners"] == 0:
+            continue
+        rows = "".join(_row(r) for r in band["races"])
+        parts.append(
+            f'<details id="missed-band-{band_key.replace("%","").replace("-","to")}">'
+            f'<summary>{band_key}: {band["n_winners"]} winner(s)</summary>'
+            f'<table class="race-list"><thead><tr><th>Date</th><th>Course</th><th>Winner</th>'
+            f'<th>SEN prob</th><th>Market prob</th></tr></thead><tbody>{rows}</tbody></table></details>'
+        )
+    return "".join(parts) if parts else "<p>No missed-winner races in this window.</p>"
+
+
 def render_heatmap_table(matrix: dict, max_rank: int = 6) -> str:
     """Real coloured HTML table — Silent Edge's rank for a runner (rows)
     against the market's own rank for that SAME runner (columns), one cell
@@ -688,10 +788,13 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
                  integrity_status: str, series: list[dict], band_analysis: dict,
                  outcome_breakdown: dict, se_calibration: list[dict], market_calibration: list[dict],
                  rank_matrix: dict, agreement_splits: dict, pnl_series: dict, odds_bands: dict,
-                 d_split: dict) -> str:
+                 d_split: dict, missed_races: list[dict], missed_bands_10pt: dict, missed_bands_5pt: dict,
+                 rank_views: dict) -> str:
+    n_missed_winner_races = len(missed_races)
     insights = build_insights(class_summary, brier_summary, roi, series, band_analysis, outcome_breakdown,
                                se_calibration, market_calibration, rank_matrix, agreement_splits, pnl_series,
-                               odds_bands, d_split)
+                               odds_bands, d_split, missed_bands_10pt, n_missed_winner_races, rank_views)
+    population_insights = build_population_insights(rank_views)
 
     donut_labels = ["A: Both correct", "B: Silent Edge only", "C: Market only", "D: Both wrong"]
     donut_data = [class_summary["four_way"][k] for k in ("A", "B", "C", "D")]
@@ -735,6 +838,23 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
     odds_band_win_rates = [odds_bands[k]["win_rate"] * 100 for k in odds_band_labels]
     odds_band_labels_json = json.dumps(odds_band_labels)
     odds_band_win_rates_json = json.dumps(odds_band_win_rates)
+
+    def _missed_chart_dataset(bands: dict) -> dict:
+        keys = list(bands.keys())
+        return {"labels": keys, "n_winners": [bands[k]["n_winners"] for k in keys]}
+    missed_bands_10pt_json = json.dumps(_missed_chart_dataset(missed_bands_10pt))
+    missed_bands_5pt_json = json.dumps(_missed_chart_dataset(missed_bands_5pt))
+
+    def _population_chart_dataset(view: dict) -> dict:
+        keys = sorted(view["bands"], key=lambda k: view["bands"][k]["avg_predicted_probability"]) if view["bands"] else []
+        return {
+            "labels": keys,
+            "expected": [view["bands"][k]["avg_predicted_probability"] * 100 for k in keys],
+            "actual": [view["bands"][k]["actual_win_rate"] * 100 for k in keys],
+            "n": view["n"],
+        }
+    population_views_json = json.dumps({name: _population_chart_dataset(v) for name, v in rank_views.items()})
+    population_insights_json = json.dumps(population_insights)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -788,6 +908,17 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
   .heat-legend {{ display: flex; flex-wrap: wrap; gap: 18px; margin-top: 14px; font-size: 0.75rem; color: var(--muted); }}
   .heat-legend-swatch {{ display: flex; align-items: center; gap: 6px; }}
   .heat-swatch-box {{ display: inline-block; width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }}
+  details {{ background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px;
+             margin-bottom: 6px; padding: 8px 12px; }}
+  details summary {{ cursor: pointer; font-size: 0.85rem; color: var(--fg); }}
+  .race-list {{ width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.78rem; }}
+  .race-list th {{ text-align: left; color: var(--muted); font-weight: 500; padding: 4px 8px; }}
+  .race-list td {{ padding: 4px 8px; border-top: 1px solid var(--border); }}
+  .toggle-btn {{ background: var(--panel); border: 1px solid var(--border); color: var(--fg); border-radius: 6px;
+                 padding: 4px 12px; font-size: 0.78rem; cursor: pointer; margin-right: 8px; }}
+  .toggle-btn.active {{ background: var(--blue); border-color: var(--blue); }}
+  select.population-select {{ background: var(--panel); border: 1px solid var(--border); color: var(--fg);
+                               border-radius: 6px; padding: 4px 10px; font-size: 0.8rem; margin-bottom: 12px; }}
 </style>
 </head>
 <body>
@@ -857,10 +988,54 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
   <div class="insight"><strong>Analysis:</strong> {insights['heatmap']}</div>
 </div>
 
+<div class="chart-panel" style="margin-bottom:32px;">
+  <h2>WHO DID WE BOTH MISS? — What probability did SEN give the actual winner?</h2>
+  <p class="heat-explainer">Restricted to races where BOTH Silent Edge's top pick and the market favourite lost
+    (category D — {n_missed_winner_races} races in this window). For each such race, this groups the ACTUAL
+    winner by the probability Silent Edge's own locked prediction originally gave it. This is purely descriptive
+    — it says nothing on its own about whether Silent Edge is miscalibrated (see the Expected vs Actual panel
+    below for that test, over ALL eligible runners, not just missed winners).</p>
+  <div>
+    <button class="toggle-btn active" id="btn10pt" onclick="showMissedWinnerBands(10)">10-point bands</button>
+    <button class="toggle-btn" id="btn5pt" onclick="showMissedWinnerBands(5)">5-point bands</button>
+  </div>
+  <div class="chart-canvas-wrap"><canvas id="missedWinnerChart"></canvas></div>
+  <div class="insight"><strong>Analysis:</strong> {insights['missed_winners']}</div>
+  <div style="margin-top:16px;">
+    <strong style="font-size:0.85rem;">Underlying races by band (10-point):</strong>
+    {render_missed_race_list(missed_bands_10pt)}
+  </div>
+</div>
+
+<div class="chart-panel" style="margin-bottom:32px;">
+  <h2>Expected vs Actual — full eligible population (not just missed winners)</h2>
+  <p class="heat-explainer">This is the scientifically load-bearing chart: it uses EVERY eligible runner in the
+    selected population, not a hindsight-selected subset, and "expected wins" is a real sum of the individual
+    runners' own probabilities (never an arbitrary band midpoint). A high actual-win count in a band only means
+    something if it exceeds what this population's own probabilities already implied.</p>
+  <select class="population-select" id="populationSelect" onchange="showPopulationView(this.value)">
+    <option value="ALL RUNNERS">All runners</option>
+    <option value="SEN TOP PICKS">Silent Edge top picks only</option>
+    <option value="SEN SECOND CHOICES">Silent Edge 2nd choices only</option>
+    <option value="SEN THIRD CHOICES">Silent Edge 3rd choices only</option>
+  </select>
+  <div class="chart-canvas-wrap"><canvas id="expectedActualChart"></canvas></div>
+  <div class="insight"><strong>Analysis:</strong> <span id="populationInsight">{insights['expected_vs_actual']}</span></div>
+</div>
+
 <div class="not-yet">
   <strong>Not yet built (real, honest — Phase 3 is not complete):</strong>
   <ul>
-    <li>Per-race drill-down / click-through from any chart, donut segment, or heat-map cell.</li>
+    <li>Per-race drill-down / click-through from any chart, donut segment, or heat-map cell (the missed-winner
+        band lists above are a real, working exception — see the expandable race tables).</li>
+    <li>SEN-vs-market probability scatter plot for missed winners (brief Section 10).</li>
+    <li>Winner-ranking analysis charts by SEN/market rank for missed winners specifically (Section 9) — the
+        underlying data already exists in the rank-vs-rank heat map above and
+        scripts/missed_winners_report.py, not yet a dedicated chart here.</li>
+    <li>Race-card integration (Section 11), Track Record day-by-day missed-winner summaries (Section 12), and
+        the Research Findings panel with hypothesis auto-registration (Section 14) — the Research Lab tracker
+        (src/research/hypothesis_tracker.py) already exists and is used for other findings this session, just
+        not wired into this specific UI yet.</li>
     <li>Mobile-specific layout polish beyond basic CSS grid responsiveness.</li>
   </ul>
 </div>
@@ -963,6 +1138,57 @@ new Chart(document.getElementById('oddsBandChart'), {{
     y: {{ ticks: {{ color: '#93a1b8', callback: v => v + '%' }} }} }},
     plugins: {{ legend: {{ display: false }} }} }}
 }});
+
+// --- Missed-winner probability-band chart (5pt/10pt toggle) ---
+const missedBands10 = {missed_bands_10pt_json};
+const missedBands5 = {missed_bands_5pt_json};
+const missedWinnerChart = new Chart(document.getElementById('missedWinnerChart'), {{
+  type: 'bar',
+  data: {{ labels: missedBands10.labels, datasets: [
+    {{ label: 'Missed winners', data: missedBands10.n_winners, backgroundColor: '#f5b942' }},
+  ]}},
+  options: {{ maintainAspectRatio: false,
+    scales: {{ x: {{ ticks: {{ color: '#93a1b8', maxRotation: 60, minRotation: 60 }} }}, y: {{ ticks: {{ color: '#93a1b8' }} }} }},
+    plugins: {{ legend: {{ display: false }} }},
+    onClick: (evt, elements) => {{
+      if (!elements.length) return;
+      const label = missedWinnerChart.data.labels[elements[0].index];
+      const id = 'missed-band-' + label.replace(/%/g, '').replace(/-/g, 'to');
+      const el = document.getElementById(id);
+      if (el) {{ el.open = true; el.scrollIntoView({{behavior: 'smooth', block: 'center'}}); }}
+    }}
+  }}
+}});
+function showMissedWinnerBands(width) {{
+  const data = width === 5 ? missedBands5 : missedBands10;
+  missedWinnerChart.data.labels = data.labels;
+  missedWinnerChart.data.datasets[0].data = data.n_winners;
+  missedWinnerChart.update();
+  document.getElementById('btn10pt').classList.toggle('active', width === 10);
+  document.getElementById('btn5pt').classList.toggle('active', width === 5);
+}}
+
+// --- Expected vs Actual chart (switchable population) ---
+const populationViews = {population_views_json};
+const populationInsights = {population_insights_json};
+const expectedActualChart = new Chart(document.getElementById('expectedActualChart'), {{
+  type: 'bar',
+  data: {{ labels: populationViews['ALL RUNNERS'].labels, datasets: [
+    {{ label: 'Expected (avg predicted %)', data: populationViews['ALL RUNNERS'].expected, backgroundColor: '#4f8ff7' }},
+    {{ label: 'Actual win %', data: populationViews['ALL RUNNERS'].actual, backgroundColor: '#2fd6b8' }},
+  ]}},
+  options: {{ maintainAspectRatio: false,
+    scales: {{ x: {{ ticks: {{ color: '#93a1b8' }} }}, y: {{ ticks: {{ color: '#93a1b8', callback: v => v + '%' }} }} }},
+    plugins: {{ legend: {{ labels: {{ color: '#e8edf5' }} }} }} }}
+}});
+function showPopulationView(name) {{
+  const data = populationViews[name];
+  expectedActualChart.data.labels = data.labels;
+  expectedActualChart.data.datasets[0].data = data.expected;
+  expectedActualChart.data.datasets[1].data = data.actual;
+  expectedActualChart.update();
+  document.getElementById('populationInsight').textContent = populationInsights[name] + ' (n=' + data.n + ' runners in this view)';
+}}
 </script>
 </body>
 </html>
@@ -1000,6 +1226,11 @@ def main():
     odds_bands = odds_band_analysis(observations)
     d_split = split_both_wrong_by_agreement(classified)
 
+    missed_races = find_missed_winner_races(all_races)
+    missed_bands_10pt = missed_winner_probability_bands(missed_races, band_width=0.10)
+    missed_bands_5pt = missed_winner_probability_bands(missed_races, band_width=0.05)
+    rank_views = rank_population_views(observations)
+
     roi = compute_roi(conn, start, end)
     integrity_result = run_audit(conn, start, end)
     series = daily_series(conn, start, end)
@@ -1010,10 +1241,11 @@ def main():
     reconciliation = run_reconciliation(all_races, classified, class_summary, outcome_breakdown, roi,
                                          agreement_splits, rank_matrix, brier_summary, d_split)
     print(f"Dashboard reconciliation: {reconciliation['status']} ({len(reconciliation['checks'])} checks)")
+    print(f"Missed-winner races (both wrong): {len(missed_races)}")
 
     html = render_html(start, end, class_summary, brier_summary, roi, integrity_result["status"], series, band_analysis,
                         outcome_breakdown, se_calibration, market_calibration, rank_matrix, agreement_splits,
-                        pnl_series, odds_bands, d_split)
+                        pnl_series, odds_bands, d_split, missed_races, missed_bands_10pt, missed_bands_5pt, rank_views)
     OUTPUT_PATH.write_text(html)
     print(f"Research dashboard written to {OUTPUT_PATH} ({len(html)} bytes).")
     print(f"Range: {start} .. {end}  |  {class_summary['n_eligible']} eligible races  |  "
