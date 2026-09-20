@@ -1725,6 +1725,7 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
       <div class="subtitle" id="page-subtitle" data-race-date="{race_date.isoformat()}">Independent racing probability model — every prediction locked before the race.</div>
     </div>
     <div class="top-bar-buttons">
+      <a class="theme-toggle" href="research_dashboard.html" style="text-decoration:none; display:inline-block;">📊 Research Intelligence</a>
       <button class="theme-toggle" onclick="document.getElementById('help-dialog').showModal()">❓ What do OR / Form mean?</button>
       <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">🌓 Toggle theme</button>
     </div>
