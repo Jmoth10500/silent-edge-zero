@@ -823,6 +823,8 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
     band_keys = sorted(band_analysis, key=lambda k: band_analysis[k]["avg_predicted_probability"])
     band_expected = [band_analysis[k]["avg_predicted_probability"] * 100 for k in band_keys]
     band_actual = [band_analysis[k]["actual_win_rate"] * 100 for k in band_keys]
+    band_n_selections = [band_analysis[k]["n_selections"] for k in band_keys]
+    band_n_wins = [band_analysis[k]["actual_wins"] for k in band_keys]
 
     outcome_labels = ["WON", "PLACED", "UNPLACED", "VOID/NR"]
     outcome_data = [outcome_breakdown[k] for k in outcome_labels]
@@ -834,6 +836,8 @@ def render_html(start: date, end: date, class_summary: dict, brier_summary, roi:
     band_keys_json = json.dumps(band_keys)
     band_expected_json = json.dumps(band_expected)
     band_actual_json = json.dumps(band_actual)
+    band_n_selections_json = json.dumps(band_n_selections)
+    band_n_wins_json = json.dumps(band_n_wins)
     donut_labels_json = json.dumps(donut_labels)
     donut_data_json = json.dumps(donut_data)
     outcome_labels_json = json.dumps(outcome_labels)
@@ -1094,15 +1098,37 @@ new Chart(document.getElementById('winRateChart'), {{
     plugins: {{ legend: {{ labels: {{ color: '#e8edf5' }} }} }} }}
 }});
 
+const bandNSelections = {band_n_selections_json};
+const bandNWins = {band_n_wins_json};
+const bandSampleSizeLabelPlugin = {{
+  id: 'bandSampleSizeLabel',
+  afterDatasetsDraw(chart) {{
+    const {{ ctx }} = chart;
+    const meta = chart.getDatasetMeta(1);  // 'Actual win %' bars
+    ctx.save();
+    ctx.fillStyle = '#e8edf5';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    meta.data.forEach((bar, i) => {{
+      ctx.fillText(`${{bandNWins[i]}}/${{bandNSelections[i]}}`, bar.x, bar.y - 6);
+    }});
+    ctx.restore();
+  }},
+}};
 new Chart(document.getElementById('bandChart'), {{
   type: 'bar',
   data: {{ labels: {band_keys_json}, datasets: [
     {{ label: 'Expected (avg predicted %)', data: {band_expected_json}, backgroundColor: '#4f8ff7' }},
     {{ label: 'Actual win %', data: {band_actual_json}, backgroundColor: '#2fd6b8' }},
   ]}},
+  plugins: [bandSampleSizeLabelPlugin],
   options: {{ maintainAspectRatio: false, scales: {{ x: {{ ticks: {{ color: '#93a1b8' }} }},
     y: {{ ticks: {{ color: '#93a1b8', callback: v => v + '%' }} }} }},
-    plugins: {{ legend: {{ labels: {{ color: '#e8edf5' }} }} }} }}
+    layout: {{ padding: {{ top: 16 }} }},
+    plugins: {{ legend: {{ labels: {{ color: '#e8edf5' }} }},
+      tooltip: {{ callbacks: {{ afterLabel: (ctx) => ctx.datasetIndex === 1
+        ? `Sample: ${{bandNWins[ctx.dataIndex]}} wins of ${{bandNSelections[ctx.dataIndex]}} selections`
+        : `Sample: ${{bandNSelections[ctx.dataIndex]}} selections` }} }} }} }}
 }});
 
 new Chart(document.getElementById('outcomeDonutChart'), {{

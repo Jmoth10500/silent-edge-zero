@@ -60,7 +60,7 @@ def test_render_html_produces_a_complete_page_with_chart_canvases():
         {"n_settled": 6, "n_staked": 5, "stake": 5.0, "profit": 1.0, "roi": 0.2}, "PASS",
         [{"date": "2026-09-10", "silent_edge_brier": 0.1, "market_brier": 0.09, "brier_gap": 0.01,
           "n_brier_observations": 10, "silent_edge_win_rate": 0.5, "market_favourite_win_rate": 0.5, "n_eligible_races": 10}],
-        {"0%-10%": {"n_selections": 100, "avg_predicted_probability": 0.05, "actual_win_rate": 0.04, "calibration_error": -0.01}},
+        {"0%-10%": {"n_selections": 100, "actual_wins": 4, "avg_predicted_probability": 0.05, "actual_win_rate": 0.04, "calibration_error": -0.01}},
         {"WON": 3, "PLACED": 2, "UNPLACED": 4, "VOID/NR": 1},
         [{"bin_index": 0, "bin_range": (0.0, 0.1), "mean_predicted": 0.05, "mean_actual": 0.04, "count": 10}],
         [{"bin_index": 0, "bin_range": (0.0, 0.1), "mean_predicted": 0.06, "mean_actual": 0.05, "count": 10}],
