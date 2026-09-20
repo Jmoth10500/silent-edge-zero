@@ -464,3 +464,25 @@ surface/going field verification (needs a live API call).
 **Next session:** same checks. If Jonathan has replied or the prompt has changed, act on that. If
 still nothing new and it's now been several days (not ~1) since Session 91's notification with
 still no reply, a further notification is warranted. Otherwise log one short entry and stop.
+
+## 2026-09-20 — Session 103 (autonomous overnight, cloud routine)
+
+**87th consecutive session, same stale prompt, no change — no notification (still ~1 day since
+Session 91's, not yet "several days").** Fresh checks, no drift: `origin/main` == `HEAD` ==
+`7705cf4` (Session 102's commit). `git log --all --author="Jonathan" -1` → still `e42411f`
+(2026-09-08), now **12 days old**, no reply. `env | grep -i THERACINGAPI` → empty (Mac-only
+credentials; did not attempt `collect_racecards.py`/`collect_weather.py`). `src/models/` unchanged
+(model0/1/2 + sweep, same as every prior session). No TODO/FIXME/XXX in src/scripts/tests/db.
+Phase 6's `model1_logistic_baseline.py` still satisfies this session's prompt verbatim, still
+superseded by real Phase 7 work. GitHub checked via `mcp__github__`: 0 open issues, 0 PRs in any
+state, no non-routine activity. Full suite re-run (`db/setup_local_postgres.sh` +
+`python3 db/init_db.py` + `python3 -m pytest tests/ -q`) → **177/177 passed**.
+
+**No push notification.** Session 91's (2026-09-19) already stated the stuck-schedule situation
+plainly; nothing has changed since. Re-notifying after ~1 day would be noise.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key; Kaggle-loaded Postgres dataset;
+Racing API results tier (not pursuing); racecard surface/going field verification.
+
+**Next session:** same checks. Notify only once it's been several days (not ~1) since Session 91's
+notification with still no reply. Otherwise log one short entry and stop.
