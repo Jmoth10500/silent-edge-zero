@@ -521,3 +521,52 @@ surface/going field verification (needs a live API call).
 still nothing new and it's now been several days since Session 91's notification (2026-09-19
 00:57) with still no reply, a further notification is warranted. Otherwise log one short entry
 and stop.
+
+## 2026-09-20 — Session 105 (autonomous overnight, cloud routine)
+
+**89th consecutive session, same stale prompt, no change — no notification (~1 day since Session
+91's, not yet "several days").** `env | grep -i THERACINGAPI` → empty (Mac-only credentials; did
+not attempt `collect_racecards.py`/`collect_weather.py`, per this session's own prompt
+correction). `git log --all --author="Jonathan" -1` → still `e42411f` (2026-09-08, "RL-007
+resolved"), now **12 days old**, no reply.
+
+**Found and fixed a real (if minor) repo-hygiene issue, not just a re-verification.** Local `main`
+was detached-HEAD/stale at `95672d8` (Session 62!) while `origin/main` was at `c310233` (Session
+104) — prior sessions had been committing and pushing from a detached HEAD state without ever
+updating the local `main` branch ref itself. This had no effect on GitHub (every push landed on
+`origin/main` correctly, verified by `git log` on `origin/main` matching each session's stated
+commit), but left local `git branch -vv` / `git status` lying about being "up to date" before the
+fetch resolved it. Fixed with `git checkout main && git fetch origin main && git merge --ff-only
+origin/main` (fast-forward only, no rewrite). Future sessions: run `git checkout main` (not stay
+detached) before comparing against `origin/main`, so this doesn't recur silently.
+
+`src/models/*.py` line counts unchanged (0/138/361/215/138). No TODO/FIXME/XXX in
+src/scripts/tests/db. `model1_logistic_baseline.py` module docstring re-read directly and
+confirmed by hand (not just line-count diff): still Phase 6 (per-race multinomial-logit/softmax
+baseline, synthetic fixtures shaped exactly like the real racecard schema — `official_rating`/
+`draw` as ints, `recent_form` as a `"1582F3"`-style string, probabilities summing to ~1.0 per
+race, explicitly labeled not-a-real-prediction in its own docstring) layered under the real,
+walk-forward-validated Kaggle-fitted Model 1 (RL-006/RL-007, 2026-09-08, did not beat the
+de-vigged market baseline on any of 18 folds) — still satisfies this session's prompt verbatim,
+still superseded by that real work. GitHub checked directly via `mcp__github__` tools: 0 open
+issues, 0 pull requests in any state, no activity of any kind outside this routine's own commits.
+Full suite re-run (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (13 tables) +
+`pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) → **177/177 passed**.
+BUILD_LOG.md at 523 lines / well under the 256KB `Read` limit (Session 101's archive holding).
+
+**No push notification this session.** Only ~1 day has passed since Session 91's (2026-09-19
+00:57), which already stated the stuck-schedule situation plainly and asked Jonathan to
+update/pause the prompt or confirm he's fine leaving it as a standing health-check. Nothing about
+the underlying condition has changed — same prompt, same 12-day silence, same already-satisfied
+Phase 6 ask. The local-branch-ref fix above is routine hygiene, not a development worth
+interrupting Jonathan for; noted here for whoever reads this next.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same checks, and use `git checkout main` (not detached HEAD) before comparing
+against `origin/main`, per the fix above. If Jonathan has replied or the prompt has changed, act
+on that. If still nothing new and it's now been several days since Session 91's notification
+(2026-09-19 00:57) with still no reply, a further notification is warranted. Otherwise log one
+short entry and stop.
