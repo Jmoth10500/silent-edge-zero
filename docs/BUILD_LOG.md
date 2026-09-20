@@ -6464,3 +6464,49 @@ still nothing new and it's been a meaningful stretch (days, not hours) since Ses
 notification with still no reply, a further notification may be warranted — otherwise log one
 short entry and stop. Trim/archive of this file (Session 50, now ~6428 lines) still needs a human
 call.
+
+## 2026-09-20 — Session 99 (autonomous overnight, cloud routine)
+
+**83rd consecutive session, same stale prompt, no change — no notification (only ~1 day since
+Session 91's, not yet the "days, not hours" threshold that session itself set).** Fresh container,
+shallow clone as usual; `git fetch --unshallow origin` then `git fetch origin main` — no drift
+(`origin/main` == local `HEAD` == `cf995e2`, Session 98's commit). `git log --all --author=
+"Jonathan" -1` → still `e42411f` (2026-09-08, "RL-007 resolved"), now **12 days old**, no reply.
+`env | grep -i THERACINGAPI` → empty (Mac-only credentials; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's own prompt correction).
+`src/models/*.py` + `racecard_theracingapi.py` line counts unchanged (0/138/361/215/138/116).
+`model1_logistic_baseline.py` module docstring re-read directly: still describes the original
+Phase 6 synthetic-fixture baseline (per-race multinomial-logit/softmax, `official_rating`/`draw`
+as ints, `recent_form` as a `"1582F3"`-style string, probabilities summing to ~1.0 per race) as
+historical record, now layered under the 2026-09-08 update describing the real Kaggle-fitted
+Model 1 (RL-006/RL-007, did not beat the de-vigged market baseline) — still satisfies this
+session's prompt verbatim, still superseded by that real work. GitHub checked directly via
+`mcp__github__` tools: 0 open issues, 0 pull requests in any state, no activity of any kind
+outside this routine's own commits. Full suite re-run (`db/setup_local_postgres.sh` +
+`python3 db/init_db.py` (13 tables) + `pip install -r requirements.txt` +
+`python3 -m pytest tests/ -q`) → **177/177 passed**. No TODO/FIXME/XXX in src/scripts/tests/db.
+
+**New observation this session, worth flagging even without a notification:** this file
+(`docs/BUILD_LOG.md`) is now 6466 lines / ~490KB — large enough that Claude Code's own `Read` tool
+refuses to read it in one call (256KB limit) and this session had to fall back to `tail`/`grep`/
+`sed` to inspect it. This is a step change from "long file" to "file some of this routine's own
+tooling can no longer open directly," and it will only get worse at ~30-40 lines/session if the
+prompt stays stale. Flagging concretely so whoever next reads this (human or Claude) has the
+number, not just the recurring "needs a human call" note.
+
+**No push notification this session.** Only about a day has passed since Session 91's
+(2026-09-19), which already stated the situation plainly (schedule stuck, 11 days no reply at the
+time, asked Jonathan to update/pause the prompt or confirm he's fine leaving it as a standing
+health-check). Nothing has changed since that would change the ask. Re-notifying this soon for the
+same unresolved, already-clearly-stated condition would be noise, not help.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same checks. If Jonathan has replied or the prompt has changed, act on that. If
+still nothing new and it's now been several days since Session 91's notification with still no
+reply, a further notification is warranted — the BUILD_LOG.md size point above is worth including
+in it, not a separate trigger on its own. Otherwise log one short entry and stop. Trim/archive of
+this file still needs a human call; it is no longer just a style preference (see the size note
+above).
