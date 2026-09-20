@@ -429,3 +429,38 @@ reply, a further notification is warranted. Otherwise log one short entry and st
 BUILD_LOG.md size problem is resolved for now (28KB); if this file grows back toward the 256KB
 Read limit over many more stale sessions, repeat the same archive-and-pointer approach rather than
 letting it become unreadable again.
+
+## 2026-09-20 — Session 102 (autonomous overnight, cloud routine)
+
+**86th consecutive session, same stale prompt, no change — no notification (~1 day since Session
+91's, not yet "several days").** `git fetch origin main` then `--unshallow` — no drift
+(`origin/main` == local `HEAD` == `30cc4bb`, Session 101's commit). `git log --all
+--author="Jonathan" -1` → still `e42411f` (2026-09-08, "RL-007 resolved"), now **12 days old**, no
+reply. `env | grep -i THERACINGAPI` → empty (Mac-only credentials; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's own prompt correction).
+`src/models/*.py` + `racecard_theracingapi.py` line counts unchanged (0/138/361/215/138/116). No
+TODO/FIXME/XXX in src/scripts/tests/db. Phase 6's `model1_logistic_baseline.py` (per-race
+multinomial-logit/softmax baseline over synthetic fixtures shaped exactly like the real racecard
+schema — `official_rating`/`draw` as ints, `recent_form` as a `"1582F3"`-style string,
+probabilities summing to ~1.0 per race, explicitly labeled not-a-real-prediction) still satisfies
+this session's prompt verbatim, still superseded by real work (Phase 7 gradient-boosting Model 2,
+RL-006/RL-007's real Kaggle-trained Model 1, which did not beat the de-vigged market baseline).
+GitHub checked directly via `mcp__github__` tools: 0 open issues, 0 pull requests in any state, no
+activity of any kind outside this routine's own commits. Full suite re-run
+(`db/setup_local_postgres.sh` + `python3 db/init_db.py` (13 tables) +
+`pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) → **177/177 passed**.
+BUILD_LOG.md still well under the 256KB Read limit (this file only, per Session 101's archive).
+
+**No push notification this session.** Only ~1 day since Session 91's (2026-09-19), which already
+stated the stuck-schedule situation plainly and asked Jonathan to update/pause the prompt or
+confirm he's fine leaving it as a standing health-check. Nothing about the underlying condition
+has changed — same prompt, same 12-day silence, same already-satisfied Phase 6 ask. Sending again
+this soon would be noise, not signal.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same checks. If Jonathan has replied or the prompt has changed, act on that. If
+still nothing new and it's now been several days (not ~1) since Session 91's notification with
+still no reply, a further notification is warranted. Otherwise log one short entry and stop.
