@@ -905,15 +905,18 @@ def render_track_record(summaries: list[dict], race_history: dict[date, list[dic
                   f'far too small a sample to judge against the {_pct(0.232)} real backtested hit rate or the '
                   f'{_pct(0.333)} market-favourite rate. Shown as-is, not smoothed or projected.</div>')
 
+    # Rendered newest-first (Jonathan's request, 2026-09-21) so "the last 7
+    # days" are the first 7 rows in the DOM; the cumulative tiles above
+    # were already computed from `summaries` in real chronological order.
     day_rows = []
-    for s in summaries:
+    for s in reversed(summaries):
         d_hit = s["top_pick_wins"] / s["races_settled"] if s["races_settled"] else 0.0
         width = max(2, round(d_hit * 100))
         pnl = s["win_profit"]
         pnl_color = "var(--good)" if pnl >= 0 else "var(--bad)"
         day_dom_id = f"day-{s['race_date'].isoformat()}"
         day_rows.append(f"""
-        <div class="trackrow" onclick="document.getElementById('{day_dom_id}').showModal()">
+        <div class="trackrow pg-item" onclick="document.getElementById('{day_dom_id}').showModal()">
           <span class="trackrow-date">{s['race_date'].strftime('%d %b')}</span>
           <span class="trackrow-pct">{_pct(d_hit)}</span>
           <div class="trackrow-bar-wrap">
@@ -930,7 +933,8 @@ def render_track_record(summaries: list[dict], race_history: dict[date, list[dic
     <div class="section-label">Track record — real settled results, day by day</div>
     {tiles}
     {caveat}
-    <div class="track-record-chart">{''.join(day_rows)}</div>
+    <div class="track-record-chart pg-list" id="track-record-rows">{''.join(day_rows)}</div>
+    {render_pagination_controls("track-record-rows")}
     {render_days_tracked_dialog(dates)}
     {day_dialogs}"""
 
@@ -1157,6 +1161,18 @@ def render_hero(races: list[dict], daily_summaries: list[dict]) -> str:
     <a class="edge-jump" href="#races">View today's races ↓</a>"""
 
 
+def render_pagination_controls(list_id: str) -> str:
+    """Real, shared 'last 7 / expand to 25 / page 1-2-3' markup (Jonathan's
+    request, 2026-09-21) — used by both the £100 bank tracker and the
+    day-by-day track record. All rows are always present in the rendered
+    HTML; the page's own initPaginatedList() script purely toggles which
+    are visible via the `hidden` attribute, so a visitor with JavaScript
+    disabled simply sees the full real list rather than a broken control."""
+    return f"""
+      <button type="button" class="pg-expand" id="{list_id}-expand" hidden>Show more ▾</button>
+      <div class="pg-pager" id="{list_id}-pager" hidden></div>"""
+
+
 def render_bank_tracker(summaries: list[dict]) -> str:
     """Real "£100 starting bank" tracker — Jonathan's real request
     (2026-09-11): "far more understandable than Brier score to 95% of
@@ -1171,21 +1187,28 @@ def render_bank_tracker(summaries: list[dict]) -> str:
         return ""
     STARTING_BANK = 100.0
     balance = STARTING_BANK
-    rows = []
+    balances_ascending = []  # (summary, running_balance), oldest first — real running sum needs this order
     for s in summaries:
         balance += s["win_profit"]
-        pnl = s["win_profit"]
-        pnl_color = "var(--good)" if pnl >= 0 else "var(--bad)"
-        rows.append(f"""
-        <div class="bank-row">
-          <span class="bank-date">{s['race_date'].strftime('%d %b')}</span>
-          <span class="bank-pnl" style="color:{pnl_color}">£{pnl:+.2f}</span>
-          <span class="bank-balance">£{balance:.2f}</span>
-        </div>""")
+        balances_ascending.append((s, balance))
 
     total_return = balance - STARTING_BANK
     return_pct = total_return / STARTING_BANK
     result_color = "var(--good)" if total_return >= 0 else "var(--bad)"
+
+    # Rendered newest-first (Jonathan's request, 2026-09-21) so "the last 7
+    # days" are the first 7 rows in the DOM — the running balance above was
+    # already computed in real chronological order before this reversal.
+    rows = []
+    for s, bal in reversed(balances_ascending):
+        pnl = s["win_profit"]
+        pnl_color = "var(--good)" if pnl >= 0 else "var(--bad)"
+        rows.append(f"""
+        <div class="bank-row pg-item">
+          <span class="bank-date">{s['race_date'].strftime('%d %b')}</span>
+          <span class="bank-pnl" style="color:{pnl_color}">£{pnl:+.2f}</span>
+          <span class="bank-balance">£{bal:.2f}</span>
+        </div>""")
 
     return f"""
     <div class="section-label">£100 starting bank — flat £1 win stake, every top pick, since Day 1</div>
@@ -1197,7 +1220,8 @@ def render_bank_tracker(summaries: list[dict]) -> str:
       <div class="bank-note">Real, honest, and not a recommendation — a flat £1 stake on every
         real top pick, same definition used everywhere else on this page. A real losing run
         would show up here exactly as it happened, never smoothed out.</div>
-      <div class="bank-rows">{''.join(rows)}</div>
+      <div class="bank-rows pg-list" id="bank-rows">{''.join(rows)}</div>
+      {render_pagination_controls("bank-rows")}
     </div>"""
 
 
@@ -1691,6 +1715,28 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
   .bank-date {{ color: var(--text-secondary); flex: 1; }}
   .bank-balance {{ font-weight: 600; min-width: 70px; text-align: right; }}
 
+  /* Shared "last 7 / expand to 25 / page 1-2-3" controls -- bank tracker
+     and track record both use render_pagination_controls() + the page's
+     initPaginatedList() script; rows always exist in the HTML, only
+     visibility is toggled, so a no-JS visitor sees the full real list. */
+  .pg-expand {{
+    display: block; width: 100%; margin-top: 10px; padding: 9px;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--series-1); font-size: 12px; font-weight: 600; cursor: pointer;
+  }}
+  .pg-expand:hover {{ border-color: var(--series-1); }}
+  .pg-pager {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }}
+  .pg-pager button {{
+    background: var(--surface-1); border: 1px solid var(--border); color: var(--text-secondary);
+    border-radius: 20px; padding: 5px 13px; font-size: 12px; font-weight: 600; cursor: pointer;
+  }}
+  .pg-pager button.active {{ border-color: var(--series-1); color: var(--series-1); background: color-mix(in srgb, var(--series-1) 10%, var(--surface-1)); }}
+  .pg-pager button:hover {{ border-color: var(--series-1); }}
+  /* .bank-row/.trackrow/.pg-expand all set their own `display`, which
+     otherwise beats the browser's default [hidden]{{display:none}} rule --
+     this makes the JS-toggled `hidden` attribute actually take effect. */
+  .pg-item[hidden], .pg-expand[hidden], .pg-pager[hidden] {{ display: none !important; }}
+
   details.model-transparency {{
     background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
     padding: 14px 16px; margin-bottom: 24px;
@@ -1914,6 +1960,56 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
   document.querySelectorAll('.bet-calc').forEach(function(el) {{
     calcBet(el.dataset.domid);
   }});
+
+  // Real "last 7 days, then Expand to 25, then page 1-2-3" behaviour
+  // (Jonathan's request, 2026-09-21) for the £100 bank tracker and the
+  // day-by-day track record. Every row already exists in the HTML in
+  // newest-first order; this purely toggles which are visible, so a
+  // visitor with JavaScript disabled just sees the full real list.
+  function initPaginatedList(listId, collapsedSize, pageSize) {{
+    var list = document.getElementById(listId);
+    if (!list) return;
+    var items = Array.prototype.slice.call(list.children);
+    var total = items.length;
+    var expandBtn = document.getElementById(listId + '-expand');
+    var pager = document.getElementById(listId + '-pager');
+    var totalPages = Math.ceil(total / pageSize);
+    var page = 1;
+    var expanded = false;
+
+    function render() {{
+      var start, end;
+      if (page === 1 && !expanded) {{
+        start = 0; end = Math.min(collapsedSize, total);
+      }} else {{
+        start = (page - 1) * pageSize; end = Math.min(start + pageSize, total);
+      }}
+      items.forEach(function (el, i) {{ el.hidden = !(i >= start && i < end); }});
+      if (expandBtn) expandBtn.hidden = !(page === 1 && !expanded && total > collapsedSize);
+      if (pager) {{
+        pager.hidden = totalPages <= 1;
+        if (!pager.hidden && !pager.dataset.built) {{
+          pager.dataset.built = '1';
+          for (var p = 1; p <= totalPages; p++) {{
+            (function (p) {{
+              var b = document.createElement('button');
+              b.type = 'button';
+              b.textContent = String(p);
+              b.onclick = function () {{ page = p; expanded = true; render(); }};
+              pager.appendChild(b);
+            }})(p);
+          }}
+        }}
+        Array.prototype.forEach.call(pager.children, function (b, i) {{
+          b.classList.toggle('active', (i + 1) === page && (expanded || page !== 1));
+        }});
+      }}
+    }}
+    if (expandBtn) expandBtn.onclick = function () {{ expanded = true; render(); }};
+    render();
+  }}
+  initPaginatedList('bank-rows', 7, 25);
+  initPaginatedList('track-record-rows', 7, 25);
 </script>
 {f'<script data-goatcounter="https://{GOATCOUNTER_SITE_CODE}.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>' if GOATCOUNTER_SITE_CODE else ''}
 </body>
