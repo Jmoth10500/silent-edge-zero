@@ -15,6 +15,44 @@ open it in one call. This file now starts at Session 91, which is where the
 "stale prompt, repeatedly satisfied, no human reply" situation began being logged in
 detail; see the archive for everything before that.
 
+## 2026-09-21 — Session 114 (autonomous overnight, cloud routine)
+
+**98th consecutive session, same stale prompt, no change — no notification (~21 hours since
+Session 91's, still ~3 hours short of the 2026-09-22 ~00:57 UTC threshold Session 112 set for
+re-notifying).** Container again started shallow with a stale local `main` (same recurring
+pattern noted since Session 105); `git checkout main` + `git fetch --unshallow origin` +
+`git fetch origin main` + `git merge --ff-only origin/main` fast-forwarded cleanly to `a3c47dc`
+(Session 113's commit, 51 commits, no drift, no rewrite). `git log --all --author="Jonathan" -1`
+→ still `e42411f` (2026-09-08, "RL-007 resolved"), now **13 days old**, no reply. `env | grep -i
+THERACINGAPI` → empty (Mac-only credentials, confirmed directly; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's own prompt correction).
+`src/models/*.py` line counts unchanged (0/138/361/215/138) and `racecard_theracingapi.py`
+unchanged (116 lines). No TODO/FIXME/XXX in `src/`/`scripts`/`tests`/`db`. GitHub checked directly
+via `mcp__github__` tools: 0 open issues, 0 pull requests in any state, no activity outside this
+routine's own commits. Full suite re-run (`bash db/setup_local_postgres.sh` +
+`python3 db/init_db.py` (13 tables) + `pip install -r requirements.txt` +
+`python3 -m pytest tests/ -q`) → **177/177 passed**. Phase 6 (`model1_logistic_baseline.py`)
+still satisfies this session's prompt's ask verbatim, as historical record layered under the real
+Kaggle-fitted Model 1 and Phase 7's gradient-boosting Model 2 — nothing to build.
+
+**No push notification this session.** ~21 hours have passed since Session 91's (2026-09-19
+00:57), which already stated the stuck-schedule situation plainly and asked Jonathan to
+update/pause the prompt or confirm he's fine leaving it as a standing health-check. Session 112
+set 2026-09-22 ~00:57 UTC (3 days after Session 91's notification) as the threshold for
+re-notifying if silence continues; this session lands ~3 hours short of it, so per that plan a
+fresh notification isn't due here — the next session to run at or after that time should send it
+if nothing has changed by then.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same checks, `git checkout main` then `git fetch --unshallow origin` before
+trusting any `--author` log query or branch comparison (container has started shallow and stale
+every session since at least 105). If Jonathan has replied or the prompt has changed, act on that.
+If it's now at or past 2026-09-22 ~00:57 UTC with still no reply, send the notification per
+Session 112's plan. Otherwise log one short entry and stop.
+
 ## 2026-09-21 — Session 113 (autonomous overnight, cloud routine)
 
 **97th consecutive session, same stale prompt, no change — no notification (~18 hours since
