@@ -144,7 +144,7 @@ def check_settlement(conn, start: date, end: date) -> dict:
             order.append(race_id)
         races[race_id]["results"].append((horse_id, position, note))
 
-    no_winner_races, dead_heat_races, misclassified_nr = [], [], []
+    no_winner_races, dead_heat_races, misclassified_nr, whole_race_void = [], [], [], []
     n_settled, n_pending = 0, 0
 
     for race_id in order:
@@ -160,8 +160,24 @@ def check_settlement(conn, start: date, end: date) -> dict:
 
         winners = [hid for hid, pos, note in results if pos == 1]
         real_starters = [hid for hid, pos, note in results if note not in VOID_RESULT_CODES]
+        any_finisher = any(pos is not None for hid, pos, note in results)
 
-        if len(winners) == 0 and len(real_starters) > 0:
+        if len(winners) == 0 and not any_finisher:
+            # Real, legitimate whole-race void (e.g. race stopped/declared
+            # void mid-running) -- every runner has a status (VOID/NR/PU/
+            # etc.) but literally NONE has a finishing position, which is
+            # the genuine fingerprint of the whole race producing no
+            # result at all. Distinct from the case below, where SOME
+            # runners have real finishing positions but none is marked
+            # 1st -- that's an actual data gap in capturing the winner.
+            # Verified live against horseracing.net for race 57655 (Bath,
+            # 2026-09-12): declared void after runners had gone >5f,
+            # 2026-09-21 audit.
+            whole_race_void.append({
+                "race_id": race_id, "date": str(race_date_val), "off_time": str(off_time),
+                "course": course_name,
+            })
+        elif len(winners) == 0 and len(real_starters) > 0:
             no_winner_races.append({
                 "race_id": race_id, "date": str(race_date_val), "off_time": str(off_time),
                 "course": course_name,
@@ -184,7 +200,7 @@ def check_settlement(conn, start: date, end: date) -> dict:
     return {
         "races_checked": len(order), "races_settled": n_settled, "races_pending": n_pending,
         "no_winner_races": no_winner_races, "dead_heat_races": dead_heat_races,
-        "misclassified_nr": misclassified_nr,
+        "misclassified_nr": misclassified_nr, "whole_race_void": whole_race_void,
     }
 
 
@@ -268,6 +284,11 @@ def run_audit(conn, start: date, end: date) -> dict:
 
     if settlement["dead_heat_races"]:
         warnings.append(f"{len(settlement['dead_heat_races'])} real dead heat(s) — informational, not a defect")
+    if settlement["whole_race_void"]:
+        warnings.append(
+            f"{len(settlement['whole_race_void'])} whole race(s) declared void mid-running (zero finishers, "
+            f"verified against the results source) — informational, not a defect"
+        )
     thin = price_quality.get("thin_book", 0)
     wide = price_quality.get("wide_spread", 0)
     if thin or wide:
