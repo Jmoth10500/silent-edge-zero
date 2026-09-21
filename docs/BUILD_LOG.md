@@ -1122,4 +1122,18 @@ Not a data-collection bug — the results genuinely exist and are correct. **Rea
 
 19 new/updated tests (`test_generate_eod_report.py`, `test_generate_daily_summary.py`, `test_generate_dashboard.py`) covering void-vs-loss settlement and the new NR status/badge. Full suite: **335/335 pass**.
 
+---
+
+## 2026-09-21 — "can you update the website and results" — 3 unmapped courses closed, real backfill
+
+Jonathan: "silent edge zero, can you update the website and results." The scheduled 21:31 `collect-results` run had already fired and deployed by itself moments earlier, but its own log flagged a real gap: **Ffos Las, Hamilton, and Leicester (22 of today's 31 races) were being skipped entirely** — none of the three had an entry in `data/racingpost_course_ids.py`, and Leicester was also missing from `HORSERACINGNET_COURSE_SLUGS` in `scripts/import_horseracingnet_results.py`. Same "unmapped course, explicitly skipped and reported, never guessed" pattern this project has hit before (Bath/Musselburgh, 2026-09-12).
+
+**Real IDs/slugs found via live search before adding anything** (same discipline as every other course added to this file — never fabricated):
+- Racing Post: Ffos Las id `1212`/`ffos-las`, Hamilton id `22`/`hamilton`, Leicester id `30`/`leicester` — each confirmed against a live racingpost.com URL for today's actual card.
+- horseracing.net: Hamilton already mapped; added Leicester (`leicester`) and Ffos Las (`ffos-las`), each confirmed against a real horseracing.net results URL.
+
+**Re-ran the real evening pipeline by hand** (`scripts/run_collect_results.sh` — same script the LaunchAgent runs) after the fix: 2026-09-21 went from **16/31 settled** to **31/31 real races settled** (298 + 268 result rows recorded across both sources, 0 unmatched horse names, 0 skipped for unmapped course). Top pick won 6/31 (19.4%), placed 13 (41.9%), favourite won 15. Dashboard regenerated and redeployed — confirmed live (`Deploy is live!`, production URL).
+
+Full suite: **489/489 pass** (no new tests — this is the same established "add real course to the mapping dict" pattern already covered by that pattern's own existing tests, not new logic).
+
 **Real, honest note on the P&L numbers:** this is a genuine correction, not new data — some past days' recorded win-rate/P&L figures shift slightly (always toward more accurate, since previously-excluded genuine losses/voids are now counted). 2026-09-12's headline figure in particular drops from the 41.2% quoted earlier this week to the corrected 35.9%.

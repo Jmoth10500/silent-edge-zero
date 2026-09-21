@@ -87,6 +87,8 @@ HORSERACINGNET_COURSE_SLUGS: dict[str, str] = {
     "newcastle": "newcastle",
     "hamilton": "hamilton",
     "plumpton": "plumpton",
+    "leicester": "leicester",
+    "ffos las": "ffos-las",
 }
 
 
