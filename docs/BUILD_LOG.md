@@ -15,6 +15,53 @@ open it in one call. This file now starts at Session 91, which is where the
 "stale prompt, repeatedly satisfied, no human reply" situation began being logged in
 detail; see the archive for everything before that.
 
+## 2026-09-21 — Session 110 (autonomous overnight, cloud routine)
+
+**94th consecutive session, same stale prompt, no change — no notification (~2 days 9 hours since
+Session 91's, ~3 hours since Session 109's; not yet "several days").** Container again started
+shallow with a stale local `main` (same recurring pattern Sessions 105-109 flagged, still not
+urgent, still worth a human fix to the base container image): `git fetch origin main` triggered an
+implicit unshallow, then explicit `git fetch --unshallow origin` confirmed complete
+(`git rev-parse --is-shallow-repository` → `false`); `git checkout main && git merge --ff-only
+origin/main` fast-forwarded cleanly from `95672d8` to `0256cf9` (Session 109's commit, the
+BUILD_LOG.md/ARCHIVE split), no drift once resolved, no rewrite. `git log --author="Jonathan" -1`
+→ still `e42411f` (2026-09-08, "RL-007 resolved"), still **13 days old**, no reply. `env | grep -i
+THERACINGAPI` → empty (Mac-only credentials, confirmed via `date -u` cross-check; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's own prompt correction).
+`src/models/*.py` line counts unchanged (0/138/361/215/138) and `racecard_theracingapi.py`
+unchanged (116 lines). No TODO/FIXME/XXX in `src/`/`scripts`/`tests`/`db`. Phase 6's
+`model1_logistic_baseline.py` (per-race multinomial-logit/softmax baseline over synthetic fixtures
+shaped exactly like the real racecard schema, `official_rating`/`draw` as ints, `recent_form` as an
+undelimited `"1582F3"`-style string, probabilities summing to ~1.0 per race, explicitly labeled
+not-a-real-prediction) is unchanged and still satisfies this session's prompt's Phase 6 ask
+verbatim — still superseded by the real, walk-forward-validated Kaggle-fitted Model 1
+(RL-006/RL-007, ~487k real runner predictions across 18 chronological folds, did not beat the
+de-vigged market baseline on any fold) and by Phase 7's gradient-boosting Model 2. GitHub checked
+directly via `mcp__github__` tools: 0 open issues, 0 pull requests in any state, no activity of any
+kind outside this routine's own commits. Full suite re-run (`bash db/setup_local_postgres.sh` +
+`python3 db/init_db.py` (13 tables) + `pip install -r requirements.txt` +
+`python3 -m pytest tests/ -q`) → **177/177 passed**.
+
+**No push notification this session.** Same reasoning as Sessions 92-109: this schedule's stored
+prompt was already verbatim-satisfied 93 sessions running before this one, Session 91's
+(2026-09-19 00:57) notification already stated the stuck-schedule situation plainly and asked
+Jonathan to update/pause the prompt or confirm he's fine leaving it as a standing health-check, and
+nothing about the underlying condition has changed since — same prompt, same 13-day silence, same
+already-satisfied Phase 6 ask, no GitHub activity, no code drift beyond routine session commits.
+Only ~3 hours have passed since Session 109's own check (which itself judged ~2 days 6 hours since
+Session 91 as "not yet several days"); sending again this soon would be noise, not signal.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same checks, `git checkout main` then `git fetch --unshallow origin` before
+trusting any `--author` log query or branch comparison (container has started shallow and stale
+every session since at least 105 — still worth a human fix to the base container image, still not
+urgent). If Jonathan has replied or the prompt has changed, act on that. If still nothing new and
+it's now been several days since Session 91's notification (2026-09-19 00:57) with still no reply,
+a further notification is warranted. Otherwise log one short entry and stop.
+
 ## 2026-09-21 — Session 109 (autonomous overnight, cloud routine)
 
 **93rd consecutive session, same stale prompt, no change — no notification (~2 days 6 hours since
