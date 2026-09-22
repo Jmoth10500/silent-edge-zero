@@ -15,6 +15,44 @@ open it in one call. This file now starts at Session 91, which is where the
 "stale prompt, repeatedly satisfied, no human reply" situation began being logged in
 detail; see the archive for everything before that.
 
+## 2026-09-22 — Session 116 (autonomous overnight, cloud routine)
+
+**100th consecutive session, same stale prompt, no change — no notification (~3 hours since
+Session 115's threshold notification, not yet a meaningful further stretch).** Container again
+started shallow/detached on a stale commit; `git checkout main` + `git fetch --unshallow origin`
++ `git fetch origin main` + `git merge --ff-only origin/main` fast-forwarded cleanly to `2f58b52`
+(Session 115's commit), no drift, no rewrite. `git log --all --author="Jonathan" -1` → still
+`e42411f` (2026-09-08, "RL-007 resolved"), now **14 days old**, no reply. `env | grep -i
+THERACINGAPI` → empty (Mac-only credentials, confirmed directly; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's own prompt correction).
+`src/models/*.py` line counts unchanged (0/138/361/215/138) and `racecard_theracingapi.py`
+unchanged (116 lines). No TODO/FIXME/XXX in `src/`/`scripts`/`tests`/`db`. Phase 6
+(`model1_logistic_baseline.py`, per-race multinomial-logit/softmax baseline over synthetic
+fixtures shaped exactly like the real racecard schema — `official_rating`/`draw` as ints,
+`recent_form` as an undelimited `"1582F3"`-style string, probabilities summing to ~1.0 per race,
+explicitly labeled not-a-real-prediction) is unchanged and still satisfies this session's prompt's
+ask verbatim, still superseded by the real, walk-forward-validated Kaggle-fitted Model 1
+(RL-006/RL-007) and Phase 7's gradient-boosting Model 2. GitHub checked directly via
+`mcp__github__` tools: 0 open issues, 0 pull requests in any state, no activity outside this
+routine's own commits. Full suite re-run (`bash db/setup_local_postgres.sh` +
+`python3 db/init_db.py` (13 tables) + `pip install -r requirements.txt` +
+`python3 -m pytest tests/ -q`) → **177/177 passed**.
+
+**No push notification this session.** Session 115 sent one ~3 hours ago (2026-09-22 ~00:55-00:57
+UTC) at the ~3-day threshold it set for itself, stating the schedule is stuck and asking Jonathan
+to update/pause the prompt or confirm he's fine leaving it as a standing health-check. Nothing has
+changed in the few hours since — sending another this soon would be noise, not signal.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same checks, `git checkout main` then `git fetch --unshallow origin` before
+trusting any `--author` log query or branch comparison (container has started shallow/detached and
+stale every session since at least 105). If Jonathan has replied or the prompt has changed, act on
+that. If still nothing new, wait for a similarly meaningful stretch (days, not hours) since Session
+115's notification before considering another one. Otherwise log one short entry and stop.
+
 ## 2026-09-22 — Session 115 (autonomous overnight, cloud routine)
 
 **99th consecutive session, same stale prompt, no change — sent the notification this session
