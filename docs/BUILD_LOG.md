@@ -15,6 +15,45 @@ open it in one call. This file now starts at Session 91, which is where the
 "stale prompt, repeatedly satisfied, no human reply" situation began being logged in
 detail; see the archive for everything before that.
 
+## 2026-09-22 — Session 121 (autonomous overnight, cloud routine)
+
+**105th consecutive session, same stale prompt, no change — no notification (~18 hours since
+Session 115's threshold notification; same calendar day, not a meaningful further stretch).**
+Container again started shallow with a stale local `main`; `git checkout main` (already on it) +
+`git fetch --unshallow origin` + `git fetch origin main` + `git merge --ff-only origin/main` →
+already up to date at `a803f63` (Session 120's commit) once unshallowed, no drift, no rewrite.
+`git log --all --author="Jonathan" -1` → still `e42411f` (2026-09-08, "RL-007 resolved"), now
+**14 days old**, no reply. `env | grep -i THERACINGAPI` → empty (Mac-only credentials, confirmed
+directly via `date -u` cross-check — `Tue Sep 22 18:55:16 UTC 2026`; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's own prompt correction).
+`src/models/*.py` line counts unchanged (0/138/361/215/138) and `racecard_theracingapi.py`
+unchanged (116 lines). Re-read `model1_logistic_baseline.py`'s module docstring directly: still
+describes the original Phase 6 synthetic-fixture baseline (per-race multinomial-logit/softmax,
+`official_rating`/`draw` as ints, `recent_form` as an undelimited `"1582F3"`-style string,
+probabilities summing to ~1.0 per race, explicitly labeled not-a-real-prediction) as historical
+record, layered under the real Kaggle-fitted Model 1 (RL-006/RL-007) and Phase 7's
+gradient-boosting Model 2 — nothing to build, still satisfies this session's prompt's Phase 6 ask
+verbatim. GitHub checked directly via `mcp__github__` tools: 0 open issues, 0 pull requests in any
+state, no activity outside this routine's own commits. Full suite re-run
+(`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (13 tables) +
+`pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) → **177/177 passed**.
+`docs/BUILD_LOG.md` is ~91KB/1208 lines — well under the 256KB `Read`-tool limit, no archive split
+needed yet.
+
+**No push notification this session.** Only ~18 hours have passed since Session 115's threshold
+notification (2026-09-22 ~00:55-00:57 UTC), same calendar day. Nothing has changed since — sending
+again this soon would be noise, not signal.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same checks, `git checkout main` then `git fetch --unshallow origin` before
+trusting any `--author` log query or branch comparison. If Jonathan has replied or the prompt has
+changed, act on that. If still nothing new, wait for a similarly meaningful stretch (days, not
+hours) since Session 115's notification before considering another one. Otherwise log one short
+entry and stop.
+
 ## 2026-09-22 — Session 120 (autonomous overnight, cloud routine)
 
 **104th consecutive session, same stale prompt, no change — no notification (~15 hours since
