@@ -15,6 +15,53 @@ open it in one call. This file now starts at Session 91, which is where the
 "stale prompt, repeatedly satisfied, no human reply" situation began being logged in
 detail; see the archive for everything before that.
 
+## 2026-09-23 — Session 123 (autonomous overnight, cloud routine)
+
+**107th consecutive session, same stale prompt, no change — no notification (~24 hours since
+Session 115's threshold notification; not yet a meaningful further stretch on the established
+~3-day cadence).** Container again started with a detached HEAD on a stale commit; `git checkout
+main` + `git fetch --unshallow origin` + `git fetch origin main` + `git merge --ff-only
+origin/main` fast-forwarded cleanly to `9fd59f3` (Session 122's commit), no drift, no rewrite.
+`git log --all --author="Jonathan" -1` → still `e42411f` (2026-09-08, "RL-007 resolved"), now
+**15 days old**, no reply. `env | grep -i THERACINGAPI` → empty (Mac-only credentials, confirmed
+directly via `date -u` cross-check — `Wed Sep 23 00:54:33 UTC 2026`; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's own prompt correction).
+`src/models/*.py` line counts unchanged (0/138/361/215/138) and `racecard_theracingapi.py`
+unchanged (116 lines). No TODO/FIXME/XXX in `src/`/`scripts`/`tests`/`db`. Phase 6
+(`model1_logistic_baseline.py`, per-race multinomial-logit/softmax baseline over synthetic
+fixtures shaped exactly like the real racecard schema — `official_rating`/`draw` as ints,
+`recent_form` as an undelimited `"1582F3"`-style string, probabilities summing to ~1.0 per race,
+explicitly labeled not-a-real-prediction) is unchanged and still satisfies this session's prompt's
+ask verbatim, still superseded by the real, walk-forward-validated Kaggle-fitted Model 1
+(RL-006/RL-007) and Phase 7's gradient-boosting Model 2. GitHub checked directly via
+`mcp__github__` tools: 0 open issues, 0 closed issues, 0 pull requests in any state, no activity
+outside this routine's own commits. Full suite re-run (`bash db/setup_local_postgres.sh` +
+`python3 db/init_db.py` (13 tables) + `pip install -r requirements.txt` +
+`python3 -m pytest tests/ -q`) → **177/177 passed**. `docs/BUILD_LOG.md` is ~94KB/1289 lines —
+still under the 256KB `Read`-tool limit, no archive split needed yet.
+
+**No push notification this session.** ~24 hours have passed since Session 115's threshold
+notification (2026-09-22 ~00:55-00:57 UTC) — a calendar-day rollover but not the ~3-day gap this
+routine has consistently used before re-notifying on an unchanged condition (the same cadence
+Session 112 set and Session 91 established before it). Nothing has changed since: same prompt,
+same already-satisfied Phase 6 ask, same 15-day silence, no GitHub activity, no code drift beyond
+routine session commits. Sending again this soon would be noise, not signal. Flagging plainly for
+whichever session runs next: this is now 8 sessions and ~24 hours past the last notification with
+zero reply; if a session lands at or past roughly 2026-09-25 ~00:55 UTC (3 days after Session
+115's notification) with still no reply, that is the threshold this file's own established pattern
+calls for re-notifying — send it then rather than deferring further on the clock alone.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same checks, `git checkout main` then `git fetch --unshallow origin` before
+trusting any `--author` log query or branch comparison (container has started shallow/detached and
+stale every session since at least 105). If Jonathan has replied or the prompt has changed, act on
+that. If still nothing new and it's now at or past ~2026-09-25 ~00:55 UTC (3 days after Session
+115's notification), send a further notification per this session's flag. Otherwise log one short
+entry and stop.
+
 ## 2026-09-22 — Session 122 (autonomous overnight, cloud routine)
 
 **106th consecutive session, same stale prompt, no change — no notification (~21 hours since
