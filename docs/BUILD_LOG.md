@@ -15,6 +15,50 @@ open it in one call. This file now starts at Session 91, which is where the
 "stale prompt, repeatedly satisfied, no human reply" situation began being logged in
 detail; see the archive for everything before that.
 
+## 2026-09-23 — Session 129 (autonomous overnight, cloud routine)
+
+**113th consecutive session, same stale prompt, no change — no notification (~3 hours since
+Session 128's check, well short of the 2026-09-25 ~00:55 UTC threshold Session 115/123 set for
+re-notifying).** Container started on a detached HEAD again, behind `origin/main`; `git checkout
+main` + `git fetch origin main` + `git fetch --unshallow origin` (shallow again this session) +
+`git merge --ff-only origin/main` fast-forwarded cleanly to `8dca620` (Session 128's commit), no
+drift, no rewrite. `git log --all --author="Jonathan" -1` → still `e42411f` (2026-09-08,
+"RL-007 resolved"), now **15 days old**, no reply (cross-checked against `date -u` →
+`Wed Sep 23 18:55:03 UTC 2026`). `env | grep -i THERACINGAPI` → empty (Mac-only credentials,
+confirmed directly; did not attempt `collect_racecards.py`/`collect_weather.py`, per this
+session's own prompt correction). `src/models/*.py` line counts unchanged (0/138/361/215/138) and
+`racecard_theracingapi.py` unchanged (116 lines). No TODO/FIXME/XXX in `src/`/`scripts`/`tests`/`db`.
+`model1_logistic_baseline.py`'s module docstring re-read directly: still describes the original
+Phase 6 synthetic-fixture baseline (per-race multinomial-logit/softmax, `official_rating`/`draw`
+as ints, `recent_form` as an undelimited `"1582F3"`-style string, probabilities summing to ~1.0
+per race, explicitly labeled not-a-real-prediction) as historical record, layered under the real,
+walk-forward-validated Kaggle-fitted Model 1 (RL-006/RL-007) and Phase 7's gradient-boosting
+Model 2 — still satisfies this session's prompt's Phase 6 ask verbatim, nothing to build. GitHub
+checked directly via `mcp__github__` tools: 0 open issues, 0 pull requests in any state, no
+activity outside this routine's own commits. Full suite re-run
+(`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (13 tables) +
+`pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) → **177/177 passed**.
+`docs/BUILD_LOG.md` was ~117KB/1556 lines before this entry — still under the 256KB `Read`-tool
+limit, no archive split needed yet.
+
+**No push notification this session.** ~3 hours have passed since Session 128's check and roughly
+42 hours since Session 115's notification (2026-09-22 ~00:55-00:57 UTC) — still short of the
+2026-09-25 ~00:55 UTC threshold (3 days after Session 115's notification) that Session 115/123
+established for re-notifying. Nothing has changed since: same prompt, same already-satisfied
+Phase 6 ask, same 15-day silence, no GitHub activity, no code drift beyond routine session commits.
+Sending again this soon would be noise, not signal.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** same checks, `git checkout main` then `git fetch --unshallow origin` before
+trusting any `--author` log query or branch comparison (container keeps starting shallow/detached
+— still worth a human fix to the base container image, still not urgent). If Jonathan has replied
+or the prompt has changed, act on that. If still nothing new and it's now past 2026-09-25 ~00:55
+UTC (3 days since Session 115's last notification) with still no reply, send a further
+notification. Otherwise log one short entry and stop.
+
 ## 2026-09-23 — Session 128 (autonomous overnight, cloud routine)
 
 **112th consecutive session, same stale prompt, no change — no notification (~3 hours since
