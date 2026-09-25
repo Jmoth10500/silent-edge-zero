@@ -15,6 +15,52 @@ open it in one call. This file now starts at Session 91, which is where the
 "stale prompt, repeatedly satisfied, no human reply" situation began being logged in
 detail; see the archive for everything before that.
 
+## 2026-09-25 — Session 145 (autonomous overnight, cloud routine)
+
+**129th consecutive session, same stale prompt, no change — no notification (~3 hours since
+Session 144's push-bug-fix confirmation, well short of the 2026-09-28 ~00:55 UTC re-notify
+threshold Session 139 set).** Container started on a detached HEAD again (16 commits behind
+`main`'s stale local pointer at `8dca620`, but `origin/main` itself was already at `4e7b18a` —
+Session 144's commit had genuinely reached GitHub). `git checkout main` + `git fetch --unshallow
+origin` + `git fetch origin main` + `git merge --ff-only origin/main` fast-forwarded local `main`
+to `4e7b18a`; `git rev-list --left-right --count origin/main...main` → `0\t0`, confirming `main`
+and `origin/main` are identical — Session 143's push fix continues to hold cleanly. `git log --all
+--author="Jonathan" -1` → still `e42411f` (2026-09-08, "RL-007 resolved"), now **17 days old**, no
+reply (cross-checked against `date -u` → `Fri Sep 25 18:55:35 UTC 2026`). `env | grep -i
+THERACINGAPI` → empty (Mac-only credentials, confirmed directly; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's own prompt correction).
+`src/models/*.py` line counts unchanged (0/138/361/215/138) and `racecard_theracingapi.py`
+unchanged (116 lines). No TODO/FIXME/XXX in `src/`/`scripts`/`tests`/`db`. Re-read
+`model1_logistic_baseline.py`'s module docstring directly: still describes the original Phase 6
+synthetic-fixture baseline (per-race multinomial-logit/softmax, `official_rating`/`draw` as ints,
+`recent_form` as an undelimited `"1582F3"`-style string, probabilities summing to ~1.0 per race,
+explicitly labeled not-a-real-prediction) as historical record, layered under the real,
+walk-forward-validated Kaggle-fitted Model 1 (RL-006/RL-007) and Phase 7's gradient-boosting
+Model 2 — still satisfies this session's prompt's Phase 6 ask verbatim, nothing to build. GitHub
+checked directly via `mcp__github__` tools: 0 open issues, 0 pull requests in any state, no
+activity outside this routine's own commits. Full suite re-run (`bash db/setup_local_postgres.sh`
++ `python3 db/init_db.py` (13 tables) + `pip install -r requirements.txt` +
+`python3 -m pytest tests/ -q`) → **177/177 passed**. `docs/BUILD_LOG.md` was ~172KB/2261 lines
+before this entry — still under the 256KB `Read`-tool limit, no archive split needed yet.
+
+**No push notification this session.** ~3 hours have passed since Session 144's check and roughly
+54 hours remain until the 2026-09-28 ~00:55 UTC threshold Session 139 established. Nothing has
+changed since: same prompt, same already-satisfied Phase 6 ask, same 17-day silence, no GitHub
+activity, no code drift beyond routine session commits, push mechanism still confirmed working.
+Sending again this soon would be noise, not signal.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** `git checkout main`, `git fetch --unshallow origin` if shallow, `git fetch origin
+main`, `git merge --ff-only origin/main`, then confirm `git rev-list --left-right --count
+origin/main...main` prints `0\t0` before doing anything else — do not trust "fast-forwarded
+cleanly" language alone. If Jonathan has replied or the prompt has changed, act on that. If still
+nothing new and it's now at or past 2026-09-28 ~00:55 UTC (3 days since Session 139's notification)
+with still no reply, send a further notification. Otherwise log one short entry, commit, push, and
+verify the push landed on `origin/main` before stopping.
+
 ## 2026-09-25 — Session 144 (autonomous overnight, cloud routine)
 
 **128th consecutive session, same stale prompt, no change — no notification (~3 hours since
