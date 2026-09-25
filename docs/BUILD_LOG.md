@@ -15,6 +15,67 @@ open it in one call. This file now starts at Session 91, which is where the
 "stale prompt, repeatedly satisfied, no human reply" situation began being logged in
 detail; see the archive for everything before that.
 
+## 2026-09-25 — Session 143 (autonomous overnight, cloud routine)
+
+**Found and fixed a real infra bug: 14 sessions (129-142) of `docs/BUILD_LOG.md` entries were
+never actually reaching `origin/main`.** Container started on a detached HEAD at `b1d4d4d`
+(Session 142's commit) same as prior sessions reported, but this time checked what "detached
+HEAD, N commits behind origin" actually meant instead of just fast-forwarding local `main` to
+match `origin/main` and moving on: `git diff origin/main HEAD --stat` showed the detached HEAD
+carried 14 commits (Sessions 129 through 142, `docs/BUILD_LOG.md` only, 596 lines, all correctly
+attributed) that `origin/main` did not have — `origin/main` was frozen at Session 128's commit
+(`8dca620`, 2026-09-23). Grepped every prior session entry in this file for the literal string
+"git push" — zero matches. Every session since 129 described "fast-forwarding to the previous
+session's commit" at the *start* (which only advances local `main` to match origin, silently
+discarding awareness of the still-detached, never-merged prior commits) but never once confirmed
+a successful `git push` at the *end*, and never noticed the resulting drift because each new
+session's starting checks (`git log --all --author`, file line counts, etc.) don't care which ref
+things live on. Root cause: sessions ran `git checkout main` + `merge --ff-only origin/main`,
+which moves the branch pointer to match origin, but never brought the detached commits *forward
+onto* `main` before attempting to push — so any push attempt (if one even happened) was pushing an
+unchanged `main`, and the real new commit stayed orphaned on a detached HEAD, ready to be silently
+picked back up (still detached) by the next session's container. Fix applied this session: `git
+checkout -B main HEAD` (reset the `main` branch pointer to the detached HEAD's tip, bringing all
+14 orphaned commits onto the branch) then `git push -u origin main`. Verified with a fresh `git
+fetch origin main` afterward: `origin/main` now resolves to `b1d4d4d`, matching local `main`
+exactly (0 ahead / 0 behind). All 14 previously-stranded sessions' log entries are now safely on
+GitHub. **This session's own commit will be the first real test that the fix holds** — verified by
+re-fetching after this commit's push, below.
+
+Also re-ran this session's normal checks since the routine was already mid-flight: repo was
+shallow (`git rev-parse --is-shallow-repository` → true) — `git fetch --unshallow origin` restored
+full history (50 → 146 commits) before trusting the `--author` query. `git log --all
+--author="Jonathan" -1` → still `e42411f` (2026-09-08, "RL-007 resolved"), still **17 days old**,
+no reply (`date -u` → `Fri Sep 25 12:57:20 UTC 2026`). `env | grep -i THERACINGAPI` → empty
+(Mac-only credentials, confirmed directly; did not attempt `collect_racecards.py` /
+`collect_weather.py`, per this session's own prompt correction). `src/models/*.py` line counts
+unchanged (0/138/361/215/138) and `racecard_theracingapi.py` unchanged (116 lines) — Phase 6
+(`model1_logistic_baseline.py`) still satisfies this session's prompt's ask verbatim, still
+superseded by the real, walk-forward-validated Kaggle-fitted Model 1 (RL-006/RL-007) and Phase 7's
+gradient-boosting Model 2 — nothing to build. GitHub checked directly via `mcp__github__` tools: 0
+open issues, 0 pull requests in any state. Full suite re-run (`bash db/setup_local_postgres.sh` +
+`python3 db/init_db.py` (13 tables) + `pip install -r requirements.txt` +
+`python3 -m pytest tests/ -q`) → **177/177 passed**.
+
+**Sent a push notification this session**, separate from the stale-prompt 3-day cadence Session
+139 established (next stale-prompt threshold unchanged at 2026-09-28 ~00:55 UTC): this is a new,
+concrete finding — two weeks of build-log commits were at risk of being lost entirely if the
+container had ever been reclaimed before a successful push, and the routine had been silently
+reporting success without ever verifying it. Worth a heads-up on its own regardless of the
+stale-prompt cadence.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** after `git checkout main`, verify `main` and `origin/main` are the same commit
+(`git rev-list --left-right --count origin/main...main` should print `0\t0`) *before* relying on
+"fast-forwarded cleanly" language alone — that phrase alone hid this bug for 14 sessions. Always
+run an explicit `git push` and re-`git fetch` + compare shas afterward to confirm it actually
+landed, not just that the local commit succeeded. If Jonathan has replied or the prompt has
+changed, act on that. Otherwise same checks as before, stale-prompt notification cadence unchanged
+(next threshold 2026-09-28 ~00:55 UTC).
+
 ## 2026-09-25 — Session 142 (autonomous overnight, cloud routine)
 
 **126th consecutive session, same stale prompt, no change — no notification (~3 hours since
