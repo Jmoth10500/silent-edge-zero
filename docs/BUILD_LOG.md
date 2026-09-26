@@ -15,6 +15,57 @@ open it in one call. This file now starts at Session 91, which is where the
 "stale prompt, repeatedly satisfied, no human reply" situation began being logged in
 detail; see the archive for everything before that.
 
+## 2026-09-26 — Session 152 (autonomous overnight, cloud routine)
+
+**136th consecutive session, same stale prompt, no change — no notification (~3 hours since
+Session 151's check, still short of the 2026-09-28 ~00:55 UTC re-notify threshold Session 139
+set).** Container started on a detached HEAD at `305264a` (Session 151's commit); `git status`
+clean. Repo confirmed shallow (`git rev-parse --is-shallow-repository` → true) — `git fetch
+--unshallow origin` restored full history, then `git fetch origin main` (fresh, no cached ref),
+then `git rev-parse HEAD origin/main` → both `305264a`, confirmed identical before doing anything
+else, per the push-verification protocol Session 147 established. `git checkout main` + `git
+merge --ff-only origin/main` fast-forwarded local `main` (23 commits behind) to `305264a` cleanly
+(1052 lines, `docs/BUILD_LOG.md` only), `git rev-list --left-right --count origin/main...main` →
+`0\t0`. `env | grep -i THERACINGAPI` → empty (Mac-only credentials, confirmed directly; did not
+attempt `collect_racecards.py`/`collect_weather.py`, per this session's own prompt correction).
+GitHub checked via `mcp__github__` tools (delegated to a subagent, result verified against the
+established baseline): 0 issues in any state, 0 pull requests in any state. `git log --all
+--author="Jonathan" -1` → still `e42411f` (2026-09-08, "RL-007 resolved"), now **18 days old**,
+no reply (cross-checked against `date -u` → `Sat Sep 26 15:55:06 UTC 2026`). `src/models/*.py`
+line counts unchanged (0/138/361/215/138) and `racecard_theracingapi.py` unchanged (116 lines) —
+this session's prompt's Phase 6 ask (statistical/logistic baseline over realistic synthetic
+fixtures shaped like the real racecard schema, probabilities summing to ~1.0 per race, clearly
+labeled not-a-real-prediction) is still satisfied verbatim by `model1_logistic_baseline.py`'s
+original synthetic-fixture baseline, now layered under the real Kaggle-fitted Model 1
+(RL-006/RL-007) and Phase 7's gradient-boosting Model 2 — nothing to build. No TODO/FIXME/XXX in
+`src/`/`scripts`/`tests`/`db`. Full suite re-run (`bash db/setup_local_postgres.sh` +
+`python3 db/init_db.py` (13 tables) + `pip install -r requirements.txt` +
+`python3 -m pytest tests/ -q`) → **177/177 passed**. `docs/BUILD_LOG.md` was ~199KB/2608 lines
+before this entry — still under the 256KB `Read`-tool limit, no archive split needed yet, though
+it has grown noticeably closer to it (was ~172KB ten sessions ago at Session 145); worth watching.
+
+**No push notification this session.** ~3 hours have passed since Session 151's check and roughly
+33 hours remain until the 2026-09-28 ~00:55 UTC threshold Session 139 established. Nothing has
+changed since: same prompt, same already-satisfied Phase 6 ask, same 18-day silence, no GitHub
+activity, no code drift beyond routine session commits, push mechanism (fixed Session 147) verified
+working again this session with a fresh, uncached fetch comparison. Sending again this soon would
+be noise, not signal.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** `git checkout main`, `git fetch --unshallow origin` if shallow, `git fetch origin
+main` (fresh, no cached ref), then compare `git rev-parse HEAD origin/main` directly before doing
+anything else — do not trust `git push`'s own "up-to-date"/"fast-forwarded" messages, and do not
+trust a `rev-list`/`status` check against a ref that wasn't just freshly fetched. If Jonathan has
+replied or the prompt has changed, act on that. If still nothing new and it's now at or past
+2026-09-28 ~00:55 UTC with still no reply, send a further notification. Otherwise log one short
+entry, commit, push, and verify with a fresh fetch that the push actually landed on `origin/main`
+before stopping. If `docs/BUILD_LOG.md` approaches ~230-250KB, split older sessions out to
+`docs/BUILD_LOG_ARCHIVE.md` per the Session 101 precedent rather than waiting for the 256KB
+`Read`-tool limit to bite.
+
 ## 2026-09-26 — Session 151 (autonomous overnight, cloud routine)
 
 **135th consecutive session, same stale prompt, no change — no notification (~12 hours since
