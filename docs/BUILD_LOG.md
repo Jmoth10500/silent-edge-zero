@@ -15,6 +15,68 @@ open it in one call. This file now starts at Session 91, which is where the
 "stale prompt, repeatedly satisfied, no human reply" situation began being logged in
 detail; see the archive for everything before that.
 
+## 2026-09-26 — Session 147 (autonomous overnight, cloud routine)
+
+**131st consecutive session, same stale prompt — but this session found a real bug: the "push
+fix still holds" claims from Sessions 143-146 were wrong.** Container started on a detached HEAD
+at `ecfb5c7` (Session 146's commit). `git rev-parse HEAD main origin/main` showed local `main` and
+a *freshly fetched* `origin/main` both sitting at `8dca620` — **Session 128's commit** — 18 commits
+and one full day behind the detached HEAD. Every session from 129 through 146 had committed
+locally and reported the push as successful (several explicitly logging `git rev-list --left-right
+--count origin/main...main` → `0 0`), but none of those 18 commits had actually reached GitHub.
+Session 143's "fix 14-session silent push failure" entry did not fix the underlying problem; it
+(and every session after it) was verifying against a stale or cached view of `origin/main` rather
+than a true fetch, so the checks kept passing while the real remote fell further behind.
+
+This session: `git checkout main` (fast-forward-only, clean — no divergence, just 18 commits
+`main` didn't have yet), `git merge --ff-only ecfb5c7` to bring local `main` up to the detached
+HEAD, then `git push -u origin main`. Push reported `Everything up-to-date` (misleading — see
+above, this is exactly the phrasing that fooled prior sessions), so this session did **not** trust
+it: ran `git fetch origin main` fresh and compared `git rev-parse HEAD origin/main` directly —
+both `ecfb5c7`, confirmed identical. This is the first session in the 129-146 run to verify the
+push against a guaranteed-fresh fetch rather than a locally cached ref or a trusted git message.
+**Lesson for future sessions: never conclude a push landed from git's own success message or from
+an unqualified `rev-list`/`status` check — always run `git fetch origin <branch>` first, with no
+caching assumptions, then compare `git rev-parse HEAD origin/main` directly.**
+
+Everything else unchanged from Session 146's findings, re-verified fresh this session rather than
+carried forward: `env | grep -i THERACINGAPI` → empty (Mac-only credentials, confirmed directly;
+did not attempt `collect_racecards.py`/`collect_weather.py`, per this session's own prompt
+correction). `git fetch --unshallow origin` then `git log --all --author="Jonathan" -1` → still
+`e42411f` (2026-09-08, "RL-007 resolved"), now **18 days old**, no reply (`date -u` →
+`Sat Sep 26 00:55:28 UTC 2026`). GitHub checked directly via `mcp__github__` tools: 0 open issues,
+0 pull requests in any state. `src/models/` unchanged (0/138/361/215/138 lines across
+`__init__.py`/`model0_market_baseline.py`/`model1_logistic_baseline.py`/
+`model2_gradient_boosting.py`/`model2_hyperparameter_sweep.py`) and `racecard_theracingapi.py`
+unchanged (116 lines) — this session's prompt's Phase 6 ask (statistical/logistic baseline over
+realistic synthetic fixtures shaped like the real racecard schema, probabilities summing to ~1.0
+per race, clearly labeled not-a-real-prediction) is still satisfied verbatim by
+`model1_logistic_baseline.py`'s original synthetic-fixture baseline, now layered under the real
+Kaggle-fitted Model 1 (RL-006/RL-007) and Phase 7's gradient-boosting Model 2 — nothing to build.
+Full suite re-run (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (13 tables) +
+`pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) → **177/177 passed**.
+
+**No push notification threshold change.** Session 139 set the next re-notify point at
+2026-09-28 ~00:55 UTC (3 days after Session 139's notification) if Jonathan still hasn't replied.
+It is now 2026-09-26 ~00:55 UTC — 2 days early. Nothing else new: same prompt, same
+already-satisfied Phase 6 ask, no GitHub activity. The push-verification bug found and fixed this
+session doesn't itself warrant an out-of-band notification — it was a self-contained automation
+defect with no data-integrity or user-facing consequence (BUILD_LOG.md content was always correct
+in each session's own local repo; it just hadn't reached GitHub), and it's now fixed and verified.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** `git checkout main`, `git fetch --unshallow origin` if shallow, `git fetch origin
+main`, then compare `git rev-parse HEAD origin/main` directly (do not trust `git push`'s own
+"up-to-date"/"fast-forwarded" messages, and do not trust a `rev-list`/`status` check against a ref
+that wasn't just freshly fetched — that combination is exactly what let 18 commits go undelivered
+for a full day across Sessions 129-146 undetected). If Jonathan has replied or the prompt has
+changed, act on that. If still nothing new and it's now at or past 2026-09-28 ~00:55 UTC with
+still no reply, send a further notification. Otherwise log one short entry, commit, push, and
+verify with a fresh fetch that the push actually landed on `origin/main` before stopping.
+
 ## 2026-09-25 — Session 146 (autonomous overnight, cloud routine)
 
 **130th consecutive session, same stale prompt, no change — no notification (~3 hours since
