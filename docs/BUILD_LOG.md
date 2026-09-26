@@ -15,6 +15,54 @@ open it in one call. This file now starts at Session 91, which is where the
 "stale prompt, repeatedly satisfied, no human reply" situation began being logged in
 detail; see the archive for everything before that.
 
+## 2026-09-26 — Session 148 (autonomous overnight, cloud routine)
+
+**132nd consecutive session, same stale prompt, no change — no notification (~3 hours since
+Session 147's push-verification fix, well short of the 2026-09-28 ~00:55 UTC re-notify threshold
+Session 139 set).** Verified Session 147's push-verification fix held: container started on a
+detached HEAD at `01968f0` (Session 147's commit), local `main`'s stale pointer was still at
+`8dca620` (Session 128) as expected — this is normal container behavior, not the bug. Ran the fresh
+verification Session 147 established: `git rev-parse --is-shallow-repository` → true, `git fetch
+--unshallow origin` restored full history, `git fetch origin main` (fresh, no cached ref), then
+`git rev-parse HEAD origin/main` → both `01968f0` — confirmed identical before doing anything else.
+`git checkout main` + `git merge --ff-only origin/main` fast-forwarded local `main` to `01968f0`
+cleanly (860 lines, `docs/BUILD_LOG.md` only). GitHub checked directly via `mcp__github__` tools: 0
+open issues, 0 pull requests in any state. `env | grep -i THERACINGAPI` → empty (Mac-only
+credentials, confirmed directly; did not attempt `collect_racecards.py`/`collect_weather.py`, per
+this session's own prompt correction). `src/models/*.py` line counts unchanged
+(0/138/361/215/138) and `racecard_theracingapi.py` unchanged (116 lines) — this session's prompt's
+Phase 6 ask (statistical/logistic baseline over realistic synthetic fixtures shaped like the real
+racecard schema, probabilities summing to ~1.0 per race, clearly labeled not-a-real-prediction) is
+still satisfied verbatim by `model1_logistic_baseline.py`'s original synthetic-fixture baseline, now
+layered under the real Kaggle-fitted Model 1 (RL-006/RL-007) and Phase 7's gradient-boosting Model
+2 — nothing to build. No TODO/FIXME/XXX in `src/`/`scripts`/`tests`/`db`. `git log --all
+--author="Jonathan" -1` → still `e42411f` (2026-09-08, "RL-007 resolved"), now **18 days old**, no
+reply (cross-checked against `date -u` → `Sat Sep 26 03:54:43 UTC 2026`). Full suite re-run
+(`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (13 tables) +
+`pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) → **177/177 passed**.
+`docs/BUILD_LOG.md` was ~184KB/2416 lines before this entry — still under the 256KB `Read`-tool
+limit, no archive split needed yet.
+
+**No push notification this session.** ~3 hours have passed since Session 147's check and roughly
+45 hours remain until the 2026-09-28 ~00:55 UTC threshold Session 139 established. Nothing has
+changed since: same prompt, same already-satisfied Phase 6 ask, same 18-day silence, no GitHub
+activity, no code drift beyond routine session commits, push mechanism (fixed Session 147) verified
+working again this session with a fresh, uncached fetch comparison. Sending again this soon would
+be noise, not signal.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call).
+
+**Next session:** `git checkout main`, `git fetch --unshallow origin` if shallow, `git fetch origin
+main` (fresh, no cached ref), then compare `git rev-parse HEAD origin/main` directly before doing
+anything else — do not trust `git push`'s own "up-to-date"/"fast-forwarded" messages, and do not
+trust a `rev-list`/`status` check against a ref that wasn't just freshly fetched. If Jonathan has
+replied or the prompt has changed, act on that. If still nothing new and it's now at or past
+2026-09-28 ~00:55 UTC with still no reply, send a further notification. Otherwise log one short
+entry, commit, push, and verify with a fresh fetch that the push actually landed on `origin/main`
+before stopping.
+
 ## 2026-09-26 — Session 147 (autonomous overnight, cloud routine)
 
 **131st consecutive session, same stale prompt — but this session found a real bug: the "push
