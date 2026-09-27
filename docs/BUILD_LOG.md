@@ -18,6 +18,56 @@ Session 133 (2026-09-24), which is where the push-verification bug (found and
 fixed at Session 147) and everything since is logged; see the archive for
 everything before that.
 
+## 2026-09-27 — Session 160 (autonomous overnight, cloud routine)
+
+**144th consecutive session, same stale prompt, no change — no notification (~9 hours before the
+2026-09-28 ~00:55 UTC re-notify threshold Session 139 set, so not yet reached).** Container started
+on a detached HEAD at `7f1ea88` (Session 159's commit, already matching a fresh `origin/main` fetch);
+`git status` clean. Repo confirmed shallow (`git rev-parse --is-shallow-repository` → true); `git
+fetch origin main` (fresh, no cached ref) first, compared `git rev-parse HEAD origin/main` → both
+`7f1ea88`, confirmed identical before doing anything else, per the push-verification protocol Session
+147 established. `git fetch --unshallow origin` then restored full history. `git checkout main` + `git
+merge --ff-only origin/main` fast-forwarded local `main` (31 commits behind, stale pointer at
+Session 128's `8dca620`) to `7f1ea88` cleanly, `git rev-list --left-right --count origin/main...main`
+→ `0\t0`. `env | grep -i THERACINGAPI` → empty (Mac-only credentials, confirmed directly; did not
+attempt `collect_racecards.py`/`collect_weather.py`, per this session's prompt correction). GitHub
+checked via `mcp__github__` tools (delegated to a subagent): 0 issues in any state, 0 pull requests
+in any state, `search_commits` for `author-name:Jonathan` on the default branch → 9 matches, most
+recent still `e42411f` ("RL-007 resolved") dated 2026-09-08T15:57:44+01:00 — the same reference
+commit, now **19 days old** (cross-checked against `date -u` → `Sun Sep 27 15:55:14 UTC 2026`), no
+reply. `src/models/*.py` line counts unchanged (0/138/361/215/138) and `racecard_theracingapi.py`
+unchanged (116 lines) — this session's prompt's Phase 6 ask (statistical/logistic baseline over
+realistic synthetic fixtures shaped like the real racecard schema, probabilities summing to ~1.0 per
+race, clearly labeled not-a-real-prediction) is still satisfied verbatim by
+`model1_logistic_baseline.py`'s original synthetic-fixture baseline, now layered under the real
+Kaggle-fitted Model 1 (RL-006/RL-007) and Phase 7's gradient-boosting Model 2 — nothing to build. No
+TODO/FIXME/XXX in `src/`/`scripts`/`tests`/`db`. Full suite re-run (`bash
+db/setup_local_postgres.sh` + `python3 db/init_db.py` (13 tables) + `pip install -r
+requirements.txt` + `python3 -m pytest tests/ -q`) → **177/177 passed**. `docs/BUILD_LOG.md` is
+~106KB/1321 lines after Session 159's archive split — plenty of headroom, no split concerns for a
+long while.
+
+**No push notification this session.** Roughly 9 hours remain until the 2026-09-28 ~00:55 UTC
+threshold Session 139 established. Nothing has changed since Session 159: same prompt, same
+already-satisfied Phase 6 ask, same 19-day silence, no GitHub activity, no code drift beyond routine
+session commits, push mechanism verified working again this session with a fresh, uncached fetch
+comparison. Sending again this soon would be noise, not signal.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials and does not attempt those
+scripts.
+
+**Next session:** `git checkout main`, `git fetch --unshallow origin` if shallow, `git fetch origin
+main` (fresh, no cached ref), then compare `git rev-parse HEAD origin/main` directly before doing
+anything else — do not trust `git push`'s own "up-to-date"/"fast-forwarded" messages, and do not
+trust a `rev-list`/`status` check against a ref that wasn't just freshly fetched. If Jonathan has
+replied or the prompt has changed, act on that. If still nothing new and it's now at or past
+2026-09-28 ~00:55 UTC with still no reply, send a further notification. Otherwise log one short
+entry, commit, push, and verify with a fresh fetch that the push actually landed on `origin/main`
+before stopping.
+
 ## 2026-09-27 — Session 159 (autonomous overnight, cloud routine)
 
 **143rd consecutive session, same stale prompt, no change — no notification (~12 hours since
