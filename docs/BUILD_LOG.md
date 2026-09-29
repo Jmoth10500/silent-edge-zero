@@ -18,6 +18,54 @@ Session 133 (2026-09-24), which is where the push-verification bug (found and
 fixed at Session 147) and everything since is logged; see the archive for
 everything before that.
 
+## 2026-09-29 — Session 174 (autonomous overnight, cloud routine)
+
+**158th consecutive session, same stale prompt, no change — no notification (~33 hours since
+Session 163's 20-day-silence notification, within the established "several days, not hours"
+cadence, not yet due for another).** Container started on a detached HEAD at `9df53d2` (Session
+173's commit); `git status` clean, repo shallow (recurring pattern, unchanged). `git fetch origin
+main` (fresh, no cached ref) → `git rev-parse HEAD origin/main` → both `9df53d2`, confirmed
+identical before doing anything else, per the push-verification protocol Session 147 established.
+`git fetch --unshallow origin` restored full history, then `git checkout main` + `git merge
+--ff-only origin/main` fast-forwarded local `main` (45 commits behind, stale pointer at the base
+image's `8dca620`) to `9df53d2` cleanly, touching only `BUILD_LOG.md`/`BUILD_LOG_ARCHIVE.md`, no
+code. `env | grep -i THERACINGAPI` → empty (Mac-only credentials, confirmed directly; did not
+attempt `collect_racecards.py`/`collect_weather.py`, per this session's prompt correction).
+`src/models/*.py` line counts unchanged (0/138/361/215/138) and `racecard_theracingapi.py`
+unchanged (116 lines, re-checked directly) — this session's prompt's Phase 6 ask
+(statistical/logistic baseline over realistic synthetic fixtures shaped like the real racecard
+schema, probabilities summing to ~1.0 per race, clearly labeled not-a-real-prediction) is still
+satisfied verbatim by `model1_logistic_baseline.py`'s original synthetic-fixture baseline, now
+layered under the real Kaggle-fitted Model 1 (RL-006/RL-007) and Phase 7's gradient-boosting
+Model 2 — nothing to build. No TODO/FIXME/XXX in `src/`/`scripts`/`tests`/`db`. GitHub checked via
+`mcp__github__` tools (delegated to a subagent): 0 issues in any state, 0 pull requests in any
+state, most recent Jonathan-authored commit still `e42411f` ("RL-007 resolved") dated
+2026-09-08T15:57:44+01:00 — now **21 days old**, last 5 commits on `main` all authored by the
+automated routine (Sessions 169-173), no reply. Full suite re-run (`bash
+db/setup_local_postgres.sh` + `python3 db/init_db.py` (13 tables) + `pip install -r
+requirements.txt` + `python3 -m pytest tests/ -q`) → **177/177 passed**. `docs/BUILD_LOG.md` is
+~163KB/2021 lines before this entry — well under the ~230KB watch threshold, plenty of headroom.
+
+**No push notification this session.** Session 163 sent the 20-day-silence notification ~33 hours
+ago; nothing has changed since (same prompt, same already-satisfied Phase 6 ask, silence now 21
+days, no GitHub activity, no code drift beyond routine session commits). Per the established
+"several days, not hours" cadence, sending again this soon would be noise, not signal.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live);
+Kaggle-loaded 558K-row Postgres dataset; Racing API results tier (not pursuing); racecard
+surface/going field verification (needs a live API call). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials and does not attempt those
+scripts.
+
+**Next session:** `git checkout main`, `git fetch --unshallow origin` if shallow, `git fetch origin
+main` (fresh, no cached ref), then compare `git rev-parse HEAD origin/main` directly before doing
+anything else — do not trust a `rev-parse`/`rev-list`/`status` check against a ref that wasn't just
+freshly fetched. If Jonathan has replied or the prompt has changed, act on that. A notification was
+sent at Session 163 (2026-09-28 ~00:56 UTC); per the established "several days, not hours" cadence,
+the next one shouldn't go out before several more days of continued silence — log one short entry,
+commit, push, and verify with a fresh fetch that the push actually landed on `origin/main` before
+stopping, unless something material changes.
+
 ## 2026-09-29 — Session 173 (autonomous overnight, cloud routine)
 
 **157th consecutive session, same stale prompt, no change — no notification (~29 hours since
