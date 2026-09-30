@@ -12,7 +12,7 @@ Model probability vs market-implied probability. Edge only means something when 
 
 - **Database:** PostgreSQL 16 (already running locally via Homebrew, zero setup cost)
 - **Language:** Python 3.11 (already on this machine)
-- **ML:** scikit-learn, CatBoost/XGBoost/LightGBM (added when Phase 6–7 starts, not yet needed)
+- **ML:** scikit-learn (in use since 2026-09-08, Phase 7 — `src/models/model2_gradient_boosting.py`); CatBoost/XGBoost/LightGBM still not needed
 - **API layer:** FastAPI (added when Phase 11 dashboard starts)
 - **Provider abstraction:** every external data source sits behind an interface (`RacecardProvider`, `OddsProvider`, `ResultsProvider`, `RatingsProvider`, `WeatherProvider`) so a provider can be swapped without touching the rest of the system — see `src/providers/`
 
@@ -39,8 +39,17 @@ silent-edge-zero/
                                   runnable on Jonathan's own machine (has the credentials
                                   in a local .env) — the cloud routine environment does not
                                   have THERACINGAPI_USERNAME/PASSWORD and never assumes it does.
-      (odds_betfair.py         — NOT YET WRITTEN, waiting on a Betfair Delayed App Key —
-                                  this line is aspirational, the file does not exist yet)
+      odds_betfair.py          — STUB, untested against a real account. Written 2026-09-09
+                                  (cloud routine) against Betfair's public Betting API docs
+                                  (JSON-RPC listMarketCatalogue/listMarketBook), same honest
+                                  status racecard_theracingapi.py carried before Session 4
+                                  verified it live. Still BLOCKED on a real Delayed App Key
+                                  (docs/FREE_DATA_SOURCES.md #4) — do not trust the field
+                                  mapping until a live call confirms it. Also flags a real,
+                                  still-unsolved gap: Betfair marketIds and Racing API race
+                                  IDs are different ID spaces — reconciliation logic now
+                                  lives in src/reconciliation/race_identity.py (see below),
+                                  not yet wired into this provider (see the module docstring).
     market/
       probability.py           — overround removal: proportional, power, Shin methods
       movement.py               — price movement features: opening/current price,
@@ -51,6 +60,30 @@ silent-edge-zero/
       feature_vector.py         — combines runner_features.py (Sections 8+10) and
                                   market/movement.py (Section 16) into a single flat
                                   per-runner feature dict — the actual model-input row shape
+      draw_bias.py               — course/distance-specific historical draw bias (RL-004's
+                                  real hypothesis, vs runner_features.py's neutral placeholder).
+                                  Pure aggregation over caller-supplied, already leakage-filtered
+                                  historical records — no DB access. Added 2026-09-08 (cloud
+                                  routine), tested against synthetic fixtures only, NOT YET run
+                                  against the real Kaggle history — Mac-only next step
+      weather_features.py        — RL-001's turf-vs-AW rainfall interaction feature. Combines
+                                  a WeatherSnapshot (LIVE, weather_open_meteo.py) with a
+                                  caller-supplied surface string into a flat feature dict; the
+                                  interaction term is forced to 0.0 on AW, passed through on
+                                  turf, None when ambiguous — never guessed. Pure computation,
+                                  no HTTP/DB access. Added 2026-09-08 (cloud routine), synthetic
+                                  fixtures only — also flags that no racecard field maps a real
+                                  surface/going string yet, a separate open gap from the missing
+                                  real-data test itself. See RESEARCH_LAB.md RL-001.
+    reconciliation/
+      race_identity.py          — matches a Racing API RaceCard to a Betfair market
+                                  (BetfairMarketIdentity) by normalized course name + closest
+                                  off-time within a tolerance, greedy nearest-first assignment.
+                                  Pure computation, no HTTP/DB access. Added 2026-09-09 (cloud
+                                  routine) — the matching logic is tested against synthetic
+                                  fixtures, but its own assumption (the two providers' course
+                                  names/clocks actually line up live) is untested. Not yet wired
+                                  into odds_betfair.py. See RESEARCH_LAB.md RL-009.
     evaluation/
       calibration.py            — Brier score, log loss, calibration curve (Section 24)
     validation/
@@ -63,15 +96,40 @@ silent-edge-zero/
                                   multinomial-logit over race-relative rating/draw/form/
                                   weight features (Section 8/10 features -> Section 6-ish
                                   first model), trained by pure-Python gradient ascent.
-                                  Synthetic-fixture-only — see RESEARCH_LAB.md RL-006.
+                                  Real-data trained & walk-forward validated (Sessions 8/9,
+                                  Jonathan's Mac) — lost to Model 0 on Brier/log loss on
+                                  every fold. See RESEARCH_LAB.md RL-006.
+      model2_gradient_boosting.py — Model 2 (Phase 7): a per-runner binary classifier
+                                  (sklearn HistGradientBoostingClassifier) over the SAME
+                                  5 features as Model 1, renormalised to sum to 1.0 per
+                                  race. Built 2026-09-08 (cloud routine) — synthetic-fixture
+                                  -only so far, same status Model 1 had before Sessions 8/9.
+                                  See RESEARCH_LAB.md RL-008.
+      model2_hyperparameter_sweep.py — fits Model 2 once per combination in a
+                                  max_depth/learning_rate/max_iter grid against the same
+                                  synthetic always-wins signal, confirming the fitting
+                                  itself isn't fragile to reasonable setting changes before
+                                  a real Mac-side run. Added 2026-09-09 (cloud routine) —
+                                  a stability check, NOT a real hyperparameter benchmark.
+                                  See RESEARCH_LAB.md RL-008.
   scripts/
     collect_racecards.py       — LIVE since 2026-09-08 (Session 4): pulls real GB racecards
                                   from The Racing API into the DB. Mac-only (needs
                                   THERACINGAPI_USERNAME/PASSWORD, not present in the cloud
                                   routine environment) — do not attempt this from the cloud.
-    collect_weather.py         — runs the live weather provider, stores snapshots
-    load_kaggle_historical.py  — bootstraps historical DB from the Kaggle dataset,
-                                  written but untested — needs your Kaggle credentials
+    collect_weather.py         — runs the live weather provider, stores snapshots.
+                                  Mac-only, same credential reason as above.
+    load_kaggle_historical.py  — real, run to completion (Session 6, Jonathan's Mac):
+                                  558,370 real runner results loaded. Mac-only — the loaded
+                                  DB state lives only there, the cloud routine cannot reach it.
+    derive_recent_form.py      — one-shot backfill (Session 9, Mac-only): real, leakage-safe
+                                  recent_form/days_since_last_run derived from each horse's
+                                  own prior Kaggle rows.
+    train_model1.py            — real Model 1 vs Model 0 walk-forward comparison script
+                                  (Sessions 8/9, Mac-only — needs the real Kaggle-loaded DB).
+    train_model2.py            — Model 0 vs Model 1 vs Model 2 walk-forward comparison,
+                                  mirrors train_model1.py's shape. Added 2026-09-08 (cloud
+                                  routine), NOT YET RUN — Mac-only, needs the real DB.
   tests/
     test_leakage.py            — enforces observed_at/available_at ordering (Section 6/30)
                                   and the DB-level prediction-immutability trigger (Section 32)
@@ -79,6 +137,10 @@ silent-edge-zero/
     test_market_movement.py    — price movement feature tests
     test_runner_features.py    — per-runner and race-relative feature tests (synthetic fixtures)
     test_feature_vector.py     — combined feature-vector tests (synthetic fixtures)
+    test_draw_bias.py          — course/distance draw-bias bucketing and win-rate-vs-baseline
+                                  tests, hand-verified arithmetic against synthetic fixtures
+    test_weather_features.py   — RL-001 turf/AW surface classification and rainfall-interaction
+                                  feature tests, against synthetic surfaces/WeatherSnapshots
     test_calibration.py        — Brier/log-loss/calibration-curve tests (synthetic predictions)
     test_walk_forward.py       — walk-forward split harness tests (synthetic chronological data)
     test_model0_market_baseline.py — Model 0 + end-to-end split/predict/score pipeline tests,
@@ -92,6 +154,22 @@ silent-edge-zero/
     test_racecard_theracingapi.py — LIVE provider tests against a real captured API response
                                   fixture (Session 4) — includes the ambiguous off_time
                                   regression case
+    test_odds_betfair.py        — STUB provider tests against a public-docs-shaped fixture
+                                  (NOT a real captured response, unlike the racecard fixture
+                                  above) — name/price merge by selectionId, an unmatched
+                                  selectionId correctly skipped rather than fabricated, an
+                                  empty price ladder returning None not 0, and a JSON-RPC
+                                  error-key response raising rather than being swallowed
+    test_model2_gradient_boosting.py — Model 2 tests: renormalisation edge cases (all-zero,
+                                  empty, negative), fit/predict error handling, and a
+                                  signal-recovery convergence check — synthetic fixtures only.
+    test_model2_hyperparameter_sweep.py — cartesian-product correctness, input validation,
+                                  a 12-combination signal-recovery stability check, and
+                                  summarize_sweep() roll-up stats — synthetic fixtures only.
+    test_race_identity.py       — course-name normalization truth table, exact/tolerance/
+                                  boundary time-matching, greedy multi-candidate assignment,
+                                  tz-aware input handling, and defensive/validation cases —
+                                  synthetic fixtures shaped like both providers' real schemas.
 ```
 
 ## Data integrity rules enforced in code, not just policy

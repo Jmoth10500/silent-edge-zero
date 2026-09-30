@@ -76,6 +76,7 @@ Last verified: 2026-09-19 (RaceIQ research + historical Betfair load added this 
 - **Scraping permission:** N/A, use the API
 - **Reliability:** not yet tested — needs account
 - **Replacement if unavailable:** bookmaker-published odds via The Racing API's odds endpoint (see source 3) can substitute for a rough market-probability baseline if Betfair access stalls
+- **Provider stub:** `src/providers/odds_betfair.py` — written 2026-09-09 (cloud routine) against the public JSON-RPC docs, unit-tested (`tests/test_odds_betfair.py`), not used live while the account is blocked.
 - **Status: BLOCKED — account created, Delayed App Key issued (2026-09-09), but a real session-login call still returns `LIMITED_ACCESS`/`SUSPENDED` even after identity verification. Credentials in `.env`. Do not retry the login endpoint repeatedly (real lockout risk) — only retry with a concrete reason to think the status changed.**
 
 ---
