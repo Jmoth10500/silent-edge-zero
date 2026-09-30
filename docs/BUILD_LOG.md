@@ -20,6 +20,74 @@ Session 133 (2026-09-24), which is where the push-verification bug (found and
 fixed at Session 147) and everything since is logged; see the archive for
 everything before that.
 
+## 2026-09-30 — Session 185 (autonomous overnight, cloud routine)
+
+**The "22 days of silence" is resolved — Jonathan was never gone, he just wasn't pushing to
+GitHub.** Container started on a detached HEAD; `git fetch origin main` (fresh) + `git rev-parse
+HEAD origin/main` matched exactly at `c4e42ee`, no drift, no stale-pointer artifact this time.
+`git log` on that commit shows it is NOT a routine-session commit: `c4e42ee` ("Recover 25-30 Sep
+P&L using starting prices; stop results upsert wiping SP"), authored by Jonathan Nuttall
+(`jonathan@thisisimas.com`) at `2026-09-30T22:29:42+01:00` — **today**, and preceded by
+`ff1041f` ("Merge cloud routine work (origin/main) into local main"), `744c3df` (course ID
+additions), and `69d4b82` (Smarkets date-param fix + silent-failure health check). `origin` also
+now carries a `local-2026-09-30` branch (confirmed, via `git merge-base --is-ancestor`, already
+fully merged into `main` — a leftover ref, not unmerged work).
+
+**What actually happened, pieced together from `docs/BUILD_LOG_LOCAL.md` (1149 lines, read in
+full) and `git log --author=jonathan@thisisimas.com`:** Jonathan has been actively developing and
+*running this project in production* on his own Mac continuously since 2026-09-08 — 89 commits
+under his own name, on 14 distinct calendar days spanning 2026-09-08 through 2026-09-21, then a
+real 9-day gap (09-21 to 09-30), not the 22 days this routine's log kept citing. That 22-day figure
+was only ever true of *GitHub's `main` branch specifically* — all of that local work stayed on his
+local `main` and was never pushed, so every cloud session since Session ~90 was correctly reporting
+"no GitHub activity" while incorrectly implying inactivity. In reality `docs/BUILD_LOG_LOCAL.md`
+documents: a live Netlify-deployed dashboard Jonathan checks on his phone; a nightly
+results-collection pipeline (horseracing.net promoted to primary source after Racing Post's
+meeting-page route became unreliable mid-race-day); real recorded P&L (£1-win/£2-each-way,
+starting-price-based) across dozens of real race days; multiple real bugs found and fixed from
+Jonathan's own live bug reports ("there is 6 pending why?", "lots of data missing", a Safari
+dialog-chaining bug affecting his phone use); an hourly `health_check.py` with macOS notifications
+for silent failures; and, as of today, a real fix for a Smarkets API breaking change (dropped
+`start_date`/`end_date` query params, broke odds collection silently from ~09-24) plus a bug where
+the results-upsert was wiping real starting-price data — both fixed and backfilled today, per
+`c4e42ee`'s own commit message.
+
+**Given this, re-verified rather than assumed:** `env | grep -i THERACINGAPI` → still empty (Mac-only
+credentials, unchanged, did not attempt `collect_racecards.py`/`collect_weather.py`). `bash
+db/setup_local_postgres.sh` + `python3 db/init_db.py` → **15 tables** now (was 13 as of Session
+184 — `market_snapshot` and one other added by local work). `pip install -r requirements.txt` +
+`python3 -m pytest tests/ -q` → **576/576 passed** (was 177 at Session 184 — the jump is local
+work's test suite, now inherited via the merge). Re-read `model1_logistic_baseline.py`'s docstring
+directly: this session's prompt's Phase 6 ask (statistical/logistic baseline over synthetic
+fixtures shaped like the real racecard schema, clearly labeled not-a-real-prediction) remains
+satisfied verbatim by the module's original synthetic-fixture-tested baseline — but is now also
+thoroughly superseded in practice: Model 1 has been walk-forward fit and validated against ~487k
+real runner predictions (RL-006/RL-007), Model 2 (gradient boosting) exists, and the whole system
+is live in production with real results, not a cloud-routine deliverable. **Nothing for this
+session to build.** `git status` clean on `main`, nothing to commit — `c4e42ee` already is
+`origin/main`.
+
+**Push notification sent this session** — this is real news the established "several days, not
+hours" cadence was built to catch, and materially reframes every "N days of silence" note in
+Sessions 163-184 above: Jonathan was actively building and using the real system the whole time,
+just not through this channel or via GitHub pushes.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing, per `BUILD_LOG_LOCAL.md` — horseracing.net + Racing Post already
+cover real results). Racecard/weather collection remains Mac-only — the cloud routine environment
+has no THERACINGAPI credentials.
+
+**Next session:** `git checkout main`, `git fetch origin main` (fresh), compare `git rev-parse HEAD
+origin/main` before doing anything else. Read `docs/BUILD_LOG_LOCAL.md`'s tail for the latest local
+activity — it is now the primary source of truth for what this project actually is and does;
+`docs/BUILD_LOG.md` (this file) is secondary, cloud-routine-only bookkeeping. If Jonathan has
+pushed again, or replied to the notification sent this session, act on that. Otherwise the old
+"several days, not hours" notification cadence from Session 163 no longer applies as-is — this
+session's notification supersedes it; use judgement on when new cloud-routine activity (further
+local pushes, a reply, a new ask) next warrants surfacing something, rather than falling back into
+the old daily "still quiet" bookkeeping now that quiet-on-GitHub has been shown not to mean
+quiet-in-reality.
+
 ## 2026-09-30 — Session 184 (autonomous overnight, cloud routine)
 
 **168th consecutive session, same stale prompt, no change — no notification (~66 hours since
