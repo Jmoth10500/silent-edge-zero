@@ -1137,3 +1137,13 @@ Jonathan: "silent edge zero, can you update the website and results." The schedu
 Full suite: **489/489 pass** (no new tests — this is the same established "add real course to the mapping dict" pattern already covered by that pattern's own existing tests, not new logic).
 
 **Real, honest note on the P&L numbers:** this is a genuine correction, not new data — some past days' recorded win-rate/P&L figures shift slightly (always toward more accurate, since previously-excluded genuine losses/voids are now counted). 2026-09-12's headline figure in particular drops from the 41.2% quoted earlier this week to the corrected 35.9%.
+
+---
+
+## 2026-09-30 — "lots of data missing" — two silent failures found, fixed, and an alert added
+
+**Odds:** Smarkets removed the `start_date`/`end_date` params on `/v3/events/` (now 400 "Unknown query string properties"), so odds collection failed on every run from ~2026-09-24. Fixed in `src/providers/odds_smarkets.py` with `start_datetime_min`/`start_datetime_max`. No odds exist for 25-30 Sep and Smarkets has no history, so those days' P&L / favourite stats are empty (not real zeros).
+
+**Results:** 13 courses had no horseracing.net slug (catterick, warwick, epsom, haydock, ripon, market rasen, worcester, fontwell, salisbury, nottingham, goodwood, brighton, perth), so their races were skipped nightly. Slugs added and 22-30 Sep backfilled; daily summaries regenerated. The `__NEXT_DATA__` errors in the log are the Racing Post fallback, not the cause.
+
+**Alerting:** `scripts/health_check.py` (hourly via `com.silentedgezero.health-check`) flags no/stale odds, missing predictions, unmapped courses, and >10% unsettled races, with a once-per-day macOS notification and `logs/health_status.json`.

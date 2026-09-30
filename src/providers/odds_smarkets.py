@@ -155,8 +155,11 @@ def list_horse_racing_events(target_date: date) -> list[SmarketsEvent]:
     events: list[SmarketsEvent] = []
     params = {
         "type": "horse_racing_race",
-        "start_date": target_date.isoformat(),
-        "end_date": target_date.isoformat(),
+        # Smarkets dropped start_date/end_date (400 "Unknown query string
+        # properties") — found 2026-09-30, silently broke odds collection
+        # from ~2026-09-24. Replaced by start_datetime_min/max.
+        "start_datetime_min": f"{target_date.isoformat()}T00:00:00Z",
+        "start_datetime_max": f"{target_date.isoformat()}T23:59:59Z",
     }
     url = f"{BASE_URL}/events/"
 

@@ -56,6 +56,19 @@ from src.providers.horseracingnet_results import parse_finish_text, parse_race_r
 # site uses plain 'lingfield' even for the AW fixture, no separate
 # '-aw' slug — confirmed live 2026-09-13, matched by real off_times).
 HORSERACINGNET_COURSE_SLUGS: dict[str, str] = {
+    "catterick": "catterick",
+    "warwick": "warwick",
+    "epsom": "epsom",
+    "haydock": "haydock",
+    "ripon": "ripon",
+    "market rasen": "market-rasen",
+    "worcester": "worcester",
+    "fontwell": "fontwell",
+    "salisbury": "salisbury",
+    "nottingham": "nottingham",
+    "goodwood": "goodwood",
+    "brighton": "brighton",
+    "perth": "perth",
     "doncaster": "doncaster",
     "bath": "bath",
     "chester": "chester",
