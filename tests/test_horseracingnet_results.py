@@ -151,3 +151,26 @@ if __name__ == "__main__":
             print(f"  FAIL: {e}")
     print(f"\n{passed}/{len(tests)} tests passed.")
     sys.exit(0 if passed == len(tests) else 1)
+
+
+# --- starting price parsing (added 2026-09-30) ---
+from src.providers.horseracingnet_results import parse_sp_decimal, parse_race_runners
+
+
+def test_parse_sp_decimal_values():
+    assert parse_sp_decimal('<li class="results-table-row" data-oddsdecimal="2.875">') == 2.875
+    assert parse_sp_decimal('<li class="results-table-row" data-oddsdecimal="4">') == 4.0
+
+
+def test_parse_sp_decimal_junk_is_none():
+    assert parse_sp_decimal('<li class="results-table-row">') is None
+    assert parse_sp_decimal('<li data-oddsdecimal="">') is None
+    assert parse_sp_decimal('<li data-oddsdecimal="0">') is None
+    assert parse_sp_decimal('<li data-oddsdecimal="abc">') is None
+
+
+def test_parse_race_runners_carries_sp():
+    html = ('<li class="results-table-row" data-oddsdecimal="6"><span class=\'position-highlight\'>1st</span>'
+            '<a class="runner-title"> Centigrade </a>')
+    out = parse_race_runners(html)
+    assert out[0]["horse_name"] == "Centigrade" and out[0]["starting_price"] == 6.0

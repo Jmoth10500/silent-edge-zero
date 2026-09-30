@@ -59,6 +59,25 @@ def _extract_finish_text(li_html: str) -> str | None:
     return tokens[0] if tokens else None
 
 
+_SP_ATTR_RE = re.compile(r'data-oddsdecimal="([^"]*)"')
+
+
+def parse_sp_decimal(row_open_tag: str) -> float | None:
+    """Real decimal starting price from a runner row's `data-oddsdecimal`
+    attribute (verified 2026-09-30 against Racing Post SPs already in the DB:
+    Please Don't Go 4, Plaid 2.2, Flower Youmzain 2.875, exact matches).
+    None when missing, non-numeric or <= 1.0 (non-runners/voids carry junk),
+    never guessed."""
+    m = _SP_ATTR_RE.search(row_open_tag)
+    if not m:
+        return None
+    try:
+        v = float(m.group(1))
+    except ValueError:
+        return None
+    return v if v > 1.0 else None
+
+
 def parse_race_runners(section_html: str) -> list[dict]:
     """Real runner list for one race's section — [{horse_name, finish_text}, ...].
     `finish_text` is the real raw marker text (a position like '3rd', or
@@ -86,7 +105,8 @@ def parse_race_runners(section_html: str) -> list[dict]:
         if not name_match:
             continue
         finish_text = _extract_finish_text(block)
-        out.append({"horse_name": name_match.group(1).strip(), "finish_text": finish_text})
+        out.append({"horse_name": name_match.group(1).strip(), "finish_text": finish_text,
+                    "starting_price": parse_sp_decimal(m.group(0))})
     return out
 
 

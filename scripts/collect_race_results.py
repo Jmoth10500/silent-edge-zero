@@ -352,7 +352,7 @@ def insert_results(conn, source_id: int, race_id: int, rows: list[dict], our_run
             ON CONFLICT (race_id, horse_id) DO UPDATE SET
                 finishing_position = EXCLUDED.finishing_position,
                 distance_beaten = EXCLUDED.distance_beaten,
-                starting_price = EXCLUDED.starting_price,
+                starting_price = COALESCE(EXCLUDED.starting_price, runner_result.starting_price),
                 result_note = EXCLUDED.result_note,
                 observed_at = EXCLUDED.observed_at
             """,

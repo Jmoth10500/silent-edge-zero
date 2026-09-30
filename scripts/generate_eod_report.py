@@ -69,12 +69,13 @@ def load_top_picks_and_favourites(conn, race_date: date):
     cur.execute(
         """
         SELECT r.id, r.off_time, c.name, r.race_name, h.id, h.name,
-               p.model_probability, ms.exchange_back
+               p.model_probability, ms.exchange_back, rr.starting_price
         FROM prediction p
         JOIN race r ON r.id = p.race_id
         JOIN course c ON c.id = r.course_id
         JOIN horse h ON h.id = p.horse_id
         JOIN model_version mv ON mv.id = p.model_version_id
+        LEFT JOIN runner_result rr ON rr.race_id = r.id AND rr.horse_id = h.id
         LEFT JOIN LATERAL (
             SELECT exchange_back
             FROM market_snapshot ms2
@@ -92,7 +93,7 @@ def load_top_picks_and_favourites(conn, race_date: date):
     races: dict[int, dict] = {}
     order: list[int] = []
     for (race_id, off_time, course_name, race_name, horse_id, horse_name,
-         prob, exchange_back) in rows:
+         prob, exchange_back, starting_price) in rows:
         if race_id not in races:
             races[race_id] = {
                 "race_id": race_id, "off_time": off_time, "course_name": course_name,
@@ -103,6 +104,7 @@ def load_top_picks_and_favourites(conn, race_date: date):
             "horse_id": horse_id, "horse_name": horse_name,
             "model_probability": float(prob),
             "exchange_back": float(exchange_back) if exchange_back is not None else None,
+            "starting_price": float(starting_price) if starting_price is not None else None,
         })
         races[race_id]["field_size"] += 1
 
@@ -111,6 +113,17 @@ def load_top_picks_and_favourites(conn, race_date: date):
         race = races[rid]
         runners = race["runners"]
         top_pick = max(runners, key=lambda x: x["model_probability"])
+        race["odds_basis"] = "exchange"
+        if not any(x["exchange_back"] is not None for x in runners) and any(
+                x["starting_price"] is not None for x in runners):
+            # No exchange price was ever captured for this race (e.g. the
+            # 2026-09-24..30 Smarkets outage). Fall back to the real starting
+            # price for the WHOLE race (never mixed within a race) so the race
+            # can still be settled. `exchange_back` carries the SP here; the
+            # race is flagged odds_basis="sp" so callers can disclose it.
+            race["odds_basis"] = "sp"
+            for x in runners:
+                x["exchange_back"] = x["starting_price"]
         priced = [x for x in runners if x["exchange_back"] is not None]
         favourite = min(priced, key=lambda x: x["exchange_back"]) if priced else None
         race["top_pick"] = top_pick

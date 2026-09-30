@@ -61,6 +61,7 @@ def compute_daily_summary(races: list[dict], results: dict) -> dict:
     win_profit = 0.0
     ew_stake_total = 0.0
     ew_profit = 0.0
+    sp_priced_races = 0  # settled on starting price, not exchange price — disclosed
 
     for race in races:
         tp = race["top_pick"]
@@ -96,6 +97,8 @@ def compute_daily_summary(races: list[dict], results: dict) -> dict:
 
         wp, _ = settle_win(1.0, tp["exchange_back"], tp_pos, tp_note)
         if wp is not None and not is_void:
+            if race.get("odds_basis") == "sp":
+                sp_priced_races += 1
             win_stake_total += 1.0
             win_profit += wp
 
@@ -114,6 +117,7 @@ def compute_daily_summary(races: list[dict], results: dict) -> dict:
         "win_profit": round(win_profit, 2),
         "ew_stake_total": round(ew_stake_total, 2),
         "ew_profit": round(ew_profit, 2),
+        "sp_priced_races": sp_priced_races,
     }
 
 
@@ -123,8 +127,8 @@ def upsert_daily_summary(conn, race_date: date, summary: dict) -> None:
         """
         INSERT INTO daily_summary
             (race_date, races_total, races_settled, top_pick_wins, top_pick_placed,
-             favourite_wins, win_stake_total, win_profit, ew_stake_total, ew_profit)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             favourite_wins, win_stake_total, win_profit, ew_stake_total, ew_profit, sp_priced_races)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (race_date) DO UPDATE SET
             races_total = EXCLUDED.races_total,
             races_settled = EXCLUDED.races_settled,
@@ -135,13 +139,14 @@ def upsert_daily_summary(conn, race_date: date, summary: dict) -> None:
             win_profit = EXCLUDED.win_profit,
             ew_stake_total = EXCLUDED.ew_stake_total,
             ew_profit = EXCLUDED.ew_profit,
+            sp_priced_races = EXCLUDED.sp_priced_races,
             computed_at = now()
         """,
         (
             race_date, summary["races_total"], summary["races_settled"],
             summary["top_pick_wins"], summary["top_pick_placed"], summary["favourite_wins"],
             summary["win_stake_total"], summary["win_profit"],
-            summary["ew_stake_total"], summary["ew_profit"],
+            summary["ew_stake_total"], summary["ew_profit"], summary["sp_priced_races"],
         ),
     )
     conn.commit()

@@ -138,7 +138,7 @@ def get_or_create_hrnet_source(conn) -> int:
         "'Real, free, fetched via headless browser. Promoted to PRIMARY results "
         "source 2026-09-13 after Racing Post''s meeting-page route became unreliable "
         "for finished race days — real, verified live (9/9 spot-check, then 398/398 "
-        "at full scale). No starting_price/distance_beaten parsed yet.') "
+        "at full scale). starting_price parsed from data-oddsdecimal since 2026-09-30; no distance_beaten yet.') "
         "ON CONFLICT (name) DO NOTHING",
         (date.today(),),
     )
@@ -213,7 +213,7 @@ def main():
                 position, note = parse_finish_text(r["finish_text"])
                 rows.append({
                     "horse_name_key": key, "finishing_position": position,
-                    "result_note": note, "starting_price": None, "distance_beaten": None,
+                    "result_note": note, "starting_price": r.get("starting_price"), "distance_beaten": None,
                 })
             n, insert_unmatched = insert_results(conn, hrnet_source_id, race_id, rows, our_runners)
             n_races_matched += 1

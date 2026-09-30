@@ -164,6 +164,7 @@ CREATE TABLE IF NOT EXISTS daily_summary (
     win_profit                 NUMERIC NOT NULL,
     ew_stake_total              NUMERIC NOT NULL,  -- total real £2-per-race stake actually settled
     ew_profit                   NUMERIC NOT NULL,
+    sp_priced_races             INTEGER NOT NULL DEFAULT 0,  -- races settled on starting price because no exchange price was captured
     computed_at                 TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
