@@ -9,6 +9,58 @@ re-doing finished work.
 
 ---
 
+## 2026-10-01 — Session 189 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — no notification.** Container started on a detached `HEAD`
+4 commits behind a stale locally-cached `main` pointer (the recurring base-image artifact seen
+every session since ~130 — only `BUILD_LOG.md` entries, no code); `git fetch origin main` (fresh)
++ `git checkout main` + `git merge --ff-only origin/main` fast-forwarded cleanly to `13d0912`
+(Session 188's commit), confirmed via `git rev-list --left-right --count origin/main...main` →
+`0 0` after. `env | grep -i THERACINGAPI` → empty, confirmed directly (Mac-only credentials; did
+not attempt `collect_racecards.py`/`collect_weather.py`, per this session's prompt correction, same
+as every prior cloud session). Read `model1_logistic_baseline.py`'s module docstring directly (not
+from memory): this session's prompt's Phase 6 ask — a statistical/logistic baseline over synthetic
+fixtures shaped like the real racecard schema (`official_rating` int, `draw` int, `recent_form` as
+an undelimited string like `"1582F3"`), producing a per-race softmax that sums to 1.0, clearly
+labeled not-a-real-prediction — remains satisfied verbatim by that module, exactly as Sessions
+139/185-188 already found, and further superseded in practice by the real Kaggle-fitted Model 1
+(RL-006/RL-007) and Model 2 gradient boosting (Phase 7), both already in `src/models/`. No new code
+written; a duplicate second baseline next to the existing one would be redundant, not additive. No
+TODO/FIXME/XXX in `src/`/`scripts`/`tests`/`db`.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) → **576/576 passed**, same count
+as Sessions 185-188. GitHub checked directly via a subagent using `mcp__github__` tools: 0 open
+issues, 0 pull requests (open or closed). Last 5 commits on `main`: Sessions 185-188's own
+re-verify commits (`15ebd36`/`bdc5ab7`/`53109c4`/`13d0912`), plus Jonathan's real `c4e42ee`
+("Recover 25-30 Sep P&L using starting prices; stop results upsert wiping SP", 2026-09-30T22:29:42
++01:00) just below them — the same commit already covered by Session 185's notification, still the
+most recent human push, no reply or new activity since. `docs/BUILD_LOG_LOCAL.md` tail re-read
+directly (1149 lines, unchanged): most recent entry still the 2026-09-30 Smarkets/results fix
+already covered by `c4e42ee`, no new local work since Session 185.
+
+**No push notification this session.** Nothing has changed since Session 185's "22-day silence
+resolved" notification and Sessions 186-188's re-verifications: same `HEAD` (modulo routine commits),
+same test count, same 0 issues/PRs, no new Jonathan activity. Sending another notification now would
+just repeat news already delivered.
+
+**Housekeeping note:** `docs/BUILD_LOG.md` is now ~224KB/2774 lines before this entry — within a
+few KB of the ~230KB watch threshold flagged since Session 152. A future session should archive
+another block (same pattern as the Session 101/159 archives) once it crosses that line, to keep this
+file comfortably inside the `Read` tool's single-call window.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing, per `BUILD_LOG_LOCAL.md`). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials.
+
+**Next session:** `git checkout main`, `git fetch origin main` (fresh), compare `git rev-parse HEAD
+origin/main` before doing anything else. Read `docs/BUILD_LOG_LOCAL.md`'s tail for the latest local
+activity. If Jonathan has pushed again or replied, act on that; otherwise use judgement on when new
+activity next warrants surfacing something, per Session 185's note — repeating "still nothing new"
+every run is not itself useful signal. Also: `docs/BUILD_LOG.md` is near the ~230KB archive
+threshold (see housekeeping note above) — consider archiving the oldest unarchived sessions if it
+crosses that line.
+
 ## 2026-10-01 — Session 188 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — no notification.** `git fetch origin main` (fresh) + `git
