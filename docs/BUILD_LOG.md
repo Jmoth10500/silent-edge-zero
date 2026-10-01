@@ -9,6 +9,59 @@ re-doing finished work.
 
 ---
 
+## 2026-10-01 — Session 191 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — no notification.** Container started on a detached `HEAD`
+exactly at `origin/main` (`88e3dd6`, Session 190's own commit) — `git fetch origin main` (fresh)
+confirmed `HEAD`/`origin/main` identical before doing anything else; `git checkout main && git
+merge --ff-only origin/main` fast-forwarded the local branch cleanly (279 insertions to
+`BUILD_LOG.md` only, no code — Session 190's entry). `env | grep -i THERACINGAPI` → empty,
+confirmed directly (Mac-only credentials; did not attempt `collect_racecards.py`/
+`collect_weather.py`, per this session's prompt correction, same as every prior cloud session).
+Read `model1_logistic_baseline.py`'s module docstring directly (not from memory): this session's
+prompt's Phase 6 ask — a statistical/logistic baseline over synthetic fixtures shaped like the real
+racecard schema (`official_rating` int, `draw` int, `recent_form` as an undelimited string like
+`"1582F3"`), producing a per-race softmax that sums to 1.0, clearly labeled not-a-real-prediction —
+remains satisfied verbatim by that module, exactly as Sessions 139/185-190 already found, and
+further superseded in practice by the real Kaggle-fitted Model 1 (RL-006/RL-007) and Model 2
+gradient boosting (Phase 7), both already in `src/models/`. No new code written; a duplicate second
+baseline next to the existing one would be redundant, not additive.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) → **576/576 passed**, same count
+as Sessions 185-190. GitHub checked directly via a subagent using `mcp__github__` tools: 0 open
+issues, 0 pull requests (open or closed, 0 total ever). Last 5 commits on `main` are all Sessions
+186-190's own re-verify commits (`bdc5ab7`/`53109c4`/`13d0912`/`565f55b`/`88e3dd6`) — Jonathan's real
+`c4e42ee` ("Recover 25-30 Sep P&L using starting prices; stop results upsert wiping SP",
+2026-09-30T22:29:42+01:00) is just below them, still the most recent human push, no reply or new
+activity since. `docs/BUILD_LOG_LOCAL.md` tail re-read directly (1149 lines, unchanged): most recent
+entry still the 2026-09-30 Smarkets/results fix already covered by `c4e42ee`, no new local work
+since Session 185.
+
+**No push notification this session.** Nothing has changed since Session 185's "22-day silence
+resolved" notification and Sessions 186-190's re-verifications: same `HEAD` (modulo routine commits),
+same test count, same 0 issues/PRs, no new Jonathan activity. Sending another notification now would
+just repeat news already delivered.
+
+**Housekeeping note:** `docs/BUILD_LOG.md` is now ~232KB/2878 lines before this entry — at the
+~230KB watch threshold flagged since Session 152 (this is the first session to measure it as having
+crossed, by decimal-KB reckoning; still comfortably inside the `Read` tool's window in practice).
+This entry is routine, not sizeable, so per the standing instruction it is not the trigger to
+archive; the next session that adds a sizeable entry should archive another block (same pattern as
+the Session 101/159 archives, into the existing `docs/BUILD_LOG_ARCHIVE.md`).
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing, per `BUILD_LOG_LOCAL.md`). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials.
+
+**Next session:** `git checkout main`, `git fetch origin main` (fresh), compare `git rev-parse HEAD
+origin/main` before doing anything else. Read `docs/BUILD_LOG_LOCAL.md`'s tail for the latest local
+activity. If Jonathan has pushed again or replied, act on that; otherwise use judgement on when new
+activity next warrants surfacing something, per Session 185's note — repeating "still nothing new"
+every run is not itself useful signal. Also: `docs/BUILD_LOG.md` is at the ~230KB archive threshold
+(see housekeeping note above) — archive the oldest unarchived sessions once a session with a
+sizeable entry comes along.
+
 ## 2026-10-01 — Session 190 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — no notification.** Container started on a detached `HEAD`
