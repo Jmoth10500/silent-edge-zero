@@ -9,6 +9,36 @@ re-doing finished work.
 
 ---
 
+## 2026-10-01 — Session 186 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — no notification.** `git fetch origin main` (fresh) confirmed
+local `HEAD` already exactly at `origin/main` (`15ebd36`, Session 185's commit) before doing
+anything else. `env | grep -i THERACINGAPI` → empty (Mac-only credentials, confirmed directly; did
+not attempt `collect_racecards.py`/`collect_weather.py`, per this session's prompt correction).
+Re-read `model1_logistic_baseline.py`'s module docstring directly: this session's prompt's Phase 6
+ask (statistical/logistic baseline over synthetic fixtures shaped like the real racecard schema,
+clearly labeled not-a-real-prediction) remains satisfied verbatim by the module's original
+synthetic-fixture-tested baseline, as Session 185 found — nothing new to build. Full suite re-run
+(`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) + `pip install -r
+requirements.txt` + `python3 -m pytest tests/ -q`) → **576/576 passed**, same count as Session 185.
+GitHub checked directly via `mcp__github__` tools: 0 issues in any state, 0 pull requests ever (open
+or closed), last 5 commits on `main` unchanged since Session 185 (Jonathan's real
+`c4e42ee`/`ff1041f`/`744c3df`/`69d4b82` plus Session 185's own log commit) — no reply, no new local
+push since Session 185 ran.
+
+**No push notification this session.** Session 185 already sent the "22-day silence resolved"
+notification for exactly this discovery a few hours ago; nothing has changed since (same HEAD,
+same test count, same 0 issues/PRs, no new Jonathan activity). Sending again now would repeat news
+already delivered.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing, per `BUILD_LOG_LOCAL.md`). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials.
+
+**Next session:** `git checkout main`, `git fetch origin main` (fresh), compare `git rev-parse HEAD
+origin/main` before doing anything else. Read `docs/BUILD_LOG_LOCAL.md`'s tail for the latest local
+activity. If Jonathan has pushed again or replied, act on that; otherwise use judgement on when new
+activity next warrants surfacing something, per Session 185's note.
 
 **Archive note (added Session 101, 2026-09-20; extended Session 159, 2026-09-27):**
 Sessions 1-90 (2026-09-08 to 2026-09-19) and Sessions 91-132 (2026-09-19 to
