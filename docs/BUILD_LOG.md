@@ -9,6 +9,43 @@ re-doing finished work.
 
 ---
 
+## 2026-10-01 — Session 187 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — no notification.** Container started on a detached `HEAD` at
+`bdc5ab7` (Session 186's commit); `git checkout main && git fetch origin main` (fresh) +
+`git merge --ff-only origin/main` confirmed it was already exactly `origin/main`, no drift. `env |
+grep THERACINGAPI` → empty, confirmed directly (Mac-only credentials; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's prompt correction, same as every
+prior cloud session). Read `model1_logistic_baseline.py`'s module docstring and
+`tests/test_model1_logistic_baseline.py` directly (not from memory): this session's prompt's Phase
+6 ask — a statistical/logistic baseline over synthetic fixtures shaped like the real racecard
+schema (`official_rating` int, `draw` int, `recent_form` as an undelimited string like `"1582F3"`),
+producing a per-race softmax that sums to 1.0, clearly labeled not-a-real-prediction — remains
+satisfied verbatim by that module, exactly as Sessions 139/185/186 already found. No new code
+written; writing a duplicate second baseline next to the existing one would just be redundant, not
+additive.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) → **576/576 passed**, same count
+as Sessions 185/186. GitHub checked directly via `mcp__github__` tools: 0 open issues, 0 pull
+requests (open or closed), last 5 commits on `main` unchanged since Session 186 (same
+`bdc5ab7`/`15ebd36`/`c4e42ee`/`ff1041f`/`744c3df`) — no reply, no new local push since Session 186.
+
+**No push notification this session.** Nothing has changed since Session 185's "22-day silence
+resolved" notification and Session 186's re-verification: same `HEAD`, same test count, same 0
+issues/PRs, no new Jonathan activity. Sending another notification now would just repeat news
+already delivered twice.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing, per `BUILD_LOG_LOCAL.md`). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials.
+
+**Next session:** `git checkout main`, `git fetch origin main` (fresh), compare `git rev-parse HEAD
+origin/main` before doing anything else. Read `docs/BUILD_LOG_LOCAL.md`'s tail for the latest local
+activity. If Jonathan has pushed again or replied, act on that; otherwise use judgement on when new
+activity next warrants surfacing something, per Session 185's note — repeating "still nothing new"
+every run is not itself useful signal.
+
 ## 2026-10-01 — Session 186 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — no notification.** `git fetch origin main` (fresh) confirmed
