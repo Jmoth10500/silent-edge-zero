@@ -9,6 +9,55 @@ re-doing finished work.
 
 ---
 
+## 2026-10-05 — Session 221 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — no notification.** Container started on a detached `HEAD` one
+commit behind `origin/main` due to the known stale-cached-ref trap (local `main` pointer was still
+at `c4e42ee`, 36 commits behind): a fresh `git fetch origin --prune` (no cached ref) resolved it
+immediately, surfacing `origin/main` at `30fccd0` (Session 220's commit) and a `local-2026-09-30`
+branch (Jonathan's own interactive-session branch, untouched by this routine). `git checkout main &&
+git merge --ff-only origin/main` fast-forwarded cleanly (`BUILD_LOG.md`/`BUILD_LOG_ARCHIVE.md` only,
+no code; `git rev-list --left-right --count origin/main...main` → `0 0` after). `env | grep -i
+THERACINGAPI` → empty, confirmed directly (Mac-only credentials; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's prompt correction, same as every
+prior cloud session). Read `src/models/model1_logistic_baseline.py`'s module docstring directly (not
+from memory): this session's prompt's Phase 6 ask — a statistical/logistic baseline over synthetic
+fixtures shaped exactly like the real racecard schema (`official_rating` int, `draw` int,
+`recent_form` as an undelimited string like `"1582F3"`), producing a per-race softmax that sums to
+1.0, clearly labeled not-a-real-prediction — remains satisfied verbatim by that module, exactly as
+Sessions 139/185-220 already found, and further superseded in practice by the real Kaggle-fitted
+Model 1 (RL-006/RL-007) and Model 2 gradient boosting (Phase 7), both already in `src/models/`. No
+new code written; a duplicate second baseline next to the existing one would be redundant, not
+additive. No TODO/FIXME/XXX in `src/`/`scripts`/`tests`/`db` (confirmed via `grep -rc`, sum 0).
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) → **576/576 passed**, same count
+as Sessions 185-220. GitHub checked via a subagent (`mcp__github__list_issues`/
+`list_pull_requests`/`search_commits`/`list_commits`): 0 issues (any state), 0 pull requests (any
+state), most recent human (`author-name:Jonathan`) commit on `main` still `c4e42ee` ("Recover 25-30
+Sep P&L using starting prices; stop results upsert wiping SP", 2026-09-30T22:29:42+01:00) — 98 total
+matches, none more recent. Last 10 commits on `main` are all Sessions 211-220's own re-verify
+commits, authored by `Claude <noreply@anthropic.com>`. 5 days since Jonathan's last activity — well
+short of the ~20-day threshold this routine has used before surfacing a silence notification, so
+nothing to flag yet.
+
+**No push notification this session.** Nothing material has changed since Session 220: same `HEAD`
+(modulo routine commits), same test count, same 0 issues/PRs, only 5 days of silence (not yet
+notification-worthy under the established cadence).
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing, per `BUILD_LOG_LOCAL.md`). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials.
+
+**Next session:** `git checkout main`, `git fetch origin main` (fresh, no cached ref), compare `git
+rev-parse HEAD origin/main` before doing anything else — this session again hit the stale local
+`main`-pointer trap (worth re-stating since it keeps recurring: a fresh fetch, not a cached ref,
+resolves it every time). Read `docs/BUILD_LOG_LOCAL.md`'s tail for any new local activity. If
+Jonathan has pushed again or replied, act on that; otherwise keep using judgement on when renewed
+silence next warrants surfacing something. `docs/BUILD_LOG.md` is ~225KB/2810 lines before this
+entry, now ~229KB after it — right at the ~230KB archive threshold previously used; the next session
+should archive older entries into `docs/BUILD_LOG_ARCHIVE.md` before appending further.
+
 ## 2026-10-05 — Session 220 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — no notification.** Container started on a detached `HEAD`
