@@ -9,6 +9,53 @@ re-doing finished work.
 
 ---
 
+## 2026-10-05 — Session 223 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — no notification.** Container started on a detached `HEAD`
+behind a stale locally-cached `main` pointer (`c4e42ee`); `git fetch origin main` (fresh) resolved
+`origin/main` to `d146546` (Session 222's own commit, which archived the Sessions 163-202 "no
+change" block out of this file into `BUILD_LOG_ARCHIVE.md`, 229KB -> 75KB — no code changed), and
+`git checkout main && git merge --ff-only origin/main` fast-forwarded cleanly (`git rev-list
+--left-right --count origin/main...main` -> `0 0` after). `env | grep -i THERACINGAPI` -> empty,
+confirmed directly (Mac-only credentials; did not attempt `collect_racecards.py`/
+`collect_weather.py`, per this session's prompt correction, same as every prior cloud session).
+Read `src/models/model1_logistic_baseline.py`'s module docstring directly (not from memory): this
+session's prompt's Phase 6 ask — a statistical/logistic baseline over synthetic fixtures shaped
+exactly like the real racecard schema (`official_rating` int, `draw` int, `recent_form` as an
+undelimited string like `"1582F3"`), producing a per-race softmax that sums to 1.0, clearly labeled
+not-a-real-prediction — remains satisfied verbatim by that module, exactly as Sessions 139/185-222
+already found, and further superseded in practice by the real Kaggle-fitted Model 1 (RL-006/RL-007)
+and Model 2 gradient boosting (Phase 7), both already in `src/models/`. No new code written; a
+duplicate second baseline next to the existing one would be redundant, not additive. No
+TODO/FIXME/XXX anywhere in `src/`/`scripts`/`tests`/`db` (confirmed via `grep -rn`, 0 matches).
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576 passed**, same
+count as Sessions 185-222. GitHub checked via a subagent (`mcp__github__list_issues`/
+`list_pull_requests`/`list_commits`): 0 issues (state: all), 0 pull requests (state: all). Most
+recent 5 commits on `main` are Sessions 218-222's own re-verify/archiving commits, all authored by
+`Claude <noreply@anthropic.com>` — Jonathan's real `c4e42ee` ("Recover 25-30 Sep P&L using starting
+prices; stop results upsert wiping SP", 2026-09-30T22:29:42+01:00) remains the most recent human
+commit, no reply or new activity since (~5 days). `docs/BUILD_LOG_LOCAL.md` tail re-read directly
+(1149 lines, unchanged): most recent entry still the 2026-09-30 Smarkets/results fix already
+covered by `c4e42ee`.
+
+**No push notification this session.** Nothing material has changed since Session 222: same `HEAD`
+(modulo this routine's own commit), same test count, same 0 issues/PRs, and only ~5 days of silence
+— well short of the ~20-day threshold this routine has used before surfacing a silence
+notification.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing, per `BUILD_LOG_LOCAL.md`). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials.
+
+**Next session:** `git checkout main`, `git fetch origin main` (fresh, no cached ref), compare `git
+rev-parse HEAD origin/main` before doing anything else — the stale-cached-ref trap keeps recurring.
+Read `docs/BUILD_LOG_LOCAL.md`'s tail for any new local activity. If Jonathan has pushed again or
+replied, act on that; otherwise keep using judgement on when renewed silence next warrants
+surfacing something. `docs/BUILD_LOG.md` is ~75KB/943 lines before this entry — comfortably under
+the ~230KB archive threshold (Session 222 already archived), no archiving needed yet.
+
 ## 2026-10-05 — Session 221 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — no notification.** Container started on a detached `HEAD` one
