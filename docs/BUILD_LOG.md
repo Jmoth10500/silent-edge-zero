@@ -9,6 +9,67 @@ re-doing finished work.
 
 ---
 
+## 2026-10-05 — Session 224 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — notifying anyway, about the routine itself, not the backlog.**
+`git fetch origin main` (fresh) resolved `origin/main` to `d27bc71` (Session 223's own commit,
+~3 hours before this one); `HEAD` was already detached exactly there, so `git checkout main`
+needed no fast-forward (`git rev-list --left-right --count origin/main...main` -> `0 0`). `env |
+grep -i THERACINGAPI` -> empty, confirmed directly (Mac-only credentials; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's prompt correction, same as every
+prior cloud session).
+
+Re-checked this session's prompt's Phase 6 ask against `src/models/model1_logistic_baseline.py`
+directly (not from memory): a statistical/logistic baseline over synthetic fixtures shaped exactly
+like the real racecard schema (`official_rating` int, `draw` int, `recent_form` as an undelimited
+string like `"1582F3"`), producing a per-race softmax that sums to 1.0, clearly labeled
+not-a-real-prediction. Confirmed satisfied verbatim, exactly as Sessions 139/185-223 already
+found, and superseded in practice by the real Kaggle-fitted Model 1 (RL-006/RL-007) and Model 2
+gradient boosting (Phase 7), both already in `src/models/`. No new code written.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576 passed**, same
+count as Sessions 185-223. GitHub checked via a subagent (`mcp__github__list_issues`/
+`list_pull_requests`/`list_commits`): 0 issues (state: all), 0 pull requests (state: all), and the
+10 most recent commits on `main` are all Sessions 214-223's own re-verify commits, authored by
+`Claude <noreply@anthropic.com>` — no one else has committed since Jonathan's real `c4e42ee`
+("Recover 25-30 Sep P&L using starting prices; stop results upsert wiping SP",
+2026-09-30T22:29:42+01:00), ~5 days ago. `docs/BUILD_LOG_LOCAL.md` tail re-read directly
+(unchanged): most recent entry still the 2026-09-30 Smarkets/results fix already covered by
+`c4e42ee`.
+
+**Sending a notification this session despite no code/data change** — not about the Phase 6
+backlog (genuinely exhausted, as Sessions 221-223 already found and as this session re-confirmed),
+but about the routine's own cadence: this is the **8th consecutive "no change" cloud-routine run in
+roughly 24 hours** (Sessions 217-224, timestamps ~3 hours apart, 2026-10-04T21:56 through
+2026-10-05T19:06 and now), every one re-running the full Postgres setup + pip install + 576-test
+suite only to confirm the same thing Session 185 already established. Sessions 221/222 both noted
+this was worth flagging "next natural occasion" and deferred; this session is making that the
+occasion, since deferring again at ~every session for two more weeks running isn't actually
+useful. Flagging to Jonathan directly: the cloud-side backlog is exhausted pending his own Mac-side
+`THERACINGAPI` credentials (no action this routine can take unblocks that), and an every-~3-hours
+schedule for a routine with nothing left to do is pure overhead (compute time, redundant commits
+cluttering `main`'s history, routine cost) — his call whether to pause this scheduled task entirely
+until he has new work for it, or drop it to a much coarser cadence (e.g. once/day) as a cheap
+safety net. Not changing the schedule myself — that's a config decision outside this routine's own
+scope, for Jonathan to make from the cloud/web UI, not something this session can or should alter
+unilaterally.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing, per `BUILD_LOG_LOCAL.md`). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials.
+
+**Next session:** `git checkout main`, `git fetch origin main` (fresh, no cached ref), compare `git
+rev-parse HEAD origin/main` before doing anything else. Read `docs/BUILD_LOG_LOCAL.md`'s tail for
+any new local activity. If Jonathan has replied to this session's notification (paused/adjusted the
+schedule, or supplied new work), act on that explicitly — don't re-derive the same "nothing to do"
+conclusion from scratch if he's already responded. Otherwise, per this session's own notification,
+don't notify again purely about "still nothing new" / "still exhausted" — that message has now been
+sent once; repeating it isn't additive. `docs/BUILD_LOG.md` is small again after Session 222's
+archiving (well under the ~230KB threshold).
+
+---
+
 ## 2026-10-05 — Session 223 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — no notification.** Container started on a detached `HEAD`
