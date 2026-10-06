@@ -9,6 +9,62 @@ re-doing finished work.
 
 ---
 
+## 2026-10-06 — Session 227 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — no notification.** Container started already exactly at
+`origin/main` (`9ebd315`, Session 226's own commit); `git fetch origin main` (fresh) confirmed
+`HEAD`/`origin/main` identical before doing anything else. `env | grep THERACINGAPI` -> empty,
+confirmed directly (Mac-only credentials; did not attempt `collect_racecards.py`/
+`collect_weather.py`, per this session's prompt correction, same as every prior cloud session).
+
+Re-checked this session's prompt's Phase 6 ask against `src/models/model1_logistic_baseline.py`
+directly: its module docstring confirms a statistical/logistic baseline over synthetic fixtures
+shaped exactly like the real racecard schema (`official_rating`/`draw` as int, `recent_form` as an
+undelimited string like `"1582F3"`), producing a per-race softmax probability that sums to 1.0,
+clearly labeled not-a-real-prediction (every weight the module's own tests produce comes from
+synthetic fixtures only). Confirmed satisfied verbatim, exactly as Sessions 139/185-226 already
+found, and superseded in practice by the real Kaggle-fitted Model 1 (RL-006/RL-007) and Model 2
+gradient boosting + hyperparameter sweep (Phase 7), both already in `src/models/`
+(`model0_market_baseline.py`, `model1_logistic_baseline.py`, `model2_gradient_boosting.py`,
+`model2_hyperparameter_sweep.py`). No new code written; `grep -rn "TODO\|FIXME\|XXX"` across
+`src/`/`scripts/`/`tests/`/`db/` -> 0 matches.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576 passed**,
+same count as Sessions 185-226. GitHub checked via a subagent (`list_issues`/`list_pull_requests`,
+`state: all`; `list_commits`): 0 issues, 0 pull requests, and the 15 most recent commits on `main`
+are all authored by `Claude <noreply@anthropic.com>` (Sessions 212-226) — no human commit since
+Jonathan's real `c4e42ee` (2026-09-30T22:29:42+01:00), now ~6 days.
+
+**Housekeeping note:** `docs/BUILD_LOG.md` is actually ~92KB/1163 lines before this entry (verified
+directly with `wc`), not the ~210KB/2645 lines claimed in Session 226's own "before this entry"
+note — that figure, and the matching ones in several sessions before it, look like copy-forwarded
+text that stopped being re-verified at some point rather than the file's real size (Session 222's
+archive into `docs/BUILD_LOG_ARCHIVE.md`, now 890KB, evidently already brought this file back down,
+and later sessions kept quoting the pre-archive figure). Recording the real size here so the next
+session doesn't inherit the same stale number.
+
+**No push notification this session.** Session 224 already sent the "backlog exhausted, consider
+pausing or coarsening the schedule" notification three sessions ago and asked that it not be
+repeated every run. Nothing has changed since then — same test count, same 0 issues/PRs, no reply
+from Jonathan yet — so there is nothing new to add to that message.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing, per `BUILD_LOG_LOCAL.md`). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials.
+
+**Next session:** `git fetch origin main` (fresh) and compare `git rev-parse HEAD origin/main`
+before doing anything else. Read `docs/BUILD_LOG_LOCAL.md`'s tail for any new local activity (still
+unchanged as of this session: most recent entry is the 2026-09-30 Smarkets/results fix already
+covered by `c4e42ee`). If Jonathan has replied to Session 224's notification (paused/adjusted the
+schedule, or supplied new work), act on that explicitly. Otherwise, continue not re-sending the
+"nothing to do" notification — only notify again if something actually changes (a reply from
+Jonathan, a new GitHub issue/PR, a test failure, or new work becoming unblocked).
+`docs/BUILD_LOG.md` is genuinely ~95KB/~1200 lines after this entry — well under the ~230KB archive
+threshold, no archiving needed yet; trust a fresh `wc` over any previously-quoted figure.
+
+---
+
 ## 2026-10-06 — Session 226 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — no notification.** Container started already exactly at
