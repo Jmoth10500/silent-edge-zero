@@ -9,6 +9,61 @@ re-doing finished work.
 
 ---
 
+## 2026-10-06 — Session 226 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — no notification.** Container started already exactly at
+`origin/main` (`21c0e11`, Session 225's own commit); `git fetch origin main` (fresh) confirmed
+`HEAD`/`origin/main` identical before doing anything else — no stale-pointer trap this time. `env |
+grep -i THERACINGAPI` -> empty, confirmed directly (Mac-only credentials; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's prompt correction, same as every
+prior cloud session).
+
+Re-checked this session's prompt's Phase 6 ask against `src/models/model1_logistic_baseline.py`
+directly: a statistical/logistic baseline over synthetic fixtures shaped exactly like the real
+racecard schema (`official_rating` int, `draw` int, `recent_form` as an undelimited string like
+`"1582F3"`), producing a per-race softmax that sums to 1.0, clearly labeled not-a-real-prediction.
+Confirmed satisfied verbatim, exactly as Sessions 139/185-225 already found, and superseded in
+practice by the real Kaggle-fitted Model 1 (RL-006/RL-007) and Model 2 gradient boosting (Phase 7),
+both already in `src/models/`. No new code written.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576 passed**,
+same count as Sessions 185-225. **Container-config note worth recording:** this session hit a
+`python3`/`pip` version mismatch not seen in prior logs — `pip`/`pip3` on `PATH` resolve to a
+system Python 3.13, while plain `python3` resolves to Python 3.11 (`/usr/local/bin/python3`), so a
+bare `pip install -r requirements.txt` silently installed into the 3.13 site-packages and
+`python3 -m pytest` then failed with `No module named pytest` even though the install reported
+success. Fixed by using `python3 -m pip install -r requirements.txt` instead of bare `pip install`
+— worth using that form from the start in future sessions to avoid the false "No module named
+pytest" dead end. GitHub checked via a subagent (`list_issues`/`list_pull_requests`, `state: all`;
+`list_commits`): 0 issues, 0 pull requests, and the most recent 15 commits on `main` are all
+authored by `Claude <noreply@anthropic.com>` (Sessions 211-225) — no human commit since Jonathan's
+real `c4e42ee` (2026-09-30T22:29:42+01:00), now ~6 days. `docs/BUILD_LOG_LOCAL.md` tail re-read
+directly (unchanged): most recent entry still the 2026-09-30 Smarkets/results fix already covered
+by `c4e42ee`.
+
+**No push notification this session.** Session 224 already sent the "backlog exhausted, consider
+pausing or coarsening the schedule" notification two sessions ago and asked that it not be repeated
+every run. Nothing has changed since then — same test count, same 0 issues/PRs, no reply from
+Jonathan yet — so there is nothing new to add to that message.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing, per `BUILD_LOG_LOCAL.md`). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials.
+
+**Next session:** `git fetch origin main` (fresh) and compare `git rev-parse HEAD origin/main`
+before doing anything else. When installing Python deps, use `python3 -m pip install -r
+requirements.txt`, not bare `pip install` — this session found the two can resolve to different
+Python versions in this container (3.11 vs 3.13), causing a false `No module named pytest` later.
+Read `docs/BUILD_LOG_LOCAL.md`'s tail for any new local activity. If Jonathan has replied to Session
+224's notification (paused/adjusted the schedule, or supplied new work), act on that explicitly.
+Otherwise, continue not re-sending the "nothing to do" notification — only notify again if something
+actually changes (a reply from Jonathan, a new GitHub issue/PR, a test failure, or new work becoming
+unblocked). `docs/BUILD_LOG.md` is ~210KB/2645 lines before this entry — comfortably under the
+~230KB archive threshold, no archiving needed yet.
+
+---
+
 ## 2026-10-06 — Session 225 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — no notification, per Session 224's own instruction not to
