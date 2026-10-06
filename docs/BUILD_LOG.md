@@ -9,6 +9,53 @@ re-doing finished work.
 
 ---
 
+## 2026-10-06 — Session 230 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — no notification.** Container started on a detached `HEAD`
+already exactly at `origin/main` (`f9a4d16`, Session 229's own commit); `git fetch origin main`
+(fresh) confirmed `HEAD`/`origin/main` identical before doing anything else. `env | grep -i
+THERACINGAPI` -> empty, confirmed directly (Mac-only credentials; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's prompt correction, same as every
+prior cloud session).
+
+This session's prompt again asks to "start Phase 6" (a statistical/logistic baseline over
+synthetic fixtures shaped like the real racecard schema). As Sessions 139/185-229 have all already
+found and documented, `src/models/model1_logistic_baseline.py` satisfies that ask verbatim
+(`official_rating`/`draw` as int, `recent_form` as an undelimited string like `"1582F3"`, per-race
+softmax summing to 1.0, clearly labeled not-a-real-prediction in its module docstring), and is
+further superseded in practice by the real Kaggle-fitted Model 1 (RL-006/RL-007) and Model 2
+gradient boosting, both already in `src/models/`. The prompt text itself appears to be a stale,
+unchanging stored instruction rather than a live ask — writing a second, duplicate baseline next to
+the existing one would not be additive. No new code written.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576 passed**,
+same count as Sessions 185-229. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` -> sum 0.
+GitHub checked via a subagent (`list_issues`/`list_pull_requests`, any state; `list_commits`): 0
+issues, 0 pull requests, and the 10 most recent commits on `main` are all authored by `Claude
+<noreply@anthropic.com>` (Sessions 220-229) — no human commit since Jonathan's real `c4e42ee`
+(2026-09-30T22:29:42+01:00), now ~6 days. `docs/BUILD_LOG_LOCAL.md` tail re-read directly
+(unchanged): most recent entry still the 2026-09-30 Smarkets/results fix already covered by
+`c4e42ee`.
+
+**No push notification this session.** Session 224 already sent the "backlog exhausted, consider
+pausing or coarsening the schedule" notification 6 sessions ago; nothing has changed since: same
+test count, same 0 issues/PRs, no reply from Jonathan yet.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing, per `BUILD_LOG_LOCAL.md`). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials.
+
+**Next session:** `git fetch origin main` (fresh) and compare `git rev-parse HEAD origin/main`
+before doing anything else. Read `docs/BUILD_LOG_LOCAL.md`'s tail for any new local activity. If
+Jonathan has replied to Session 224's notification (paused/adjusted the schedule, or supplied new
+work), act on that explicitly. Otherwise, continue not re-sending the "nothing to do" notification —
+only notify again if something actually changes (a reply from Jonathan, a new GitHub issue/PR, a
+test failure, or new work becoming unblocked). `docs/BUILD_LOG.md` is ~104KB/~1314 lines before this
+entry — well under the ~230KB archive threshold, no archiving needed yet.
+
+---
+
 ## 2026-10-06 — Session 229 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — no notification.** Container started on a detached `HEAD`
