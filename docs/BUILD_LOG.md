@@ -9,6 +9,54 @@ re-doing finished work.
 
 ---
 
+## 2026-10-07 — Session 233 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — no notification.** `git fetch origin main` (fresh) showed
+local `main` stale at `21c0e11` (Session 225, the recurring base-image trap) while `HEAD`/
+`origin/main` were already at `4945ef3` (Session 232's own commit); fast-forwarded with `git
+checkout main && git merge --ff-only origin/main` (`BUILD_LOG.md` only, no code; `git rev-list
+--left-right --count origin/main...main` -> `0 0` after). `env | grep THERACINGAPI` -> empty,
+confirmed directly (Mac-only credentials; did not attempt `collect_racecards.py`/
+`collect_weather.py`, per this session's prompt correction, same as every prior cloud session).
+
+Re-read `src/models/model1_logistic_baseline.py` directly (not from memory): this session's
+prompt's Phase 6 ask (a statistical/logistic baseline over synthetic fixtures shaped exactly like
+the real racecard schema — `official_rating`/`draw` as int, `recent_form` as an undelimited string
+like `"1582F3"` — producing a per-race softmax that sums to 1.0, clearly labeled
+not-a-real-prediction) is satisfied verbatim by that module, as Sessions 139/185-232 have all
+already found, and is further superseded in practice by the real Kaggle-fitted Model 1
+(RL-006/RL-007) and Model 2 gradient boosting, both already in `src/models/`. No new code written;
+a duplicate second baseline would not be additive.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576 passed**,
+same count as Sessions 185-232. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` -> sum 0.
+GitHub checked directly (`list_issues` state OPEN, `list_pull_requests` state all, `list_commits`
+author Jonathan): 0 open issues, 0 pull requests (any state), 0 commits by Jonathan beyond his real
+`c4e42ee` (2026-09-30T22:29:42+01:00) already on `main` — no reply to Session 224's "consider
+pausing or coarsening the schedule" notification yet, now 9 consecutive no-change sessions since it
+was sent (Sessions 225-233).
+
+**No push notification this session.** Nothing has changed since Session 224's notification or
+Session 232's re-verification: same test count, same 0 issues/PRs, no reply from Jonathan. Per
+Session 224's own request, not repeating that message again absent new information.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing, per `BUILD_LOG_LOCAL.md`). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials.
+
+**Next session:** `git fetch origin main` (fresh) and compare `git rev-parse HEAD origin/main`
+before doing anything else; expect local `main` to again be stale (recurring base-image trap) —
+fast-forward with `git merge --ff-only origin/main`, don't force-reset. Read
+`docs/BUILD_LOG_LOCAL.md`'s tail for any new local activity. If Jonathan has replied to Session
+224's notification, act on that explicitly. Otherwise keep not re-sending the "nothing to do"
+notification — only notify again if something actually changes (a reply from Jonathan, a new
+GitHub issue/PR, a test failure, or new work becoming unblocked). `docs/BUILD_LOG.md` is
+~114KB/~1456 lines before this entry — well under the ~230KB archive threshold, no archiving
+needed yet.
+
+---
+
 ## 2026-10-06 — Session 232 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — no notification.** Container started on a detached `HEAD`
