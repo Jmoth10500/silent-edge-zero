@@ -9,6 +9,64 @@ re-doing finished work.
 
 ---
 
+## 2026-10-09 — Session 265 (autonomous overnight, cloud routine)
+
+**Housekeeping (archiving) plus re-verification, no code change — no notification.** `git fetch
+origin main` (fresh) showed `origin/main` at `292bf42` (Session 264's own commit); local `HEAD`
+was already exactly there, no fast-forward needed. `env | grep -i THERACINGAPI` -> empty,
+confirmed directly (Mac-only credentials; did not attempt `collect_racecards.py`/
+`collect_weather.py`, per this session's prompt correction, same as every prior cloud session).
+
+`docs/BUILD_LOG.md` had grown to ~232KB/3061 lines, past the ~230KB watch threshold flagged by
+Sessions 262-264. Archived Sessions 203-223 (2026-10-03 to 2026-10-05, plus Session 222's
+out-of-order entry at the original tail) verbatim into `docs/BUILD_LOG_ARCHIVE.md`, same pattern
+as Session 221's prior archiving — kept Session 224 onward in the live log since it's the session
+whose "backlog exhausted, consider pausing or coarsening the schedule" notification every later
+session's commit message references by number. Live log now back down to ~150KB/2082 lines.
+Pushed that housekeeping as its own commit (`782efea`) before this entry, per a stop-hook prompt
+mid-session not to leave it uncommitted while the GitHub check ran in the background.
+
+This session's prompt again asks to "start Phase 6" (statistical/logistic baseline over synthetic
+fixtures shaped like the real racecard schema, per-race softmax summing to ~1.0, clearly labeled
+not-a-real-prediction). `src/models/model1_logistic_baseline.py` is present and unchanged; re-read
+its module docstring directly (not from memory): it still satisfies that ask verbatim —
+`official_rating`/`draw` as int, `recent_form` as an undelimited string like `"1582F3"`, per-race
+softmax summing to 1.0 by construction, clearly labeled not a real prediction — as Sessions
+139/185-264 have all already found, and remains superseded in practice by the real Kaggle-fitted
+Model 1 (RL-006/RL-007) and Model 2 gradient boosting, both already in `src/models/`. No new code
+written; a duplicate second baseline would not be additive.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576 passed**,
+same count as Sessions 185-264. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` -> sum 0.
+GitHub checked via a subagent using `mcp__github__` tools, confirmed directly against the live API:
+0 issues (any state, ever), 0 pull requests (any state, ever). Last 5 commits on `main` (as of
+before this session's own archiving commit) were all Sessions 260-264's own re-verify commits,
+authored by `Claude <noreply@anthropic.com>` — no human commit newer than Jonathan's real
+`c4e42ee` ("Recover 25-30 Sep P&L using starting prices; stop results upsert wiping SP",
+2026-09-30T22:29:42+01:00), now ~9 days. `docs/BUILD_LOG_LOCAL.md` tail re-read directly
+(unchanged): most recent entry still the 2026-09-30 Smarkets/results fix already covered by
+`c4e42ee`.
+
+**No push notification this session.** Nothing has changed since Session 224's "backlog exhausted,
+consider pausing or coarsening the schedule" notification: same test count, same 0 issues/PRs, no
+reply from Jonathan. Per Session 224's own request, not repeating that message again absent new
+information — now 41 consecutive no-change sessions since it was sent (Sessions 225-265).
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing, per `BUILD_LOG_LOCAL.md`). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials.
+
+**Next session:** `git fetch origin main` (fresh) and compare `git rev-parse HEAD origin/main`
+before doing anything else. Read `docs/BUILD_LOG_LOCAL.md`'s tail for any new local activity. If
+Jonathan has replied to Session 224's notification, act on that explicitly. Otherwise keep not
+re-sending the "nothing to do" notification — only notify again if something actually changes (a
+reply from Jonathan, a new GitHub issue/PR, a test failure, or new work becoming unblocked).
+`docs/BUILD_LOG.md` is ~150KB/~2140 lines before this entry — comfortably under the ~230KB archive
+threshold again, no archiving needed for a good while.
+
+---
+
 ## 2026-10-09 — Session 264 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — no notification.** `git fetch origin main` (fresh) showed
