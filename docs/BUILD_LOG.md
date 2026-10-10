@@ -9,6 +9,65 @@ re-doing finished work.
 
 ---
 
+## 2026-10-10 — Session 326 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — no notification.** `git fetch origin main` (fresh) showed
+`origin/main` at `8a14d9d` (Session 325's own commit); local `HEAD` was already detached and
+sitting exactly there. Hit the same recurring container-reuse ref-staleness artifact Sessions
+324-325 documented: local `main` branch ref still pointed at Session 225's `21c0e11` (this repo's
+shallow clone means `git merge-base` can't prove the two share history, but `origin/main`'s own
+log shows the normal, unbroken Session 225->325 commit chain, so there is no real divergence).
+This time `git checkout -B main origin/main` was denied by the auto-mode permission classifier as
+an "irreversible local destruction" risk; did not fight the denial. Worked from detached HEAD
+instead (sufficient for verification, committing, and pushing) rather than attempting a bypass —
+leaving the stale `main` ref for a future session, or Jonathan, to tidy with that same command if
+desired. `env | grep -i THERACINGAPI` -> empty, confirmed directly (Mac-only credentials; did not
+attempt `collect_racecards.py`/`collect_weather.py`, per this session's prompt correction, same as
+every prior cloud session).
+
+This session's prompt again asks to "start Phase 6" (statistical/logistic baseline over synthetic
+fixtures shaped like the real racecard schema, per-race softmax summing to ~1.0, clearly labeled
+not-a-real-prediction). `src/models/model1_logistic_baseline.py` is present and unchanged; re-read
+its module docstring directly (not from memory): it still satisfies that ask verbatim —
+`official_rating`/`draw` as int, `recent_form` as an undelimited string like `"1582F3"`, per-race
+softmax summing to 1.0 by construction, clearly labeled not a real prediction — as Sessions
+139/185-325 have all already found, and remains superseded in practice by the real Kaggle-fitted
+Model 1 (RL-006/RL-007) and Model 2 gradient boosting, both already in `src/models/`. No new code
+written; a duplicate second baseline would not be additive.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576 passed**,
+same count as Sessions 185-325. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` -> sum 0.
+GitHub checked directly against the live API with `mcp__github__` tools: 0 issues (open and
+closed), 0 pull requests (open and closed). Last 8 commits on `main` are all Sessions 318-325's own
+re-verify commits, authored by `Claude <noreply@anthropic.com>` — no human commit newer than
+Jonathan's real `c4e42ee` ("Recover 25-30 Sep P&L using starting prices; stop results upsert wiping
+SP", 2026-09-30T22:29:42+01:00), now ~10 days. `docs/BUILD_LOG_LOCAL.md` tail re-read directly
+(unchanged): most recent entry still the 2026-09-30 Smarkets/results fix already covered by
+`c4e42ee`.
+
+**No push notification this session.** Nothing has changed since Session 224's "backlog exhausted,
+consider pausing or coarsening the schedule" notification: same test count, same 0 issues/PRs, no
+reply from Jonathan. Per Session 224's own request, not repeating that message again absent new
+information — now 102 consecutive no-change sessions since it was sent (Sessions 225-326).
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing, per `BUILD_LOG_LOCAL.md`). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials.
+
+**Next session:** `git fetch origin main` (fresh) and compare `git rev-parse HEAD origin/main`
+before doing anything else. The local `main` branch ref is very likely still stale (pointing at
+Session 225's `21c0e11`) — if a plain `git checkout -B main origin/main` is permitted in that
+session's context, use it to fix it properly; detached-HEAD work (as this session did) is a fine
+fallback if it's denied again. Read `docs/BUILD_LOG_LOCAL.md`'s tail for any new local activity. If
+Jonathan has replied to Session 224's notification, act on that explicitly. Otherwise keep not
+re-sending the "nothing to do" notification — only notify again if something actually changes (a
+reply from Jonathan, a new GitHub issue/PR, a test failure, or new work becoming unblocked).
+`docs/BUILD_LOG.md` is ~170KB/~2308 lines before this entry — comfortably under the ~230KB archive
+threshold, no archiving needed for a good while.
+
+---
+
 ## 2026-10-09 — Session 325 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — no notification.** `git fetch origin main` (fresh) showed
