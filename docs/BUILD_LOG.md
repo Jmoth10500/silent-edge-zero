@@ -9,6 +9,60 @@ re-doing finished work.
 
 ---
 
+## 2026-10-11 — Session 337 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — no notification.** `git fetch origin main` (fresh) showed
+`origin/main` at `9e92ad0` (Session 336's own commit); local detached `HEAD` was already sitting
+exactly there. The local `main` branch ref was stale again (still Session 225's `21c0e11`, "ahead
+57, behind 50" — same recurring container-reuse artifact every prior session has documented, not
+real divergence); `git checkout -B main origin/main` was denied by the auto-mode classifier this
+run, so worked from detached HEAD instead (sufficient for verification, committing, and pushing).
+`env | grep -i THERACINGAPI` -> empty, confirmed directly (Mac-only credentials; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's prompt correction, same as every
+prior cloud session).
+
+This session's prompt again asks to "start Phase 6" (statistical/logistic baseline over synthetic
+fixtures shaped like the real racecard schema, per-race softmax summing to ~1.0, clearly labeled
+not-a-real-prediction). `src/models/model1_logistic_baseline.py` is present and unchanged, as
+Sessions 139/185-336 have all already found, and remains superseded in practice by the real
+Kaggle-fitted Model 1 (RL-006/RL-007) and Model 2 gradient boosting, both already in
+`src/models/`. No new code written; a duplicate second baseline would not be additive.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576 passed**,
+same count as Sessions 185-336. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` -> sum 0.
+GitHub checked directly against the live API with `mcp__github__` tools: 0 issues (open), 0 pull
+requests (any state). Last 5 commits on `origin/main` are all Sessions 332-336's own re-verify
+commits, authored by `Claude <noreply@anthropic.com>` — no human commit newer than Jonathan's real
+`c4e42ee` ("Recover 25-30 Sep P&L using starting prices; stop results upsert wiping SP",
+2026-09-30T22:29:42+01:00), now ~11 days. `docs/BUILD_LOG_LOCAL.md` tail re-read directly
+(unchanged): most recent entry still the 2026-09-30 Smarkets/results fix already covered by
+`c4e42ee`.
+
+**No push notification this session.** Nothing has changed since Session 224's "backlog exhausted,
+consider pausing or coarsening the schedule" notification: same test count, same 0 issues/PRs, no
+reply from Jonathan. Per Session 224's own request, not repeating that message again absent new
+information — now 112 consecutive no-change sessions since it was sent (Sessions 225-337).
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing, per `BUILD_LOG_LOCAL.md`). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials.
+
+**Next session:** `git fetch origin main` (fresh) and compare `git rev-parse HEAD origin/main`
+before doing anything else. The local `main` branch ref is very likely stale again on container
+reuse — try `git checkout -B main origin/main` first and fall back to detached-HEAD work if
+denied. Read `docs/BUILD_LOG_LOCAL.md`'s tail for any new local activity. If Jonathan has replied
+to Session 224's notification, act on that explicitly. Otherwise keep not re-sending the "nothing
+to do" notification — only notify again if something actually changes (a reply from Jonathan, a
+new GitHub issue/PR, a test failure, or new work becoming unblocked). Given 112 consecutive
+no-change sessions, this routine's schedule firing multiple times per night with nothing to do is
+worth Jonathan's attention — Session 224 raised this and it remains unresolved.
+`docs/BUILD_LOG.md` is ~218KB/~2965 lines before this entry — approaching the ~230KB archive
+threshold; the next session or two should archive older entries (e.g. Sessions ~225-300) into a
+dated archive file to keep this file manageable.
+
+---
+
 ## 2026-10-11 — Session 336 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — no notification.** `git fetch origin main` (fresh) showed
