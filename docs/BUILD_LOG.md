@@ -9,6 +9,61 @@ re-doing finished work.
 
 ---
 
+## 2026-10-12 — Session 346 (autonomous overnight, cloud routine)
+
+**Re-verification: no code/data change, no notification.** `git fetch origin main` (fresh) showed
+`origin/main` at `d323bcb` (Session 345's own commit); local detached `HEAD` was already sitting
+exactly there, no fast-forward needed — fetch again reported the same recurring "forced update"
+ref-staleness message on the local `main` branch ref. Checked directly this time: the repo is a
+shallow clone (`git rev-parse --is-shallow-repository` -> `true`, only 50 commits reachable from
+`origin/main`), which is why `c4e42ee` (Jonathan's last real commit, now well past 50 commits back)
+no longer resolves locally for an ancestry check — a clone-depth artifact, not real divergence or
+history loss; HEAD matching `origin/main` exactly is sufficient confirmation on its own.
+`env | grep -i THERACINGAPI` -> empty, confirmed directly (Mac-only credentials; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's prompt correction, same as every
+prior cloud session).
+
+This session's prompt again asks to "start Phase 6" (statistical/logistic baseline over synthetic
+fixtures shaped like the real racecard schema, per-race softmax summing to ~1.0, clearly labeled
+not-a-real-prediction). Read `src/models/model1_logistic_baseline.py` directly (not from memory):
+it still satisfies that ask verbatim — `official_rating`/`draw` as int, `recent_form` as an
+undelimited string like `"1582F3"`, per-race softmax summing to 1.0 by construction, clearly
+labeled not a real prediction — as Sessions 139/185-345 have all already found, and remains
+superseded in practice by the real Kaggle-fitted Model 1 (RL-006/RL-007) and Model 2 gradient
+boosting, both already in `src/models/`. No new code written; a duplicate second baseline would
+not be additive.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576 passed**,
+same count as Sessions 185-345. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` -> sum 0.
+GitHub checked directly against the live API with `mcp__github__` tools: 0 issues (any state), 0
+pull requests (any state). Last 5 commits on `origin/main` are all Sessions 341-345's own re-verify
+commits, authored by `Claude <noreply@anthropic.com>`. `docs/BUILD_LOG_LOCAL.md` tail re-read
+directly (unchanged, still 1149 lines): most recent entry still the 2026-09-30 Smarkets/results fix
+already covered by `c4e42ee`.
+
+**No push notification this session.** Nothing has changed since Session 224's "backlog exhausted,
+consider pausing or coarsening the schedule" notification: same test count, same 0 issues/PRs, no
+reply from Jonathan. Per Session 224's own request, not repeating that message again absent new
+information — now 121 consecutive no-change sessions since it was sent (Sessions 225-346).
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing, per `BUILD_LOG_LOCAL.md`). Racecard/weather collection remains
+Mac-only — the cloud routine environment has no THERACINGAPI credentials.
+
+**Next session:** `git fetch origin main` (fresh) and compare `git rev-parse HEAD origin/main`
+before doing anything else. Read `docs/BUILD_LOG_LOCAL.md`'s tail for any new local activity. If
+Jonathan has replied to Session 224's notification, act on that explicitly. Otherwise keep not
+re-sending the "nothing to do" notification — only notify again if something actually changes (a
+reply from Jonathan, a new GitHub issue/PR, a test failure, or new work becoming unblocked). Note:
+this container's clone of the repo is shallow (depth 50) — an ancestry check against a commit older
+than 50 commits back (e.g. `c4e42ee`) will fail to resolve locally; that's expected and not a sign
+of real divergence, so don't re-investigate it as a bug. `docs/BUILD_LOG.md` is ~104KB/~1390 lines
+before this entry — comfortably under the ~230KB archive threshold, no archiving needed for a good
+while.
+
+---
+
 ## 2026-10-12 — Session 345 (autonomous overnight, cloud routine)
 
 **Re-verification: no code/data change, no notification.** `git fetch origin main` (fresh) showed
