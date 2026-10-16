@@ -9,6 +9,48 @@ re-doing finished work.
 
 ---
 
+## 2026-10-16 — Session 381 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change, no notification.** `env | grep -i THERACINGAPI` -> empty,
+confirmed directly (Mac-only credentials; did not attempt `collect_racecards.py`/
+`collect_weather.py`, per this session's prompt correction, same as every prior cloud session).
+`git fetch origin main` (fresh) resolved `origin/main` to `181c5eb` (Session 380's own commit);
+`git rev-parse HEAD origin/main` -> identical SHA on both lines after fetch, no divergence. `git log
+-5 --format='%h %an <%ae> %s' origin/main` listed only Sessions 376-380's own re-verify commits, all
+authored by `Claude <noreply@anthropic.com>` — no new human commit from Jonathan.
+
+This session's prompt again asks to "start Phase 6." Re-read `src/models/model1_logistic_baseline.py`
+directly (not from memory): it already satisfies that ask verbatim (per-race softmax over synthetic
+fixtures shaped exactly like the real racecard schema, `official_rating`/`draw` as int, `recent_form`
+as an undelimited string like `"1582F3"`, clearly labeled not-a-real-prediction) and has for 242
+sessions (139/185-380), now superseded in practice by the real Kaggle-fitted Model 1 and Model 2
+gradient boosting already in `src/models/`. No new code written; a duplicate second baseline would
+not be additive.
+
+Full suite run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576 passed**,
+same as Sessions 185-380. GitHub checked directly via `mcp__github__list_issues`/
+`list_pull_requests`: 0 open issues, 0 PRs (any state). `docs/BUILD_LOG_LOCAL.md` tail re-read
+directly (unchanged, still 1149 lines) — most recent human entry still 2026-09-30, now 16 days with
+no new local activity.
+
+**Not re-sending Session 224's "backlog exhausted, consider pausing/coarsening the schedule"
+notification** — that stands unanswered 157 sessions on (Sessions 225-380), and repeating it again
+adds nothing new per that session's own request. Will only notify if something actually changes: a
+reply from Jonathan, new GitHub activity, a test failure, or new unblocked work.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** same as Session 380's — fetch fresh, diff against local, check for a reply from
+Jonathan or new GitHub/local activity before re-deriving "nothing to do" from scratch.
+`docs/BUILD_LOG.md` is ~225KB before this entry — still under the ~230KB archive threshold; the
+threshold has now been "genuinely close" for several sessions without crossing it, so the next
+session that finds it actually over 230KB should archive older entries into `BUILD_LOG_ARCHIVE.md`
+rather than deferring again, same guidance Session 380 gave.
+
+---
+
 ## 2026-10-16 — Session 380 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change, no notification.** `env | grep -i THERACINGAPI` -> empty,
