@@ -9,6 +9,41 @@ re-doing finished work.
 
 ---
 
+## 2026-10-16 — Session 378 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change, no notification.** `git fetch origin main` (fresh) resolved
+`origin/main` to `9c8358d` (Session 377's own commit); after fetch, local matched exactly — no
+divergence. `env | grep THERACINGAPI` -> empty, confirmed directly; did not attempt
+`collect_racecards.py`/`collect_weather.py` per this session's prompt correction (Mac-only
+credentials, same as every prior cloud session).
+
+This session's prompt again asks to "start Phase 6." Re-read `src/models/model1_logistic_baseline.py`
+directly: it already satisfies that ask verbatim (per-race softmax over synthetic fixtures shaped
+exactly like the real racecard schema, `official_rating`/`draw` as int, `recent_form` as an
+undelimited string like `"1582F3"`, clearly labeled not-a-real-prediction) and has for 239 sessions
+(139/185-377), now superseded in practice by the real Kaggle-fitted Model 1 and Model 2 gradient
+boosting already in `src/models/`. No new code written.
+
+Full suite run fresh (Postgres bootstrap + `init_db.py` 15 tables + `pip install` + `pytest`) ->
+**576/576 passed**, same as Sessions 185-377. GitHub checked directly: 0 open issues, 0 PRs (any
+state). `docs/BUILD_LOG_LOCAL.md` tail unchanged — most recent human entry still 2026-09-30, now
+16 days with no new local activity.
+
+**Not re-sending Session 224's "backlog exhausted, consider pausing/coarsening the schedule"
+notification** — that stands unanswered 154 sessions on, and repeating it again adds nothing new
+per that session's own request. Will only notify if something actually changes: a reply from
+Jonathan, new GitHub activity, a test failure, or new unblocked work.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** same as Session 377's — fetch fresh, diff against local, check for a reply from
+Jonathan or new GitHub/local activity before re-deriving "nothing to do" from scratch.
+`docs/BUILD_LOG.md` is ~217KB before this entry — still under the ~230KB archive threshold but
+getting close; next session should archive older entries into `BUILD_LOG_ARCHIVE.md` if it crosses.
+
+---
+
 ## 2026-10-16 — Session 377 (autonomous overnight, cloud routine)
 
 **Re-verification: no code/data change, no notification.** `git fetch origin main` (fresh) showed
