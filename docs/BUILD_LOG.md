@@ -9,6 +9,53 @@ re-doing finished work.
 
 ---
 
+## 2026-10-17 — Session 388 (autonomous overnight, cloud routine)
+
+**Real new activity found — streak broken, notification sent.** `env | grep -i THERACINGAPI` ->
+empty, confirmed directly (Mac-only credentials; did not attempt `collect_racecards.py`/
+`collect_weather.py`, per this session's prompt correction, same as every prior cloud session).
+
+`git fetch origin main` (fresh) resolved `origin/main` to `2aaf9bf` (Session 387's own commit,
+already pushed); `git rev-parse HEAD origin/main` -> identical SHA on both lines after fetch — the
+cloud routine's own history is fully in sync, no divergence there.
+
+This session's prompt again asks to "start Phase 6." Re-read `src/models/model1_logistic_baseline.py`
+directly: it still satisfies that ask verbatim (per-race softmax over synthetic fixtures shaped
+exactly like the real racecard schema, clearly labeled not-a-real-prediction) and remains superseded
+in practice by the real Kaggle-fitted Model 1/Model 2. No new code written; a duplicate baseline
+would not be additive — same conclusion as Sessions 139/185-387.
+
+**But `mcp__github__list_issues`/`list_pull_requests` found real activity for the first time since
+Session 224 (163 sessions of "0 issues, 0 PRs"):** **PR #1, "Data integrity repair: canonical race
+identity, validation gate, central metrics,"** opened by Jonathan himself (`Jmoth10500`, not a bot)
+at 2026-10-17T17:55 UTC — i.e. from his own Mac, hours after this session's container started.
+3,402 additions / 149 deletions across 35 files, base `main` at exactly this routine's current tip
+(`2aaf9bf`), `mergeable_state: clean`, no conflicts, no CI configured (0 check runs). Summary:
+canonical immutable race IDs + a pre-prediction validation gate (V01-V12) + prediction-lock
+snapshots + append-only raw/audit tables + a correction ledger, fixing a real bug where
+mutable-off-time race identity let provisional "tomorrow" cards get scored/locked/settled as
+phantom races. Scorer itself untouched (wrapped at runtime, model-freeze check passes). PR's own
+test plan claims 622/622 pass on its branch (45 new integrity tests) — not independently re-run
+from this cloud session since the branch isn't checked out here and this session has no mandate to
+touch Jonathan's own in-flight PR. Full `main`-branch suite (unaffected by the PR, still open) was
+re-run fresh anyway: **576/576 passed**, same as every session since 185.
+
+**Not subscribing to this PR's activity** — this session wasn't asked to watch it, and it's
+Jonathan's own work on his own repo pending his own review, not something to merge or act on
+unprompted. Flagging it to him via notification instead (first one since Session 224's "backlog
+exhausted" message, which this finding now supersedes).
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** check whether PR #1 has moved (merged, closed, updated, or reviewed) before
+re-deriving "nothing to do." If it's still open and untouched, that's new context for the "backlog
+exhausted" framing — Jonathan is actively working on this repo locally again after 17+ days quiet,
+so the standing "pause the schedule" suggestion may no longer be the right call; use judgement
+rather than reverting to the old no-op script by rote.
+
+---
+
 ## 2026-10-17 — Session 387 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change, no notification.** `env | grep -i THERACINGAPI` -> empty,
