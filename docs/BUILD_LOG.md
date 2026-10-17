@@ -9,6 +9,47 @@ re-doing finished work.
 
 ---
 
+## 2026-10-17 — Session 389 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change, no notification.** `env | grep -i THERACINGAPI` -> empty,
+confirmed directly (Mac-only credentials; did not attempt `collect_racecards.py`/
+`collect_weather.py`, per this session's prompt correction, same as every prior cloud session).
+
+`git fetch origin main` (fresh) resolved `origin/main` to `2ed1677` (Session 388's own commit,
+already pushed); `git rev-parse HEAD origin/main` -> identical SHA on both lines after fetch — the
+cloud routine's own history is fully in sync, no divergence, and no new human commit landed between
+Session 388 ending and this session starting.
+
+This session's prompt again asks to "start Phase 6." Re-read `src/models/model1_logistic_baseline.py`'s
+module docstring directly (not from memory): it still satisfies that ask verbatim (per-race softmax
+over synthetic fixtures shaped exactly like the real racecard schema, clearly labeled
+not-a-real-prediction, now also carrying the real walk-forward result from `scripts/train_model1.py`)
+and remains superseded in practice by the real Kaggle-fitted Model 1/Model 2. No new code written; a
+duplicate baseline would not be additive — same conclusion as Sessions 139/185-388.
+
+**Checked whether Session 388's new finding (PR #1) has moved — it has not.** Read PR #1 directly via
+`mcp__github__pull_request_read` (method `get`): `updated_at` is identical to `created_at`
+(`2026-10-17T17:55:00Z` / `:36Z`) — no new commits, no comments, no reviews, no CI configured, still
+open, still unmerged, `mergeable_state: unknown` (GitHub hasn't computed it fresh, was `clean` at
+creation). `mcp__github__list_issues` (OPEN): 0. This is still Jonathan's own in-flight PR on his own
+repo, pending his own review — not something this session has a mandate to touch or merge. Full
+`main`-branch suite re-run fresh anyway: **576/576 passed**, same as every session since 185 (PR #1's
+branch, not checked out here, is unaffected).
+
+**No notification this session** — nothing has changed since Session 388 already flagged PR #1;
+repeating that notification with no new information would not be useful. Will notify again only if
+PR #1 moves (merged, closed, reviewed, or gets CI) or something else changes.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** check PR #1's state again (merged/closed/reviewed/updated) before anything else —
+it's the one piece of real, live, human-driven context in this repo right now. If it has moved, that
+supersedes the old "backlog exhausted" framing entirely. If still untouched, keep re-checking rather
+than reverting to the no-op script by rote.
+
+---
+
 ## 2026-10-17 — Session 388 (autonomous overnight, cloud routine)
 
 **Real new activity found — streak broken, notification sent.** `env | grep -i THERACINGAPI` ->
