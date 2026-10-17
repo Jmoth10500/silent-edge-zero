@@ -9,6 +9,48 @@ re-doing finished work.
 
 ---
 
+## 2026-10-17 — Session 386 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change, no notification.** `env | grep -i THERACINGAPI` -> empty,
+confirmed directly (Mac-only credentials; did not attempt `collect_racecards.py`/
+`collect_weather.py`, per this session's prompt correction, same as every prior cloud session).
+
+`git fetch origin main` (fresh) moved `origin/main` from a stale local `c0b1cf7` to `33e0e81`
+(Session 385's own commit); `git rev-parse HEAD origin/main` -> identical SHA on both lines after
+fetch, no divergence (this container started detached at `33e0e81` already, i.e. Session 385's
+commit, confirming no human commit landed between Session 385 ending and this session starting).
+
+This session's prompt again asks to "start Phase 6": a statistical/logistic baseline model in
+`src/models/`, built and tested against realistic synthetic fixtures shaped exactly like the real
+racecard schema (`official_rating`/`draw` as int, `recent_form` as an undelimited string like
+`"1582F3"`), producing a per-race probability that sums to ~1.0, clearly labeled not-a-real-
+prediction. Read `src/models/model1_logistic_baseline.py`'s module docstring directly (not from
+memory): it already satisfies that ask verbatim and has for 247 sessions now (139/185-385),
+superseded in practice by the real Kaggle-fitted Model 1 and Model 2 gradient boosting already in
+`src/models/`. No new code written; a duplicate second baseline would not be additive.
+
+Full suite run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576 passed**,
+same as Sessions 185-385. GitHub checked directly via `mcp__github__list_issues`/
+`list_pull_requests`: 0 issues (any state), 0 PRs (any state). `docs/BUILD_LOG_LOCAL.md` tail
+re-read directly (unchanged) — most recent human entry still 2026-09-30, now 17 days with no new
+local activity. `docs/BUILD_LOG.md` is ~88KB before this entry — comfortably small, no archiving
+needed.
+
+**Not re-sending Session 224's "backlog exhausted, consider pausing/coarsening the schedule"
+notification** — that stands unanswered 162 sessions on (Sessions 225-385), and repeating it again
+adds nothing new per that session's own request. Will only notify if something actually changes: a
+reply from Jonathan, new GitHub activity, a test failure, or new unblocked work.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** fetch fresh, diff against local, check for a reply from Jonathan or new
+GitHub/local activity before re-deriving "nothing to do" from scratch. `docs/BUILD_LOG.md` is small
+(~88KB) and needs no archiving for a long while yet.
+
+---
+
 ## 2026-10-17 — Session 385 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change, no notification.** `env | grep -i THERACINGAPI` -> empty,
