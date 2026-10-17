@@ -48,6 +48,12 @@ from data.gb_racecourse_coordinates import GB_RACECOURSE_COORDINATES, normalise_
 
 BASE_URL = "https://api.smarkets.com/v3"
 
+# Honest, descriptive identification (2026-10-17). Cloudflare 403'd the generic
+# python-requests User-Agent from ~15 Oct; the same request identifying itself
+# truthfully returns 200. This states what the client is -- it does not imitate
+# a browser or evade any control.
+HEADERS = {"User-Agent": "SilentEdgeZero-research/1.0 (personal low-volume read-only; jonathan@thisisimas.com)"}
+
 
 def _get_with_retry(url: str, params: dict | None = None, timeout: int = 15,
                      max_attempts: int = 6) -> requests.Response:
@@ -68,7 +74,7 @@ def _get_with_retry(url: str, params: dict | None = None, timeout: int = 15,
     or after exhausting real attempts — never silently swallows a
     genuine failure."""
     for attempt in range(max_attempts):
-        resp = requests.get(url, params=params, timeout=timeout)
+        resp = requests.get(url, params=params, timeout=timeout, headers=HEADERS)
         if resp.status_code != 429:
             resp.raise_for_status()
             return resp
