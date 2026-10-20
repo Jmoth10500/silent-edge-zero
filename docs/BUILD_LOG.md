@@ -9,6 +9,37 @@ re-doing finished work.
 
 ---
 
+## 2026-10-20 — Session 412 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change, no notification.** `env | grep -i THERACINGAPI` -> empty
+(confirmed; Mac-only credentials, did not attempt `collect_racecards.py`/`collect_weather.py`).
+`git fetch origin main` -> `origin/main` already at local `HEAD` (`65a37c4`, Session 411's own
+commit) — no new human commit since Session 411 ended.
+
+Phase 6 ask (again in this session's prompt) remains satisfied by `src/models/model1_logistic_baseline.py`
+(18901 bytes, unchanged) — per-race softmax over synthetic fixtures shaped like the real racecard
+schema, clearly labeled not-a-real-prediction — and remains superseded in practice by the real
+Kaggle-fitted Model 1/Model 2 gradient boosting already in `src/models/`. No new code; a duplicate
+baseline would not be additive — same conclusion as Sessions 139/185-411.
+
+**PR #1 checked again — still has not moved.** `created_at`/`updated_at` both `2026-10-17T17:5[5/5]`,
+still open, unmerged, no comments/reviews. `list_issues` (OPEN): 0. Jonathan's own in-flight PR,
+pending his own review.
+
+Full suite re-run fresh (local Postgres bootstrap + `db/init_db.py` + `pytest tests/`) ->
+**576/576 passed**. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` -> 0.
+
+**No notification this session** — nothing has changed since Session 388 first flagged PR #1 (24
+sessions ago); repeating with no new information would not be useful.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** check PR #1's state again before anything else. If it has moved, that supersedes
+the "backlog exhausted" framing entirely.
+
+---
+
 ## 2026-10-20 — Session 411 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change, no notification.** `env | grep -i THERACINGAPI` -> empty,
