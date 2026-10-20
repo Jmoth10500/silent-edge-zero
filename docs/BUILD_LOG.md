@@ -9,6 +9,48 @@ re-doing finished work.
 
 ---
 
+## 2026-10-20 — Session 413 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change, no notification.** `env | grep -i THERACINGAPI` -> empty,
+confirmed directly (Mac-only credentials; did not attempt `collect_racecards.py`/
+`collect_weather.py`, per this session's prompt correction, same as every prior cloud session).
+
+Found local `HEAD` detached one commit ahead of the stale local `main` ref, holding Session 412's
+own commit (`281a084`) — `git fetch origin main` showed this was already pushed
+(`origin/main` == `281a084`), so no action needed; a `git status` run immediately after fetching
+(before the fetch) had read a cached `origin/main` ref and looked like an unpushed commit, but
+re-checking after a fresh fetch confirmed the routine's history is in sync with no divergence.
+
+This session's prompt again asks to "start Phase 6." `src/models/model1_logistic_baseline.py`
+(18901 bytes, unchanged) still satisfies that ask verbatim (per-race softmax over synthetic
+fixtures shaped exactly like the real racecard schema — `official_rating`/`draw` as int,
+`recent_form` as an undelimited string like `"1582F3"` — clearly labeled not-a-real-prediction)
+and remains superseded in practice by the real Kaggle-fitted Model 1/Model 2 gradient boosting
+already in `src/models/`. No new code; a duplicate baseline would not be additive — same
+conclusion as Sessions 139/185-412.
+
+**PR #1 checked again — still has not moved.** `created_at`/`updated_at` both
+`2026-10-17T17:5[5/5]`, still open, unmerged, no comments/reviews, `mergeable_state: unknown`.
+`list_pull_requests` (all states): still just the 1 PR. `list_issues` (OPEN): 0. Jonathan's own
+in-flight PR, pending his own review.
+
+Full suite re-run fresh (local Postgres bootstrap + `db/init_db.py` + `pytest tests/`) ->
+**576/576 passed**. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` -> 0.
+`docs/BUILD_LOG.md` is ~174KB before this entry — still under the ~230KB archive watch
+threshold, no archiving needed.
+
+**No notification this session** — nothing has changed since Session 388 first flagged PR #1 (25
+sessions ago) or since Session 224 flagged the routine's own cadence overhead (now 189 sessions
+ago); repeating either with no new information would not be useful.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** check PR #1's state again before anything else. If it has moved, that supersedes
+the "backlog exhausted" framing entirely.
+
+---
+
 ## 2026-10-20 — Session 412 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change, no notification.** `env | grep -i THERACINGAPI` -> empty
