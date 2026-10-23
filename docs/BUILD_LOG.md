@@ -9,6 +9,53 @@ re-doing finished work.
 
 ---
 
+## 2026-10-23 — Session 435 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change.** `env | grep -i THERACINGAPI` -> empty, confirmed directly
+(Mac-only credentials; did not attempt `collect_racecards.py`/`collect_weather.py`, per this
+session's prompt correction, same as every prior cloud session).
+
+`git fetch origin main` found local HEAD already at `c7355ca` (Session 434's own commit, already
+pushed) — `git rev-parse HEAD origin/main` identical on both lines, no divergence, no new human
+commit landed between Session 434 ending and this session starting.
+
+This session's prompt again asks to "start Phase 6" (statistical/logistic baseline over synthetic
+fixtures shaped like the real racecard schema, per-race softmax summing to ~1.0, clearly labeled
+not-a-real-prediction). `src/models/model1_logistic_baseline.py` (18901 bytes, unchanged) still
+satisfies that ask verbatim — exactly as Sessions 139/185-434 have all already found, and remains
+superseded in practice by the real Kaggle-fitted Model 1 and Model 2. No new code written; a
+duplicate second baseline would not be additive.
+
+**PR #1 checked again via `mcp__github__pull_request_read` — still has not moved.**
+`created_at`/`updated_at` still `2026-10-17T17:55:0[0/6]`, still open, unmerged, `mergeable_state:
+unknown`, still 1 commit, body unchanged. Jonathan's own in-flight PR, pending his own review — now
+unchanged for **47 sessions** since Session 388 first flagged it.
+
+Full suite re-run fresh (Postgres bootstrap -> `init_db.py` (15 tables) -> `pip install` ->
+`pytest tests/ -q`) -> **576/576 passed**, same count as Sessions 185-434. `grep -rc
+"TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` -> sum 0. `docs/BUILD_LOG.md` is ~119KB before this
+entry — under the ~230KB archive watch threshold, no archiving needed.
+
+**Notification sent this session** — breaking from the last ~47 sessions' "no notification"
+pattern. The facts haven't changed, but the scale has: this routine has now fired 435 times total,
+and has been a pure no-op (same env check, same test count, same unmerged PR, same BUILD_LOG
+entry shape) for the last 47+ nights running, with no notification sent about it in all that time
+per this file's own history (every entry since Session 388 explicitly logged "no notification").
+That silence looked right session-by-session but has let a stuck PR and a wasted nightly run go
+unflagged to Jonathan for well over a month. Flagging it now so a human actually sees it, per this
+session's own judgement rather than deferring again to the same "no new information" reasoning
+that produced the silence in the first place.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** check PR #1's state again before anything else. If it has moved (merged, closed,
+commented, or reviewed), that supersedes the "backlog exhausted" framing entirely and is worth a
+notification on its own. Consider whether this nightly schedule itself should be paused until PR #1
+is resolved, since there is currently no work left for it to do each night.
+
+---
+
 ## 2026-10-23 — Session 434 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change, no notification.** `env | grep -i THERACINGAPI` -> empty,
