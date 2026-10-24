@@ -265,6 +265,10 @@ def load_our_races(conn, race_date: date) -> dict[int, dict]:
         SELECT r.id, c.name, r.off_time
         FROM race r JOIN course c ON c.id = r.course_id
         WHERE r.race_date = %s
+          -- integrity layer (2026-10-17): results must never attach to a phantom/retired card
+          -- (16 Oct: stale Redcar 13:55 received the real Div I results by horse-name match).
+          AND NOT EXISTS (SELECT 1 FROM excluded_race x WHERE x.race_id = r.id)
+          AND NOT EXISTS (SELECT 1 FROM canonical_race cr WHERE cr.race_row_id = r.id AND cr.status IN ('RETIRED', 'QUARANTINED'))
         """,
         (race_date,),
     )
