@@ -9,6 +9,60 @@ re-doing finished work.
 
 ---
 
+## 2026-10-26 — Session 460 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change.** `env | grep -i THERACINGAPI` -> empty, confirmed directly
+(Mac-only credentials; did not attempt `collect_racecards.py`/`collect_weather.py`, per this
+session's prompt correction, same as every prior cloud session).
+
+Fresh container checkout started with local HEAD detached, already at `f3076b4` (Session 459's own
+commit, already pushed); `git fetch origin main` -> identical SHA on both lines, no divergence. No
+new human commit landed between Session 459 ending and this session starting.
+
+This session's prompt again asks to "start Phase 6" (statistical/logistic baseline over synthetic
+fixtures shaped like the real racecard schema, per-race softmax summing to ~1.0, clearly labeled
+not-a-real-prediction). Independently re-verified: `src/models/model1_logistic_baseline.py` (18901
+bytes, unchanged) still satisfies that ask verbatim — `official_rating`/`draw` as int, `recent_form`
+as an undelimited string like `"1582F3"`, per-race softmax summing to 1.0 by construction, module
+docstring explicitly labels it synthetic-only / never a real predictive claim, fixtures matching
+`tests/test_racecard_theracingapi.py`'s confirmed field shapes — exactly as Sessions 139/185-459
+have all already found, and remains superseded in practice by the real Kaggle-fitted Model 1
+(RL-006/RL-007) and Model 2 gradient boosting, both already in `src/models/`. No new code written; a
+duplicate second baseline would not be additive.
+
+**PR #1 checked again via `mcp__github__pull_request_read` (`get`, `get_comments`) and
+`mcp__github__list_issues` — still has not moved.** `created_at` `2026-10-17T17:55:00Z`,
+`updated_at` `2026-10-17T17:55:36Z`, still open, unmerged, `mergeable_state: clean`, still 1 commit,
+body unchanged, **0 comments**. `list_issues` (OPEN): 0. Jonathan has not responded to Session 435's
+notification — no merge, close, comment, or review, and no word on pausing the schedule. Jonathan's
+own in-flight PR, pending his own review — now unchanged for **72 sessions** since Session 388 first
+flagged it, and **25 sessions** since Session 435's notification with zero human engagement of any
+kind.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576
+passed**, same count as Sessions 185-459. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/`
+-> sum 0. `docs/BUILD_LOG.md` was ~212KB before this entry — under the ~230KB archive watch
+threshold, no archiving needed.
+
+**No notification this session.** Nothing has changed since Session 435's notification about PR
+#1's stall: PR #1 is still bit-for-bit unchanged (same commit, same body, no new comments), the
+test count is unchanged, and Jonathan has not weighed in on whether to pause the schedule. The gap
+is now 72/25 sessions, still short of the ~100-session re-flag threshold Sessions 454/455 set
+(roughly 28 more sessions at this rate) — repeating the same flag now would still be noise, not
+help.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** check PR #1's state again before anything else, and check whether Jonathan has
+responded to Session 435's notification — either would supersede the "backlog exhausted, awaiting
+human" framing and should be acted on or acknowledged directly rather than re-logged as another
+no-op. If the gap reaches ~100 sessions with still no human engagement, re-flag per Session 454/455's
+note above rather than deferring again.
+
+---
+
 ## 2026-10-26 — Session 459 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change.** `env | grep -i THERACINGAPI` -> empty, confirmed directly
