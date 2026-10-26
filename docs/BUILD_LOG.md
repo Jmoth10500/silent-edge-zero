@@ -9,6 +9,62 @@ re-doing finished work.
 
 ---
 
+## 2026-10-26 — Session 454 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change.** `env | grep -i THERACINGAPI` -> empty, confirmed directly
+(Mac-only credentials; did not attempt `collect_racecards.py`/`collect_weather.py`, per this
+session's prompt correction, same as every prior cloud session).
+
+Fresh container checkout started with local HEAD detached at stale `c7355ca`; `git checkout main &&
+git pull origin main` fast-forwarded cleanly (989 lines added, `docs/BUILD_LOG.md` only — Sessions
+434-453's entries); `git rev-parse HEAD origin/main` -> identical SHA (`fe4070f`) on both lines
+after pull. No new human commit landed between Session 453 ending and this session starting.
+
+This session's prompt again asks to "start Phase 6" (statistical/logistic baseline over synthetic
+fixtures shaped like the real racecard schema, per-race softmax summing to ~1.0, clearly labeled
+not-a-real-prediction). `src/models/model1_logistic_baseline.py` (373 lines, unchanged since commit
+`0b703b3`) still satisfies that ask verbatim — `official_rating`/`draw` as int, `recent_form` as an
+undelimited string like `"1582F3"`, per-race softmax summing to 1.0 by construction, module
+docstring and in-line comments explicitly label it synthetic-only / not a real prediction, fixtures
+matching `tests/test_racecard_theracingapi.py`'s (210 lines, same commit) confirmed field shapes —
+exactly as Sessions 139/185-453 have all already found, and remains superseded in practice by the
+real Kaggle-fitted Model 1 (RL-006/RL-007) and Model 2 gradient boosting, both already in
+`src/models/`. No new code written; a duplicate second baseline would not be additive.
+
+**PR #1 checked again via `mcp__github__pull_request_read` (`get` and `get_comments`) and
+`mcp__github__list_issues` — still has not moved.** `created_at` `2026-10-17T17:55:00Z`,
+`updated_at` `2026-10-17T17:55:36Z`, still open, unmerged, `mergeable_state: unknown`, still 1
+commit, body unchanged, **0 comments**. `list_issues` (OPEN): 0. Jonathan has not responded to
+Session 435's notification — no merge, close, comment, or review, and no word on pausing the
+schedule. Jonathan's own in-flight PR, pending his own review — now unchanged for **66 sessions**
+since Session 388 first flagged it.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576
+passed**, same count as Sessions 185-453. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/`
+-> sum 0. `docs/BUILD_LOG_LOCAL.md` tail re-read directly (unchanged) — most recent human entry
+still 2026-09-30, now 26 days with no new local activity. `docs/BUILD_LOG.md` was ~186KB before
+this entry — under the ~230KB archive watch threshold, no archiving needed.
+
+**No notification this session.** Nothing has changed since Session 435's notification about PR
+#1's stall and the routine's own cadence overhead: PR #1 is still bit-for-bit unchanged (same
+commit, same body, no new comments), the test count is unchanged, and Jonathan has not weighed in
+on whether to pause the schedule. Repeating the same flag with no new information would be noise,
+not help — but the gap is now 66 sessions and 19 sessions since that notification with zero human
+engagement of any kind (no PR activity, no BUILD_LOG_LOCAL.md entry, no schedule change); a future
+session approaching a much larger gap (e.g. 100 sessions) should consider that silence may mean the
+notification was never seen, not that it was declined, and re-flag at that point.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** check PR #1's state again before anything else, and check whether Jonathan has
+responded to Session 435's notification — either would supersede the "backlog exhausted, awaiting
+human" framing and should be acted on or acknowledged directly rather than re-logged as another
+no-op.
+
+---
+
 ## 2026-10-25 — Session 453 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change.** `env | grep -i THERACINGAPI` -> empty, confirmed directly
