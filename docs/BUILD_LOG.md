@@ -9,6 +9,69 @@ re-doing finished work.
 
 ---
 
+## 2026-10-27 — Session 464 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change.** `env | grep THERACINGAPI` -> empty, confirmed directly
+(Mac-only credentials; did not attempt `collect_racecards.py`/`collect_weather.py`, per this
+session's prompt correction, same as every prior cloud session).
+
+Container booted with local `HEAD` detached at `b15f7c9` (Session 463's own commit); `git fetch
+origin main` (fresh) resolved `origin/main` to the same `b15f7c9` — no divergence, no new human
+commit landed between Session 463 ending and this session starting. `git checkout main && git pull
+origin main` fast-forwarded local `main` cleanly onto it (3-commit fast-forward from a stale local
+ref, matching the archive-split commit from Session 463).
+
+This session's prompt again asks to "start Phase 6" (statistical/logistic baseline over synthetic
+fixtures shaped like the real racecard schema, per-race softmax summing to ~1.0, clearly labeled
+not-a-real-prediction). Independently re-verified: `src/models/model1_logistic_baseline.py` (18901
+bytes, byte-for-byte unchanged) still satisfies that ask verbatim — `official_rating`/`draw` as
+int, `recent_form` as an undelimited string like `"1582F3"`, per-race softmax summing to 1.0 by
+construction, module docstring explicitly labels it synthetic-only / never a real predictive
+claim, fixtures matching `tests/test_racecard_theracingapi.py`'s (7462 bytes, unchanged) confirmed
+field shapes — exactly as Sessions 139/185-463 have all already found, and remains superseded in
+practice by the real Kaggle-fitted Model 1 (RL-006/RL-007) and Model 2 gradient boosting, both
+already in `src/models/`. No new code written; a duplicate second baseline would not be additive.
+
+**PR #1 checked again via `mcp__github__pull_request_read` (`get`, `get_comments`) and
+`mcp__github__list_issues`/`list_pull_requests` — still has not moved.** `created_at`
+`2026-10-17T17:55:00Z`, `updated_at` `2026-10-17T17:55:36Z` (unchanged, 10 days old), still open,
+unmerged, `mergeable_state: clean`, still 1 commit, body unchanged, **0 comments**. `list_issues`
+(OPEN): 0. `list_pull_requests` (all states): still just the 1 PR. Jonathan has not responded to
+Session 435's notification — no merge, close, comment, or review, and no word on pausing the
+schedule. Jonathan's own in-flight PR, pending his own review — now unchanged for **76 sessions**
+since Session 388 first flagged it, and **29 sessions** since Session 435's notification with zero
+human engagement of any kind. Still short of the ~100-session re-flag threshold Sessions 454/455
+set (roughly 24 more sessions at this rate) — repeating that flag now would still be noise, not
+help.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576
+passed**, same count as Sessions 185-463. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/`
+-> sum 0. `docs/BUILD_LOG.md` is ~127KB before this entry — well under the ~230KB archive watch
+threshold after Session 463's split, no archiving needed. `docs/BUILD_LOG_LOCAL.md` tail re-read
+directly (unchanged): most recent human entry still 2026-09-30, now 28 days with no new local
+activity.
+
+**No notification this session.** Nothing has changed since Session 435's notification about PR
+#1's stall: PR #1 is still bit-for-bit unchanged (same commit, same body, no new comments), the
+test count is unchanged, and Jonathan has not weighed in on whether to pause the schedule. The gap
+is now 76/29 sessions, still short of the ~100-session re-flag threshold — repeating the same flag
+now would still be noise, not help.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git checkout main`, `git fetch origin main` (fresh, no cached ref), compare `git
+rev-parse HEAD origin/main` before doing anything else. Read `docs/BUILD_LOG_LOCAL.md`'s tail for
+any new local activity. If Jonathan has replied to Session 435's notification (paused/adjusted the
+schedule, merged/closed/commented on PR #1, or supplied new work), act on that explicitly — don't
+re-derive the same "nothing to do" conclusion from scratch if he's already responded. Otherwise,
+keep re-checking rather than reverting to the no-op script by rote, and hold the ~100-session
+re-flag threshold Sessions 454/455 set rather than re-notifying early. `docs/BUILD_LOG.md` is small
+again — no archiving needed for a good while.
+
+---
+
 ## 2026-10-27 — Session 463 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change.** `env | grep THERACINGAPI` -> empty, confirmed directly
