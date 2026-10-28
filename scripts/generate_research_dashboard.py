@@ -1242,6 +1242,48 @@ function showPopulationView(name) {{
 """
 
 
+def render_sample_meta(start, end, elig_dates, class_summary, layer, alerts, layer_status, roi, checks) -> str:
+    """Sample definition, freshness and exclusions -- shown above every metric so the page can never
+    look current when its eligible sample ended weeks earlier."""
+    import html as _h
+    from datetime import datetime, timezone
+    n = class_summary["n_eligible"]
+    window_valid = layer["metrics"]["valid_races"].numerator
+    s_start = elig_dates[0] if elig_dates else None
+    s_end = elig_dates[-1] if elig_dates else None
+    stale = (s_end is None) or (s_end < date.today() - timedelta(days=1))
+    banner = ""
+    if stale:
+        through = s_end.strftime("%d %b %Y") if s_end else "no date"
+        banner = (f'<div class="sample-banner">Research comparison currently valid through {through} only. '
+                  f'Newer races cannot enter it until they have a usable paired market price (see exclusions); '
+                  f'it advances automatically when valid paired observations exist.</div>')
+    cov = (n / window_valid) if window_valid else 0.0
+    why = []
+    if class_summary["n_unresolved"]:
+        why.append(f"{class_summary['n_unresolved']} races unresolved (no usable market data or no clear winner)")
+    ex = layer["metrics"]["excluded_races"].exclusions
+    if ex:
+        why.append("integrity exclusions: " + ", ".join(f"{v} {k.replace('_', ' ').lower()}" for k, v in ex.items()))
+    lock = layer["metrics"]["lock_market_coverage"]
+    return f"""
+<style>.sample-meta{{border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin:10px 0;font-size:.82rem;line-height:1.5}}
+.sample-banner{{background:rgba(224,161,58,.15);border-left:4px solid var(--amber);padding:8px 12px;margin:10px 0;font-weight:600}}</style>
+{banner}
+<div class="sample-meta">
+  <b>Sample</b>: eligible races {s_start or 'n/a'} → {s_end or 'n/a'} · n={n} of {int(window_valid)} valid races in the window ({cov:.0%} coverage) ·
+  last data refresh {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC.<br>
+  <b>Eligibility</b>: top pick and a usable market favourite both exist, with a clear winner. The market reference is the
+  <b>lock-window exchange price</b> (last valid Smarkets snapshot 30 min to 60 s before the off, never after) &mdash;
+  coverage over the whole tracked period is {int(lock.numerator)}/{int(lock.denominator)} races ({(lock.value or 0):.0%}); races without one are excluded, never estimated.<br>
+  <b>Exclusions</b>: {_h.escape('; '.join(why) or 'none')}.<br>
+  <b>ROI</b>: the card below reads the same central metrics layer as the main site (n={roi['n_staked']} staked bets, MIXED exchange + SP prices &mdash; see the
+  main site's price-type breakdown for exchange-only). The earlier +29.3% on 288 races covered only 9&ndash;21 Sep, a window in which every price was an exchange price.<br>
+  <b>Integrity checks</b>: {layer_status} ({len(alerts)} alert(s)); population identities: {'all reconcile' if all(ok for *_, ok in checks) else 'FAILURES &mdash; see data-health page'}.
+</div>
+"""
+
+
 def main():
     days = None
     if "--days" in sys.argv:
@@ -1292,9 +1334,32 @@ def main():
     print(f"Dashboard reconciliation: {reconciliation['status']} ({len(reconciliation['checks'])} checks)")
     print(f"Missed-winner races (both wrong): {len(missed_races)}")
 
-    html = render_html(start, end, class_summary, brier_summary, roi, integrity_result["status"], series, band_analysis,
+    # --- Integrity layer: honest sample metadata + derived status (2026-10-17) -------------------------
+    from src.integrity.health import collect_alerts, status_from_alerts
+    from src.integrity.metrics import compute as compute_metrics, load_dataset, reconcile
+    conn2 = psycopg2.connect(dbname="silent_edge_zero")
+    ds = load_dataset(conn2, LIVE_TRACKING_START, end)
+    layer = compute_metrics(ds)
+    layer_checks = reconcile(ds, layer)
+    layer_alerts = collect_alerts(conn2, end, reconciliation=layer_checks)
+    conn2.close()
+    layer_status = status_from_alerts(layer_alerts)
+    # Data Integrity Status is DERIVED: worst of the legacy audit and the new automated checks.
+    rank = {"PASS": 0, "OK": 0, "WARNING": 1, "FAIL": 2}
+    combined = max((integrity_result["status"], layer_status), key=lambda x: rank.get(x, 1))
+    combined = "PASS" if combined in ("PASS", "OK") else combined
+    race_dates = {r["race"]["race_id"]: r["race"].get("date") for r in all_races}
+    elig_dates = sorted(d for c_ in classified if c_["category"] != "UNRESOLVED"
+                        for d in [race_dates.get(c_["race_id"])] if d)
+    meta_html = render_sample_meta(start, end, elig_dates, class_summary, layer, layer_alerts, layer_status, roi, layer_checks)
+
+    html = render_html(start, end, class_summary, brier_summary, roi, combined, series, band_analysis,
                         outcome_breakdown, se_calibration, market_calibration, rank_matrix, agreement_splits,
                         pnl_series, odds_bands, d_split, missed_races, missed_bands_10pt, missed_bands_5pt, rank_views)
+    marker = "</div>\n"
+    sub_end = html.index('<div class="subtitle">')
+    cut = html.index(marker, sub_end) + len(marker)
+    html = html[:cut] + meta_html + html[cut:]
     OUTPUT_PATH.write_text(html)
     print(f"Research dashboard written to {OUTPUT_PATH} ({len(html)} bytes).")
     print(f"Range: {start} .. {end}  |  {class_summary['n_eligible']} eligible races  |  "

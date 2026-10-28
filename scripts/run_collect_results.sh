@@ -22,7 +22,16 @@ PY=/Library/Frameworks/Python.framework/Versions/3.11/bin/python3
 TODAY=$(date +%Y-%m-%d)
 $PY scripts/import_horseracingnet_results.py "$TODAY"
 $PY scripts/collect_race_results.py "$TODAY"
-$PY scripts/generate_daily_summary.py
+$PY scripts/generate_daily_summary.py "$TODAY"
+$PY scripts/integrity_report.py "$TODAY"
 $PY scripts/generate_dashboard.py
 cp dashboard.html site/index.html
-netlify deploy --prod --dir=site
+# Research Intelligence: regenerated nightly (was manual -> stale since 21 Sep). It refuses to
+# publish if its own reconciliation fails; in that case the old page stays and the failure is logged.
+if $PY scripts/generate_research_dashboard.py; then
+  cp research_dashboard.html site/research_dashboard.html
+else
+  echo "research dashboard NOT updated: generation/reconciliation failed" >&2
+fi
+# No Netlify deploy here since 2026-09-30: the site is published once a day
+# by scripts/run_deploy_site.sh (06:00). Everything stays local until then.

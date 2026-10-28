@@ -30,7 +30,8 @@ each run — the HTML file itself carries no history, the DB is the
 permanent record).
 """
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
+from html import escape as html_escape
 from pathlib import Path
 from typing import Optional
 
@@ -195,7 +196,8 @@ def load_daily_summaries(conn) -> list[dict]:
     cur.execute(
         """
         SELECT race_date, races_total, races_settled, top_pick_wins, top_pick_placed,
-               favourite_wins, win_stake_total, win_profit, ew_stake_total, ew_profit
+               favourite_wins, win_stake_total, win_profit, ew_stake_total, ew_profit,
+               sp_priced_races
         FROM daily_summary
         WHERE races_settled > 0
         ORDER BY race_date
@@ -205,13 +207,15 @@ def load_daily_summaries(conn) -> list[dict]:
     cur.close()
     out = []
     for (race_date_, races_total, races_settled, top_pick_wins, top_pick_placed,
-         favourite_wins, win_stake_total, win_profit, ew_stake_total, ew_profit) in rows:
+         favourite_wins, win_stake_total, win_profit, ew_stake_total, ew_profit,
+         sp_priced_races) in rows:
         out.append({
             "race_date": race_date_, "races_total": races_total, "races_settled": races_settled,
             "top_pick_wins": top_pick_wins, "top_pick_placed": top_pick_placed,
             "favourite_wins": favourite_wins,
             "win_stake_total": float(win_stake_total), "win_profit": float(win_profit),
             "ew_stake_total": float(ew_stake_total), "ew_profit": float(ew_profit),
+            "sp_priced_races": sp_priced_races,
         })
     return out
 
@@ -852,6 +856,24 @@ def render_day_history_dialog(day: date, races: list[dict]) -> str:
     </dialog>"""
 
 
+def sp_tag(s: dict) -> str:
+    """Small "SP" badge for a day whose races were settled at starting price
+    because no exchange price was captured (see daily_summary.sp_priced_races
+    and generate_eod_report.load_top_picks_and_favourites). Empty for days
+    priced entirely from exchange prices, so those rows look unchanged."""
+    n = s.get("sp_priced_races", 0)
+    if not n:
+        return ""
+    return (f'<span class="sp-tag" title="{n} of {s["races_settled"]} races settled at starting '
+            f'price (no exchange price captured)">SP</span>')
+
+
+SP_NOTE = ("Days tagged <b>SP</b> had no exchange price captured (Smarkets collection was broken "
+           "25-30 Sep), so their P&amp;L is settled at the real starting price instead. SP is "
+           "usually slightly worse for a backer than the exchange price the model saw, so those "
+           "days are not directly comparable with the untagged ones.")
+
+
 def render_track_record(summaries: list[dict], race_history: dict[date, list[dict]] | None = None) -> str:
     """Real, persisted day-by-day track record — cumulative hit rate and
     P&L across every real settled day, plus a per-day breakdown, built
@@ -880,7 +902,7 @@ def render_track_record(summaries: list[dict], race_history: dict[date, list[dic
       <div class="stat-tile stat-tile-clickable" onclick="document.getElementById('days-tracked-dialog').showModal()">
         <div class="stat-label">Days tracked</div>
         <div class="stat-value">{days}</div>
-        <div class="stat-sub">{races_settled} real settled races — tap to view by day</div>
+        <div class="stat-sub">{races_settled} settled races ({cum["races_genuine"]} ran, {races_settled - cum["races_genuine"]} void/non-runner) — tap to view by day</div>
       </div>
       <div class="stat-tile">
         <div class="stat-label">Top-pick hit rate (real)</div>
@@ -888,12 +910,12 @@ def render_track_record(summaries: list[dict], race_history: dict[date, list[dic
         <div class="stat-sub">vs {_pct(fav_rate)} for the market favourite, this period</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-label">£1 win P&amp;L</div>
+        <div class="stat-label">£1 win P&amp;L (mixed prices)</div>
         <div class="stat-value" style="color:{'var(--good)' if win_profit >= 0 else 'var(--bad)'}">£{win_profit:+.2f}</div>
-        <div class="stat-sub">{_pct(win_roi)} ROI on £{win_stake:.0f} staked</div>
+        <div class="stat-sub">{_pct(win_roi)} ROI on £{win_stake:.0f} staked — MIXED exchange + SP prices, see breakdown below</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-label">£2 each-way P&amp;L</div>
+        <div class="stat-label">£2 each-way P&amp;L (mixed prices)</div>
         <div class="stat-value" style="color:{'var(--good)' if ew_profit >= 0 else 'var(--bad)'}">£{ew_profit:+.2f}</div>
         <div class="stat-sub">{_pct(ew_roi)} ROI on £{ew_stake:.0f} staked</div>
       </div>
@@ -921,10 +943,12 @@ def render_track_record(summaries: list[dict], race_history: dict[date, list[dic
           <span class="trackrow-pct">{_pct(d_hit)}</span>
           <div class="trackrow-bar-wrap">
             <div class="trackrow-bar-track"><div class="trackrow-bar-fill" style="width:{width}%"></div></div>
-            <span class="trackrow-pnl" style="color:{pnl_color}">£{pnl:+.2f}</span>
+            <span class="trackrow-pnl" style="color:{pnl_color}">£{pnl:+.2f}{sp_tag(s)}</span>
           </div>
         </div>""")
 
+    sp_note = (f'<div class="bank-note">{SP_NOTE}</div>'
+               if any(s.get("sp_priced_races") for s in summaries) else "")
     dates = [s["race_date"] for s in summaries]
     day_dialogs = "".join(
         render_day_history_dialog(d, race_history[d]) for d in dates if d in race_history
@@ -933,6 +957,7 @@ def render_track_record(summaries: list[dict], race_history: dict[date, list[dic
     <div class="section-label">Track record — real settled results, day by day</div>
     {tiles}
     {caveat}
+    {sp_note}
     <div class="track-record-chart pg-list" id="track-record-rows">{''.join(day_rows)}</div>
     {render_pagination_controls("track-record-rows")}
     {render_days_tracked_dialog(dates)}
@@ -1060,6 +1085,9 @@ def compute_cumulative_track_record(summaries: list[dict]) -> dict:
     section, so the two numbers can never drift apart."""
     days = len(summaries)
     races_settled = sum(s["races_settled"] for s in summaries)
+    # Win/fav rates use genuine runners only (void/non-runner top picks are refunded, not losses or
+    # observations). Older summary rows without the field fall back to races_settled.
+    races_genuine = sum(s.get("races_genuine", s["races_settled"]) for s in summaries)
     top_pick_wins = sum(s["top_pick_wins"] for s in summaries)
     top_pick_placed = sum(s["top_pick_placed"] for s in summaries)
     favourite_wins = sum(s["favourite_wins"] for s in summaries)
@@ -1073,8 +1101,9 @@ def compute_cumulative_track_record(summaries: list[dict]) -> dict:
         "favourite_wins": favourite_wins,
         "win_profit": win_profit, "win_stake": win_stake,
         "ew_profit": ew_profit, "ew_stake": ew_stake,
-        "hit_rate": top_pick_wins / races_settled if races_settled else 0.0,
-        "fav_rate": favourite_wins / races_settled if races_settled else 0.0,
+        "races_genuine": races_genuine,
+        "hit_rate": top_pick_wins / races_genuine if races_genuine else 0.0,
+        "fav_rate": favourite_wins / races_genuine if races_genuine else 0.0,
         "win_roi": win_profit / win_stake if win_stake else 0.0,
         "ew_roi": ew_profit / ew_stake if ew_stake else 0.0,
     }
@@ -1206,10 +1235,12 @@ def render_bank_tracker(summaries: list[dict]) -> str:
         rows.append(f"""
         <div class="bank-row pg-item">
           <span class="bank-date">{s['race_date'].strftime('%d %b')}</span>
-          <span class="bank-pnl" style="color:{pnl_color}">£{pnl:+.2f}</span>
+          <span class="bank-pnl" style="color:{pnl_color}">£{pnl:+.2f}{sp_tag(s)}</span>
           <span class="bank-balance">£{bal:.2f}</span>
         </div>""")
 
+    bank_sp_note = (f'<div class="bank-note">{SP_NOTE}</div>'
+                    if any(s.get("sp_priced_races") for s in summaries) else "")
     return f"""
     <div class="section-label">£100 starting bank — flat £1 win stake, every top pick, since Day 1</div>
     <div class="bank-tracker">
@@ -1220,6 +1251,7 @@ def render_bank_tracker(summaries: list[dict]) -> str:
       <div class="bank-note">Real, honest, and not a recommendation — a flat £1 stake on every
         real top pick, same definition used everywhere else on this page. A real losing run
         would show up here exactly as it happened, never smoothed out.</div>
+      {bank_sp_note}
       <div class="bank-rows pg-list" id="bank-rows">{''.join(rows)}</div>
       {render_pagination_controls("bank-rows")}
     </div>"""
@@ -1631,6 +1663,7 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
   .trackrow-bar-wrap {{ grid-area: bar; display: flex; align-items: center; gap: 8px; }}
   .trackrow-bar-track {{ flex: 1; height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }}
   .trackrow-bar-fill {{ height: 100%; border-radius: 4px; background: var(--series-1); }}
+  .sp-tag {{ display: inline-block; margin-left: 6px; padding: 0 5px; font-size: 9px; font-weight: 700; letter-spacing: .04em; border: 1px solid currentColor; border-radius: 3px; opacity: .75; vertical-align: 1px; }}
   .trackrow-pnl {{ font-size: 11px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }}
 
   @media (min-width: 480px) {{
@@ -2016,6 +2049,75 @@ def render_html(race_date: date, races: list[dict], course_weather: dict[str, di
 </html>"""
 
 
+def split_under_review(conn, races: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Separate races that failed validation (or were classified invalid) from the
+    scored cards. Under-review races are listed with the failed rule, never ranked."""
+    if not races:
+        return races, []
+    ids = [r["race_id"] for r in races]
+    cur = conn.cursor()
+    cur.execute("""SELECT race_id, classification, reason FROM race_integrity
+                   WHERE race_id = ANY(%s) AND NOT include_in_metrics""", (ids,))
+    invalid = {rid: (cls, reason) for rid, cls, reason in cur.fetchall()}
+    cur.execute("""SELECT DISTINCT ON (race_id) race_id, status, failed_rules FROM race_validation
+                   WHERE race_id = ANY(%s) ORDER BY race_id, id DESC""", (ids,))
+    quarantined = {rid: rules for rid, status, rules in cur.fetchall() if status == "QUARANTINED"}
+    cur.close()
+    ok, review = [], []
+    for r in races:
+        rid = r["race_id"]
+        if rid in invalid:
+            r["review_reason"] = f"{invalid[rid][0]}: {invalid[rid][1]}"
+            review.append(r)
+        elif rid in quarantined:
+            r["review_reason"] = "validation rules failed: " + ", ".join(quarantined[rid])
+            review.append(r)
+        else:
+            ok.append(r)
+    return ok, review
+
+
+def render_review_section(review: list[dict], day: date) -> str:
+    if not review:
+        return ""
+    rows = "".join(
+        f"<tr><td>{r['off_time'].strftime('%H:%M') if hasattr(r['off_time'], 'strftime') else r['off_time']}</td>"
+        f"<td>{html_escape(r['course_name'])}</td><td>{html_escape(r['race_name'] or '')}</td>"
+        f"<td>{html_escape(r['review_reason'])}</td></tr>" for r in review)
+    return f"""
+    <div class="section-label">{day.strftime('%a %d %b')} — races under review ({len(review)})</div>
+    <div class="ig-card"><div class="ig-head">DATA VALIDATION FAILED / RACE UNDER REVIEW</div>
+      <div class="ig-pop">These records failed an automated integrity rule. No pick is shown and they are not counted in any
+      statistic. The raw record is retained for audit.</div>
+      <table class="ig-table"><tr><th>Time</th><th>Course</th><th>Race</th><th>Why</th></tr>{rows}</table></div>"""
+
+
+def research_sample_end() -> str | None:
+    """End date of the Research Intelligence sample, read from the generated page itself
+    (never hard-coded); None if the page is missing."""
+    import re
+    try:
+        txt = (Path(__file__).parent.parent / "research_dashboard.html").read_text(encoding="utf-8")
+        m = re.search(r'RESEARCH_SAMPLE_END:\s*(\d{4}-\d{2}-\d{2})', txt) or re.search(r'(\d{4}-\d{2}-\d{2}) to (\d{4}-\d{2}-\d{2}) · live-tracked', txt)
+        if not m:
+            return None
+        end = date.fromisoformat(m.group(m.lastindex))
+        return end.strftime("%d %b %Y") if end < date.today() - timedelta(days=1) else None
+    except Exception:
+        return None
+
+
+def inject_integrity(page: str, panel_html: str, review_html: str) -> str:
+    if review_html and '<div id="races">' in page:
+        page = page.replace('<div id="races">', review_html + '<div id="races">', 1)
+    marker = '<div class="section-label">Track record'
+    if marker in page:
+        page = page.replace(marker, panel_html + marker, 1)
+    else:
+        page = page.replace("</body>", panel_html + "</body>", 1)
+    return page
+
+
 def main():
     race_date_str = sys.argv[1] if len(sys.argv) > 1 else date.today().isoformat()
     race_date = date.fromisoformat(race_date_str)
@@ -2024,8 +2126,23 @@ def main():
     conn = psycopg2.connect(dbname="silent_edge_zero")
     races = load_predictions(conn, race_date)
     tomorrow_races = load_predictions(conn, tomorrow_date)
-    daily_summaries = load_daily_summaries(conn)
-    race_history = load_race_history(conn, [s["race_date"] for s in daily_summaries])
+
+    # Integrity layer (2026-10-17): every public number comes from ONE metrics layer
+    # (src/integrity/metrics.py); phantom/quarantined races are shown as "under review",
+    # never silently scored or counted. See docs/DATA_INTEGRITY.md.
+    from scripts.integrity_public import public_daily_summaries, public_race_history, render_integrity_panel
+    from src.integrity.health import collect_alerts, status_from_alerts
+    from src.integrity.metrics import compute as compute_metrics, load_dataset, reconcile
+    ds = load_dataset(conn, date(2026, 9, 1), race_date)
+    metrics = compute_metrics(ds)
+    checks = reconcile(ds, metrics)
+    alerts = collect_alerts(conn, race_date, reconciliation=checks)
+    status_info = {"status": status_from_alerts(alerts), "generated_at": datetime.now(timezone.utc).isoformat()}
+    daily_summaries = public_daily_summaries(ds, metrics)
+    race_history = public_race_history(ds, metrics)
+    races, review_today = split_under_review(conn, races)
+    tomorrow_races, review_tomorrow = split_under_review(conn, tomorrow_races)
+    research_end = research_sample_end()
     conn.close()
 
     course_names = {r["course_name"] for r in races}
@@ -2035,6 +2152,8 @@ def main():
 
     html = render_html(race_date, races, course_weather, daily_summaries, race_history,
                         tomorrow_date, tomorrow_races, tomorrow_weather)
+    html = inject_integrity(html, render_integrity_panel(metrics, status_info, research_end),
+                            render_review_section(review_today, race_date) + render_review_section(review_tomorrow, tomorrow_date))
     OUTPUT_PATH.write_text(html, encoding="utf-8")
     print(f"Dashboard written to {OUTPUT_PATH} ({len(races)} races today, {len(tomorrow_races)} tomorrow).")
 
