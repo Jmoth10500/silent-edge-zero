@@ -9,6 +9,64 @@ re-doing finished work.
 
 ---
 
+## 2026-10-30 — Session 488 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — and the ~100-session re-flag threshold is now crossed, so this
+session sends the notification Session 487 deferred.** `env | grep -i THERACINGAPI` -> empty,
+confirmed directly (Mac-only credentials; did not attempt `collect_racecards.py`/
+`collect_weather.py`, per this session's prompt correction, same as every prior cloud session).
+
+Container's local `main` was stale at `55e4388`; `git fetch origin main` (fresh) resolved
+`origin/main` to `1a28d4e` (Session 487's own commit, already pushed) — `git checkout main && git
+pull origin main --ff-only` fast-forwarded cleanly onto it. `git rev-parse HEAD origin/main`
+identical after. No new human commit landed between Session 487 ending and this session starting.
+
+This session's prompt again asks to "start Phase 6" (statistical/logistic baseline over synthetic
+fixtures shaped like the real racecard schema, per-race softmax summing to ~1.0, clearly labeled
+not-a-real-prediction). Independently re-verified: `src/models/model1_logistic_baseline.py` (373
+lines, unchanged) still satisfies that ask verbatim — `official_rating`/`draw` as int,
+`recent_form` as an undelimited string like `"1582F3"`, per-race softmax summing to 1.0 by
+construction, module docstring explicitly labels the original build/test as synthetic-only,
+fixtures matching `tests/test_racecard_theracingapi.py`'s (210 lines, unchanged) confirmed field
+shapes — exactly as Sessions 139/185-487 have all already found, and remains superseded in practice
+by the real Kaggle-fitted Model 1 (RL-006/RL-007) and Model 2 gradient boosting, both already in
+`src/models/` (`model0_market_baseline.py`, `model1_logistic_baseline.py`,
+`model2_gradient_boosting.py`, `model2_hyperparameter_sweep.py`). No new code written; a duplicate
+second baseline would not be additive.
+
+**PR #1 checked again via `mcp__github__pull_request_read` (`get`/`get_comments`) and
+`mcp__github__list_issues` — still has not moved.** `created_at` `2026-10-17T17:55:00Z`,
+`updated_at` `2026-10-17T17:55:36Z` (unchanged, 13 days old), still open, unmerged,
+`mergeable_state: clean`, still 1 commit, body unchanged, 0 comments. `list_issues` (OPEN): 0.
+Jonathan has not responded to Session 435's notification — no merge, close, comment, or review, and
+no word on pausing the schedule. Jonathan's own in-flight PR, pending his own review — now unchanged
+for **100 sessions** since Session 388 first flagged it, and **53 sessions** since Session 435's
+notification with zero human engagement of any kind. This crosses the ~100-session re-flag
+threshold Sessions 454/455 set, and Session 487 explicitly left this as the session to act on it —
+**push notification sent this session** about PR #1's continued stall.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576
+passed**, same count as Sessions 185-487. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/`
+-> sum 0. `docs/BUILD_LOG.md` is ~130KB before this entry — well under the ~230KB watch threshold
+after Session 485's archive split. `docs/BUILD_LOG_LOCAL.md` tail re-read directly (unchanged) —
+most recent human entry still 2026-09-30, with no new local activity since.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git checkout main`, `git fetch origin main` (fresh, no cached ref), compare `git
+rev-parse HEAD origin/main` before doing anything else. Read `docs/BUILD_LOG_LOCAL.md`'s tail for
+any new local activity. If Jonathan has replied to this session's notification (paused/adjusted the
+schedule, merged/closed/commented on PR #1, or supplied new work), act on that explicitly — don't
+re-derive the same "nothing to do" conclusion from scratch if he's already responded. Otherwise,
+having just notified, don't re-notify again immediately next session purely on rote repetition —
+give Jonathan a reasonable window to see and act on this one before considering another re-flag
+(e.g. set the next re-flag threshold at roughly 50 further sessions of continued silence, consistent
+with the ~50-session cadence Sessions 435→487 already established).
+
+---
+
 ## 2026-10-30 — Session 487 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change.** `env | grep THERACINGAPI` -> empty, confirmed directly
