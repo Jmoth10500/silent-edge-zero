@@ -9,6 +9,64 @@ re-doing finished work.
 
 ---
 
+## 2026-11-01 — Session 508 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — still holding after Session 488's re-flag, per its own
+~50-session window.** `env | grep -i THERACINGAPI` -> empty, confirmed directly (Mac-only
+credentials; did not attempt `collect_racecards.py`/`collect_weather.py`, per this session's prompt
+correction, same as every prior cloud session).
+
+Container's local `main` was detached at `9efbe7b`; `git fetch origin main` (fresh, no cached ref)
+resolved `origin/main` to `d1df6a5` (Session 507's own commit, already pushed, including its
+archive split) — `git checkout main && git pull origin main --ff-only` fast-forwarded cleanly onto
+it (13-commit fast-forward). `git rev-parse HEAD origin/main` identical on both lines after. No new
+human commit landed between Session 507 ending and this session starting.
+
+This session's prompt again asks to "start Phase 6" (statistical/logistic baseline over synthetic
+fixtures shaped like the real racecard schema, per-race softmax summing to ~1.0, clearly labeled
+not-a-real-prediction). Independently re-verified: `src/models/model1_logistic_baseline.py` (373
+lines, unchanged) and `tests/test_racecard_theracingapi.py` (210 lines, unchanged) still satisfy
+that ask verbatim — spot-checked the module docstring directly, confirming `official_rating`/`draw`
+as int, `recent_form` as an undelimited string like `"1582F3"`, per-race softmax summing to 1.0 by
+construction, and an explicit synthetic-only / not-a-real-prediction label — exactly as Sessions
+139/185-507 have all already found, and remains superseded in practice by the real Kaggle-fitted
+Model 1 (RL-006/RL-007) and Model 2 gradient boosting already in `src/models/`. No new code
+written; a duplicate second baseline would not be additive.
+
+**PR #1 checked again via `mcp__github__pull_request_read` (`get`) and `mcp__github__list_issues`
+— still has not moved.** `created_at` `2026-10-17T17:55:00Z`, `updated_at` `2026-10-17T17:55:36Z`
+(unchanged, 15 days old), still open, unmerged, `mergeable_state: clean`, still 1 commit, body
+unchanged. `list_issues` (OPEN): 0. Jonathan has not responded to Session 488's notification — no
+merge, close, comment, or review, and no word on pausing the schedule. Jonathan's own in-flight PR,
+pending his own review — now unchanged for **120 sessions** since Session 388 first flagged it, and
+**73 sessions** since Session 435's first notification (20 sessions since Session 488's re-flag).
+**No notification sent this session** — only 20 sessions have passed since the re-flag, still well
+inside the ~50-session window Session 488 set, and nothing has changed since Session 507
+independently reached the same conclusion.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576
+passed**, same count as Sessions 185-507. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/`
+-> sum 0. `docs/BUILD_LOG.md` is **~76KB** after Session 507's archive split — plenty of headroom
+before the ~230KB threshold again; no action needed for a long while. `docs/BUILD_LOG_LOCAL.md` tail
+re-read directly (unchanged, 1149 lines) — most recent human entry still 2026-09-30, with no new
+local activity since.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git checkout main`, `git fetch origin main` (fresh, no cached ref), compare `git
+rev-parse HEAD origin/main` before doing anything else. Read `docs/BUILD_LOG_LOCAL.md`'s tail for
+any new local activity. If Jonathan has replied to Session 488's notification (paused/adjusted the
+schedule, merged/closed/commented on PR #1, or supplied new work), act on that explicitly — don't
+re-derive the same "nothing to do" conclusion from scratch if he's already responded. Otherwise,
+keep holding rather than re-notifying by rote — only 20 sessions have passed since Session 488's
+re-flag (2026-10-30); give Jonathan the remaining ~30 sessions of its stated window before
+considering another re-flag. `docs/BUILD_LOG.md` is small again (~76KB) — no archive action needed
+for a long while.
+
+---
+
 ## 2026-11-01 — Session 507 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — still holding after Session 488's re-flag, per its own
