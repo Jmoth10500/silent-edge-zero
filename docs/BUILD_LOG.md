@@ -9,6 +9,56 @@ re-doing finished work.
 
 ---
 
+## 2026-11-02 — Session 517 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — still holding after Session 488's re-flag, per its own
+~50-session window.** `env | grep -i THERACINGAPI` -> empty, confirmed directly (Mac-only
+credentials; did not attempt `collect_racecards.py`/`collect_weather.py`, per this session's prompt
+correction, same as every prior cloud session).
+
+Container's local `main` was detached at `9efbe7b` (stale, pre-dating Session 507's archive split);
+`git fetch origin main` (fresh, no cached ref) resolved `origin/main` to `650bf69` (Session 516's own
+commit, already pushed) — `git checkout main && git pull origin main --ff-only` fast-forwarded
+cleanly onto it (22-commit fast-forward, archive-note history only). `git rev-parse HEAD
+origin/main` identical on both lines after. No new human commit landed between Session 516 ending
+and this session starting.
+
+This session's prompt again asks to "start Phase 6" (statistical/logistic baseline over synthetic
+fixtures shaped like the real racecard schema, per-race softmax summing to ~1.0, clearly labeled
+not-a-real-prediction). Independently re-verified: `src/models/model1_logistic_baseline.py` (373
+lines, unchanged) and `tests/test_racecard_theracingapi.py` (210 lines, unchanged) still satisfy
+that ask verbatim, exactly as Sessions 139/185-516 have all already found, and remain superseded in
+practice by the real Kaggle-fitted Model 1 (RL-006/RL-007) and Model 2 gradient boosting already in
+`src/models/`. No new code written; a duplicate second baseline would not be additive.
+
+**PR #1 checked again via `pull_request_read` (`get`) and `list_issues` — still has not moved.**
+`created_at` `2026-10-17T17:55:00Z`, `updated_at` `2026-10-17T17:55:36Z` (unchanged, 16 days old),
+still open, unmerged, 1 commit, body unchanged. `list_issues` (OPEN): 0. Jonathan has not responded
+to Session 488's notification — no merge, close, comment, or review, and no word on pausing the
+schedule. Jonathan's own in-flight PR, pending his own review — now unchanged for **129 sessions**
+since Session 388 first flagged it, **82 sessions** since Session 435's first notification, and
+**29 sessions** since Session 488's re-flag. **No notification sent** — still inside the
+~50-session window Session 488 set (~21 sessions remain), and nothing has changed since Session 516
+independently reached the same conclusion.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576
+passed**, same count as Sessions 185-516. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/`
+-> sum 0. `docs/BUILD_LOG.md` is **~112KB** before this entry — still small, plenty of headroom
+before the ~230KB threshold again; no action needed for a long while. `docs/BUILD_LOG_LOCAL.md`
+tail re-read directly (unchanged) — most recent human entry still 2026-09-30, with no new local
+activity since.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git checkout main`, `git fetch origin main`, compare `git rev-parse HEAD
+origin/main`. Read `docs/BUILD_LOG_LOCAL.md`'s tail for new local activity. If Jonathan has replied
+to Session 488's notification, act on that explicitly. Otherwise keep holding — ~21 sessions remain
+of Session 488's ~50-session window before another re-flag is due.
+
+---
+
 ## 2026-11-02 — Session 516 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — still holding after Session 488's re-flag, per its own
