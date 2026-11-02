@@ -9,6 +9,53 @@ re-doing finished work.
 
 ---
 
+## 2026-11-02 — Session 515 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — still holding after Session 488's re-flag, per its own
+~50-session window.** `env | grep -i THERACINGAPI` -> empty (Mac-only credentials; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's prompt correction).
+
+`git fetch origin main` -> `origin/main` at `9a8c13c` (Session 514's own commit, already pushed);
+`git checkout main && git pull origin main --ff-only` fast-forwarded cleanly (20-commit
+fast-forward). No new human commit landed between Session 514 ending and this session starting.
+
+Phase 6 ask (statistical/logistic baseline over synthetic fixtures shaped like the real racecard
+schema) remains independently satisfied by `src/models/model1_logistic_baseline.py` (unchanged)
+and `tests/test_racecard_theracingapi.py` (unchanged), as Sessions 139/185-514 have all found. No
+new code written; a duplicate second baseline would not be additive.
+
+**PR #1 checked again — still has not moved.** `created_at`/`updated_at` unchanged (16 days old),
+open, unmerged, `mergeable_state: clean`, 1 commit. `list_issues` (OPEN): 0. Jonathan has not
+responded to Session 488's notification — now **127 sessions** since Session 388 first flagged it,
+**27 sessions** since Session 488's re-flag. **No notification sent** — still inside the ~50-session
+window.
+
+Full suite re-run fresh (postgres setup + `db/init_db.py` (15 tables) + `pip install -r
+requirements.txt` + `pytest tests/ -q`) -> **576/576 passed**, same count as Sessions 185-514.
+`grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` -> sum 0. `docs/BUILD_LOG.md` is **~105KB**
+after Session 507's archive split — plenty of headroom. `docs/BUILD_LOG_LOCAL.md` tail re-read
+(unchanged, most recent human entry still 2026-09-30).
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Note for whoever next reviews this log (human or automated):** this routine has now run 515
+sessions since 2026-09-08, essentially all of them (from ~Session 139 onward) re-verifying the
+identical "Phase 6 already satisfied, PR #1 unmerged, tests pass" conclusion with no new work
+produced. Two notifications have already gone to Jonathan about the stuck PR (Sessions 435, 488)
+with no response in 79+ sessions. This session is holding per Session 488's own stated window
+rather than re-flagging a third time, but the pattern itself — hundreds of sessions of pure
+re-verification — is worth Jonathan's attention independent of the PR. Recommend he either review
+PR #1 directly or pause/lengthen this schedule's interval until he does, since each cycle currently
+produces no new value.
+
+**Next session:** `git checkout main`, `git fetch origin main`, compare `git rev-parse HEAD
+origin/main`. Read `docs/BUILD_LOG_LOCAL.md`'s tail for new local activity. If Jonathan has replied
+to Session 488's notification, act on that explicitly. Otherwise keep holding — ~23 sessions remain
+of Session 488's ~50-session window before another re-flag is due.
+
+---
+
 ## 2026-11-02 — Session 514 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — still holding after Session 488's re-flag, per its own
