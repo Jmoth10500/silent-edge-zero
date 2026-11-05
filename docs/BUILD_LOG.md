@@ -9,6 +9,73 @@ re-doing finished work.
 
 ---
 
+## 2026-11-05 — Session 538 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — Session 488's ~50-session re-flag window has now closed.**
+`env | grep -i THERACINGAPI` -> empty, confirmed directly (Mac-only credentials; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's prompt correction, same as every
+prior cloud session).
+
+Container's local `main` was detached at `9efbe7b` (stale); `git fetch origin main` (fresh, no
+cached ref) resolved `origin/main` to `57d776e` (Session 537's own commit, already pushed) —
+`git checkout main && git pull origin main --ff-only` fast-forwarded cleanly onto it. `git
+rev-parse HEAD origin/main` identical on both lines after. No new human commit landed between
+Session 537 ending and this session starting.
+
+This session's prompt again asks to "start Phase 6" (statistical/logistic baseline over synthetic
+fixtures shaped like the real racecard schema, per-race softmax summing to ~1.0, clearly labeled
+not-a-real-prediction). Independently re-verified: `src/models/model1_logistic_baseline.py` (373
+lines, unchanged) and `tests/test_racecard_theracingapi.py` (210 lines, unchanged) still satisfy
+that ask verbatim — `official_rating`/`draw` as int, `recent_form` as an undelimited string like
+`"1582F3"`, per-race softmax summing to 1.0 by construction, explicit synthetic-only /
+not-a-real-prediction label — exactly as Sessions 139/185-537 have all already found, and remains
+superseded in practice by the real Kaggle-fitted Model 1 (RL-006/RL-007) and Model 2 gradient
+boosting already in `src/models/`. No new code written; a duplicate second baseline would not be
+additive.
+
+**PR #1 checked again via `pull_request_read` (`get`) and `list_issues` — still has not moved.**
+`created_at` `2026-10-17T17:55:00Z`, `updated_at` `2026-10-17T17:55:36Z` (unchanged, **19 days
+old**), still open, unmerged, 1 commit, body unchanged, `mergeable_state: unknown`. `list_issues`
+(state: OPEN): 0. Jonathan has not responded to Session 488's re-flag notification — no merge,
+close, comment, or review, and no word on pausing the schedule. Jonathan's own in-flight PR,
+pending his own review — now unchanged for **150 sessions** since Session 388 first flagged it,
+**103 sessions** since Session 435's first notification, and **50 sessions** since Session 488's
+re-flag. **Session 488's own stated ~50-session window closes at this session** — per Session
+537's explicit instruction, re-flagging now via push notification rather than holding further.
+
+**Notification sent this session.** Content: PR #1 ("Data integrity repair: canonical race
+identity, validation gate, central metrics") has sat open and unreviewed for 19 days / 150
+sessions with zero response to two prior notifications (Session 435, Session 488); the cloud-side
+Phase 6 backlog remains genuinely exhausted (Mac-only `THERACINGAPI` credentials, no new local
+activity since 2026-09-30); nothing for this routine to build until Jonathan either reviews PR #1
+or supplies new direction. Flagged plainly that this is the third notification on the same
+unresolved item and recommended Jonathan either review/merge/close PR #1 himself or pause this
+schedule until he has new work queued, since further overnight runs will keep re-confirming the
+same "nothing to do" state at full compute cost (Postgres setup + pip install + 576-test suite)
+until one of those happens.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576
+passed**, same count as Sessions 185-537. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/`
+-> sum 0. `docs/BUILD_LOG.md` is **~195KB** before this entry — still well under the ~230KB
+threshold. `docs/BUILD_LOG_LOCAL.md` (173KB) tail re-read directly (unchanged) — most recent human
+entry still 2026-09-30, with no new local activity since.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git checkout main`, `git fetch origin main`, compare `git rev-parse HEAD
+origin/main`. Read `docs/BUILD_LOG_LOCAL.md`'s tail for new local activity. If Jonathan has replied
+to this session's notification (reviewed/merged/closed PR #1, paused/adjusted the schedule, or
+supplied new work), act on that explicitly — don't re-derive the same "nothing to do" conclusion
+from scratch if he's already responded. Otherwise, **don't re-notify by rote immediately** — this
+is the third notification on the same unresolved item in as many escalation rounds; give Jonathan a
+real window (comparable to the prior ~50-session windows) before considering a fourth, since
+repeating the same message with no new information isn't additive and the point of notifying is to
+reach him, not to re-state the backlog's exhaustion on a timer.
+
+---
+
 ## 2026-11-05 — Session 537 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — still holding after Session 488's re-flag, per its own
