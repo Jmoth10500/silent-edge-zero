@@ -9,6 +9,60 @@ re-doing finished work.
 
 ---
 
+## 2026-11-05 — Session 539 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — holding, no new notification (last one was ~3h ago).**
+`env | grep -i THERACINGAPI` -> empty, confirmed directly (Mac-only credentials; did not attempt
+`collect_racecards.py`/`collect_weather.py`, per this session's prompt correction, same as every
+prior cloud session).
+
+Container's local `main` was stale at `9efbe7b` (pre-dating Session 507's archive split); `git
+fetch origin main` resolved `origin/main` to `0af2993` (Session 538's own commit, already pushed,
+timestamped 2026-11-05 12:57:41 UTC — ~3 hours before this session started at ~15:55 UTC) — `git
+checkout main && git pull origin main --ff-only` fast-forwarded cleanly onto it. `git rev-parse
+HEAD origin/main` identical on both lines after.
+
+This session's prompt again asks to "start Phase 6." Independently re-verified:
+`src/models/model1_logistic_baseline.py` (373 lines, unchanged) and
+`tests/test_racecard_theracingapi.py` (210 lines, unchanged) still satisfy that ask verbatim —
+`official_rating`/`draw` as int, `recent_form` as an undelimited string like `"1582F3"`, per-race
+softmax summing to 1.0 by construction, explicit synthetic-only / not-a-real-prediction label —
+exactly as Sessions 139/185-538 have all already found, superseded in practice by the real
+Kaggle-fitted Model 1 (RL-006/RL-007) and Model 2 gradient boosting already in `src/models/`. No
+new code written; a duplicate second baseline would not be additive.
+
+**PR #1 checked again via `pull_request_read` (`get`) — still has not moved.** `created_at`
+`2026-10-17T17:55:00Z`, `updated_at` `2026-10-17T17:55:36Z` (unchanged, 19 days old), still open,
+unmerged, 1 commit, body unchanged, `mergeable_state: unknown`. No sign Jonathan has seen or acted
+on Session 538's re-flag notification yet (sent ~3h ago) — too soon to expect a response.
+**No notification sent this session.** Session 538 just re-flagged (the third notification on
+this item); sending another one 3 hours later with nothing new to report would just be noise, not
+information — per Session 538's own explicit guidance, holding and giving Jonathan a real window
+rather than re-notifying on a timer.
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576
+passed**, same count as Sessions 185-538. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/`
+-> sum 0. `docs/BUILD_LOG.md` is **~200KB** before this entry — comfortably under the ~230KB
+threshold, but the margin is shrinking faster now that this routine is firing multiple times a
+day; worth an archive split in the next several sessions if that cadence continues.
+`docs/BUILD_LOG_LOCAL.md` (173KB) tail re-read directly (unchanged) — most recent human entry
+still 2026-09-30, with no new local activity since.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git checkout main`, `git fetch origin main`, compare `git rev-parse HEAD
+origin/main`. Read `docs/BUILD_LOG_LOCAL.md`'s tail for new local activity. If Jonathan has replied
+to Session 538's notification (reviewed/merged/closed PR #1, paused/adjusted the schedule, or
+supplied new work), act on that explicitly. Otherwise keep holding without re-notifying — a real
+response window (comparable to the prior ~50-session/multi-day windows, not a few hours) should
+pass before a fourth notification is even considered, since Jonathan is very unlikely to have seen
+Session 538's flag yet at a few-hours' remove, and repeating the same message that fast would not
+be additive, just noise.
+
+---
+
 ## 2026-11-05 — Session 538 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — Session 488's ~50-session re-flag window has now closed.**
