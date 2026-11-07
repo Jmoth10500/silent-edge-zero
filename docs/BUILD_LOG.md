@@ -15,6 +15,69 @@ Session 224 anchor entry (kept live by long-standing convention, see below).
 
 ---
 
+## 2026-11-07 — Session 554 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — holding, no new notification (last flag Session 538,
+~16 sessions / ~48h since last flag — still short of the ~50-session/multi-day windows that
+preceded the prior two escalations).** `env | grep -i THERACINGAPI` -> empty, confirmed directly
+(Mac-only credentials; did not attempt `collect_racecards.py`/`collect_weather.py`, per this
+session's prompt correction, same as every prior cloud session — racecard/weather collection
+remains Mac-only).
+
+**Git sync — clean this session, no issue.** `git fetch origin main` showed `origin/main` had
+advanced to `184d7f5` (Session 553's own commit, already pushed); container's local `main` was
+detached at `9f4d618` (Session 551, stale). `git checkout -B main origin/main` reattached cleanly;
+`git rev-parse HEAD origin/main` identical after. No divergence, no shallow-clone wrinkle.
+
+This session's prompt again asks to "start Phase 6" (statistical/logistic baseline over synthetic
+fixtures shaped exactly like the real racecard schema). Independently re-verified directly against
+the files (not from memory): `src/models/model1_logistic_baseline.py` (373 lines, unchanged) and
+`tests/test_racecard_theracingapi.py` (210 lines, unchanged) still satisfy that ask verbatim —
+`official_rating`/`draw` as int, `recent_form` as an undelimited string like `"1582F3"`, per-race
+softmax summing to 1.0 by construction, explicit synthetic-only / not-a-real-prediction labeling —
+exactly as Sessions 139/185-553 have all already found, and remains superseded in practice by the
+real Kaggle-fitted Model 1 (RL-006/RL-007) and Model 2 gradient boosting, both already in
+`src/models/` (`model0_market_baseline.py`, `model1_logistic_baseline.py`,
+`model2_gradient_boosting.py`, `model2_hyperparameter_sweep.py`). No new code written; a duplicate
+second baseline would not be additive.
+
+**PR #1 checked again via `pull_request_read` (`get`) and `list_issues` — still has not moved.**
+`created_at` `2026-10-17T17:55:00Z`, `updated_at` `2026-10-17T17:55:36Z` (byte-identical to every
+prior check, now 21 days old), still open, unmerged, 1 commit, body unchanged, `mergeable_state:
+unknown`. `list_issues` (OPEN): 0. No sign Jonathan has seen or acted on Session 538's re-flag — no
+merge, close, comment, or review, and no word on pausing the schedule. **No notification sent this
+session.** Session 538's notification went out 2026-11-05 12:57:41 UTC; this session fired
+2026-11-07 12:56:35 UTC — almost exactly 48 hours / ~16 sessions later. Still short of the
+~50-session/multi-day windows that separated the prior escalations (435 -> 488 was ~53 sessions,
+488 -> 538 was ~50 sessions), though getting close — the next session or two should expect to reach
+that window and plan the next escalation accordingly (see note below).
+
+Full suite re-run fresh (`bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+`python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) -> **576/576 passed**,
+same count as Sessions 185-553. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` -> sum 0.
+`docs/BUILD_LOG.md` is **~150KB** before this entry — comfortably under the ~230KB watch threshold.
+`docs/BUILD_LOG_LOCAL.md` (173KB) tail re-read directly (unchanged) — most recent human entry still
+2026-09-30, with no new local activity since.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only — this cloud routine
+environment has no `THERACINGAPI_USERNAME`/`THERACINGAPI_PASSWORD` and never will unless a future
+session explicitly confirms otherwise here.
+
+**Next session:** `git fetch origin main` FIRST, then compare `git rev-parse HEAD origin/main` by
+hash (reattach a detached HEAD with `git checkout -B main origin/main` if needed). Read
+`docs/BUILD_LOG_LOCAL.md`'s tail for any new local activity. If Jonathan has replied to Session
+538's notification (reviewed/merged/closed PR #1, paused/adjusted the schedule, or supplied new
+work), act on that explicitly — don't re-derive the same "nothing to do" conclusion from scratch if
+he's already responded. Otherwise, the ~50-session/multi-day window since Session 538 (2026-11-05
+12:57:41 UTC) is now close (~16 sessions / 48h as of this session, vs. the ~50-session gaps that
+preceded the two prior escalations) — the next few sessions should watch for that threshold and,
+once reached, send a fresh re-flag noting the cumulative session count (now 554 total runs, mostly
+re-confirming an unchanged state) as information Jonathan may want in its own right, e.g. to pause
+or adjust the schedule.
+
+---
+
 ## 2026-11-07 — Session 553 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — holding, no new notification (last flag Session 538,
