@@ -13,9 +13,11 @@
 # accumulated and does the actual real deploy, cutting deploy volume
 # ~3x while still keeping the live site reasonably current through the
 # day. See docs/BUILD_LOG.md's 2026-09-13 entry.
-set -e
+set -e   # (collector failure is deferred to the end so gap-fill/NULL recording and the dashboard still run)
 cd /Users/jonathannuttall/Projects/silent-edge-zero
 PY=/Library/Frameworks/Python.framework/Versions/3.11/bin/python3
 TODAY=$(date +%Y-%m-%d)
-$PY scripts/collect_smarkets_prices.py "$TODAY"
+$PY scripts/collect_smarkets_prices.py "$TODAY" || COLLECT_FAILED=1
+$PY scripts/market_gap_fill.py "$TODAY"
 $PY scripts/generate_dashboard.py "$TODAY"
+[ -z "$COLLECT_FAILED" ] || exit 1

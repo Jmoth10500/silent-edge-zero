@@ -97,31 +97,14 @@ from scripts.generate_eod_report import VOID_RESULT_CODES, load_results, load_to
 
 
 def compute_settled_race_ids(conn, start: date, end: date) -> set[int]:
-    """Real, exact set of race_ids that daily_summary's own
-    `races_settled` counts — every race where the TOP PICK's own result
-    is known (win, loss, or terminal void/non-runner note), regardless of
-    whether market data exists. Computed directly from the same
-    load_top_picks_and_favourites/load_results functions
-    generate_daily_summary.py itself uses, so `len(this set)` reconciles
-    exactly with `SUM(races_settled)` from the real daily_summary table —
-    used to name the exact race-level accounting between "eligible"
-    (needs market data) and "settled" (doesn't), rather than leaving that
-    gap as an unverified label."""
-    settled: set[int] = set()
-    d = start
-    while d <= end:
-        races = load_top_picks_and_favourites(conn, d)
-        results = load_results(conn, d)
-        for race in races:
-            tp = race["top_pick"]
-            tp_result = results.get((race["race_id"], tp["horse_id"]))
-            tp_pos = tp_result[0] if tp_result else None
-            tp_note = tp_result[1] if tp_result else None
-            if tp_pos is None and tp_note is None:
-                continue
-            settled.add(race["race_id"])
-        d += timedelta(days=1)
-    return settled
+    """Exact set of race_ids the central metrics layer counts as settled races (genuine runner + void)
+    (src/integrity/metrics.py) -- the same population daily_summary's `races_settled` is derived
+    from since the 2026-10-17 integrity repair. Phantom/duplicate races are excluded and
+    void/non-runner top picks are not counted, matching the public headline exactly."""
+    from src.integrity.metrics import compute, load_dataset
+    ds = load_dataset(conn, start, end)
+    c = compute(ds)
+    return {r.facts.race_id for r, _st, _ch in c["settled"] if start <= r.facts.race_date <= end}
 
 
 class ReconciliationError(Exception):

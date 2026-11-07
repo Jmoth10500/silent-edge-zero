@@ -71,7 +71,7 @@ REAL_QUOTES_RESPONSE = {
 
 
 def _mock_get(responses_by_url_fragment):
-    def fake_get(url, params=None, timeout=None):
+    def fake_get(url, params=None, timeout=None, headers=None):
         resp = MagicMock()
         resp.raise_for_status.return_value = None
         for fragment, payload in responses_by_url_fragment.items():
@@ -114,7 +114,7 @@ def test_list_events_follows_real_pagination():
     page2 = {"events": [REAL_EVENTS_RESPONSE["events"][1]], "pagination": {}}
     call_count = {"n": 0}
 
-    def fake_get(url, params=None, timeout=None):
+    def fake_get(url, params=None, timeout=None, headers=None):
         resp = MagicMock()
         resp.raise_for_status.return_value = None
         call_count["n"] += 1

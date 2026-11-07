@@ -48,6 +48,16 @@ def check_odds(today_races: int, latest_snapshot: datetime | None, now: datetime
     return []
 
 
+def check_odds_yesterday(day: date, races: int, with_odds: int) -> list[str]:
+    """Runs at ANY hour (check_odds only fires 09:00-20:00, which is how a dead
+    collector read as 'OK' overnight on 16 Oct). A past day where most races never
+    got a single exchange price is a standing problem until the data is explained."""
+    if races and with_odds / races < 0.5:
+        return [f"{day}: only {with_odds}/{races} races have any exchange price "
+                f"({with_odds / races:.0%}) — market collection failed that day."]
+    return []
+
+
 def check_unmapped(courses: list[str], hn_slugs: dict, rp_ids: dict) -> list[str]:
     """Flag courses that the primary results source (horseracing.net) cannot
     fetch. Racing Post is only a fallback, so it is not required."""
@@ -86,17 +96,24 @@ def gather(now: datetime) -> dict:
                     "where x.race_id=r.id and (x.finishing_position is not null or x.result_note is not null))) "
                     "from race r where race_date=%s", (d,))
         results[d] = cur.fetchone()
+    cur.execute("select count(*), count(*) filter (where exists(select 1 from market_snapshot m where m.race_id=r.id)) "
+                "from race r where race_date=%s and exists(select 1 from prediction p where p.race_id=r.id) "
+                "and not exists(select 1 from excluded_race x where x.race_id=r.id)", (yday,))
+    yday_races, yday_with_odds = cur.fetchone()
     cur.execute("select distinct lower(c.name) from race r join course c on c.id=r.course_id "
                 "where r.race_date in (%s,%s)", (yday, today))
     courses = [row[0] for row in cur.fetchall()]
     conn.close()
-    return dict(races=races, predicted=predicted, latest=latest, results=results, courses=courses)
+    return dict(races=races, predicted=predicted, latest=latest, results=results, courses=courses,
+                yday=(yday, yday_races, yday_with_odds))
 
 
 def run_checks(now: datetime, data: dict, hn_slugs: dict, rp_ids: dict) -> list[str]:
     problems = []
     problems += check_predictions(data["races"], data["predicted"], now)
     problems += check_odds(data["races"], data["latest"], now)
+    if "yday" in data:
+        problems += check_odds_yesterday(*data["yday"])
     problems += check_unmapped(data["courses"], hn_slugs, rp_ids)
     for d, (total, unsettled) in data["results"].items():
         problems += check_results(d, total, unsettled, now)

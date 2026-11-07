@@ -64,6 +64,7 @@ def load_race_dataset(conn, race_date: date, model_version_name: str = "gbm_v1")
         LEFT JOIN jockey jk ON jk.id = rs.jockey_id
         LEFT JOIN runner_result rr ON rr.race_id = p.race_id AND rr.horse_id = p.horse_id
         WHERE r.race_date = %s AND p.locked_at IS NOT NULL AND mv.name = %s
+          AND NOT EXISTS (SELECT 1 FROM excluded_race x WHERE x.race_id = r.id)  -- integrity layer: phantom/invalid races never reach research
         ORDER BY r.off_time, r.id, p.model_probability DESC
         """,
         (race_date, model_version_name),
@@ -81,6 +82,7 @@ def load_race_dataset(conn, race_date: date, model_version_name: str = "gbm_v1")
         JOIN race r ON r.id = p.race_id
         JOIN model_version mv ON mv.id = p.model_version_id
         WHERE r.race_date = %s AND p.locked_at IS NOT NULL AND mv.name = %s
+          AND NOT EXISTS (SELECT 1 FROM excluded_race x WHERE x.race_id = r.id)
         """,
         (race_date, other_model),
     )
@@ -191,7 +193,10 @@ def attach_market_data(conn, races: list[dict]) -> None:
             )
             latest = cur.fetchone()
 
-            at_lock = None
+            # Legacy definition, kept under its honest name: the first snapshot after the
+            # prediction lock. Predictions lock the morning BEFORE the race, so this can be a
+            # price from 14+ hours before the off -- it is NOT a lock-time market price.
+            first_after_lock = None
             if locked_at is not None:
                 cur.execute(
                     """
@@ -201,7 +206,24 @@ def attach_market_data(conn, races: list[dict]) -> None:
                     """,
                     (race_id, horse_id, locked_at),
                 )
-                at_lock = cur.fetchone()
+                first_after_lock = cur.fetchone()
+
+            # Integrity repair (2026-10-17): "at_lock" now means the LOCK-WINDOW price defined in
+            # src/integrity/market.py -- the last valid ('ok' quality) exchange snapshot captured in
+            # [off - 30 min, off - 60 s], never after the off. No snapshot in the window => None
+            # (race becomes ineligible for paired comparisons; nothing is inferred).
+            off_utc = _race_off_datetime(race["race"])
+            cur.execute(
+                """
+                SELECT exchange_back, exchange_lay, midprice, spread, price_quality, observed_at
+                FROM market_snapshot
+                WHERE race_id = %s AND horse_id = %s AND price_quality = 'ok'
+                  AND observed_at >= %s - interval '30 minutes' AND observed_at <= %s - interval '60 seconds'
+                ORDER BY observed_at DESC LIMIT 1
+                """,
+                (race_id, horse_id, off_utc, off_utc),
+            )
+            at_lock = cur.fetchone()
 
             cur.execute(
                 """
@@ -216,6 +238,7 @@ def attach_market_data(conn, races: list[dict]) -> None:
             runner["market"] = {
                 "latest": _snapshot_dict(latest),
                 "at_lock": _snapshot_dict(at_lock),
+                "first_after_lock": _snapshot_dict(first_after_lock),
                 "closing": _snapshot_dict(closing),
             }
 
