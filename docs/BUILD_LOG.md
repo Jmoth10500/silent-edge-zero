@@ -15,6 +15,59 @@ Session 224 anchor entry (kept live by long-standing convention, see below).
 
 ---
 
+## 2026-11-08 — Session 560 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — holding, no new notification.** Last flag was Session 538
+(2026-11-05 12:57:41 UTC); this is ~22 sessions since, still short of the ~50-session gap that
+preceded the two prior escalations (435→488 ~53, 488→538 ~50). Holding per Sessions 539-559.
+
+**Found and fixed: container started this session with `HEAD` detached, 8 commits ahead of the
+local `main` branch ref (Sessions 552-559's commits).** `git log` showed `HEAD` at `8e03e41`
+(Session 559) while `git rev-parse main` was stuck at `9f4d618` (Session 551) — the local branch
+pointer had not been advancing even though each session's commits were landing fine. Diffed the 8
+orphaned commits (`git diff --stat 9f4d618..8e03e41`): all touched only `docs/BUILD_LOG.md`
+(append-only log text), no code. Fixed with `git checkout -B main 8e03e41` (recreates `main` at the
+detached commit) then `git fetch origin main` — confirmed `origin/main` was *already* at `8e03e41`
+(the commits had been pushed fine each session; only the local branch ref was stale/detached in the
+container, this is the scenario Session 558's note anticipated). No data was lost and nothing
+further to push. **Flagging this so a future session doesn't skip the same check**: start of every
+run should do `git rev-parse HEAD main` and reattach (`git checkout -B main <HEAD-sha>`) if they
+differ, before doing anything else.
+
+Verified directly (not from memory, all confirmed this session):
+- `env | grep -i THERACINGAPI` → empty. Did not attempt `collect_racecards.py`/`collect_weather.py`
+  (Mac-only credentials, per prompt correction — unchanged).
+- Phase 6 ask ("start a synthetic-fixture logistic baseline") remains already satisfied, unchanged:
+  `src/models/model1_logistic_baseline.py` (373 lines) and `tests/test_racecard_theracingapi.py`
+  (210 lines) still carry the explicit synthetic-only/not-a-real-prediction labeling (confirmed via
+  grep: "synthetic fixtures only", "NOT a real...") and the real field-mapping fixture
+  (`official_rating`/`draw` as int, `recent_form` like `"1582F3"`). Superseded in practice by the
+  real Kaggle-fitted Model 1 and Model 2 gradient boosting already in `src/models/`. No new code
+  written — a duplicate second baseline would not be additive.
+- PR #1 (`pull_request_read` get + `list_issues`): still open, unmerged, 1 commit, body/timestamps
+  byte-identical to every prior check (`created_at`/`updated_at` both 2026-10-17T17:55:xxZ), now
+  **22 days old**. `list_issues` (OPEN): 0. No sign of any human action on PR #1 or Session 538's
+  flag.
+- Full suite fresh (`db/setup_local_postgres.sh` + `db/init_db.py` (15 tables) + `pip install -r
+  requirements.txt` + `pytest tests/ -q`) → **576/576 passed**, same count as Sessions 185-559.
+  `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` → sum 0.
+- `docs/BUILD_LOG_LOCAL.md` tail re-read: unchanged, most recent human entry still 2026-09-30.
+- `docs/BUILD_LOG.md` is **~180KB** before this entry (headroom to the ~230KB split threshold
+  remains, roughly 7-8 sessions of margin at the prior growth rate).
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git fetch origin main` first; also run `git rev-parse HEAD main` and reattach
+(`git checkout -B main <HEAD-sha>`) if they differ — don't assume a prior session already fixed
+this, check it fresh every time. Check `docs/BUILD_LOG_LOCAL.md`'s tail for new local activity. If
+Jonathan has acted on PR #1 or Session 538's notification, act on that explicitly rather than
+re-deriving "nothing to do." Otherwise keep holding until the ~50-session gap since Session 538 is
+actually reached (~22 as of this session) before any re-flag — and watch `docs/BUILD_LOG.md`'s size
+against the ~230KB split threshold.
+
+---
+
 ## 2026-11-08 — Session 559 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — holding, no new notification.** Last flag was Session 538
