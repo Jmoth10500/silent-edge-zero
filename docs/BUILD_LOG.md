@@ -15,6 +15,58 @@ Session 224 anchor entry (kept live by long-standing convention, see below).
 
 ---
 
+## 2026-11-08 — Session 564 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — holding, no new notification.** Last flag was Session 538
+(2026-11-05 12:57:41 UTC); this is ~26 sessions since, still short of the ~50-session gap that
+preceded the two prior escalations (435→488 ~53, 488→538 ~50). Holding per Sessions 539-563.
+
+**Same stale-local-`main`-ref container quirk as Sessions 560-563, found and fixed again.**
+Container started with local `main` at `9f4d618` (Session 551, unchanged) while `origin/main` had
+advanced to `b32cb67` (Session 563's own commit). `git fetch origin main` confirmed `origin/main`
+really is `b32cb67`; fixed with `git checkout -B main origin/main`. `git rev-parse HEAD main
+origin/main` all identical afterward. No data lost, nothing to push for this fix.
+
+Verified directly (not from memory, all confirmed this session):
+- `env | grep -i THERACINGAPI` → empty. Did not attempt `collect_racecards.py`/`collect_weather.py`
+  (Mac-only credentials, per prompt correction — unchanged).
+- Phase 6 ask ("start a synthetic-fixture logistic baseline") remains already satisfied, unchanged:
+  `src/models/model1_logistic_baseline.py` still carries the explicit synthetic-only/not-a-real
+  labeling and the real field-mapping fixture (`official_rating`/`draw` as int, `recent_form` like
+  `"1582F3"`), confirmed via `grep -c "synthetic fixtures only"`. Superseded in practice by the real
+  Kaggle-fitted Model 1 and Model 2 gradient boosting already in `src/models/`. No new code written
+  — a duplicate second baseline would not be additive.
+- PR #1 (`pull_request_read` get + `list_issues`): still open, unmerged, 1 commit, body/timestamps
+  byte-identical to every prior check (`created_at`/`updated_at` both 2026-10-17T17:55:xxZ), now
+  **22 days old**. `list_issues` (OPEN): 0. No sign of any human action on PR #1 or Session 538's
+  flag.
+- Full suite fresh (`db/setup_local_postgres.sh` + `db/init_db.py` (15 tables) + `pip install -r
+  requirements.txt` + `pytest tests/ -q`) → **576/576 passed**, same count as Sessions 185-563.
+  `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` → sum 0.
+- `docs/BUILD_LOG_LOCAL.md` tail re-read: unchanged, most recent human entry still 2026-09-30.
+- **Archive-split correction:** Session 563 estimated only "~1 session of margin" before the
+  ~230KB (235,520-byte) split threshold. Measured directly this session: `docs/BUILD_LOG.md` is
+  **196,894 bytes (~192KB)** after Session 563's own entry landed — i.e. that entry only added
+  ~3.9KB, not the much larger jump Session 563's margin estimate implied. At that growth rate there
+  is realistically **~8-9 sessions of margin remaining**, not 1. Not performing the split this
+  session since it is not yet needed; flagging the corrected estimate so the next few sessions don't
+  over-react to Session 563's figure. Will still need doing eventually — the next session that sees
+  the file within ~1-2 sessions of 235KB should do it.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git fetch origin main` first; also run `git rev-parse HEAD main origin/main` and
+reattach (`git checkout -B main origin/main`) if `main` differs from the other two — recurs every
+session so far (560-564), treat it as a standing per-container quirk. Check
+`docs/BUILD_LOG_LOCAL.md`'s tail for new local activity. If Jonathan has acted on PR #1 or Session
+538's notification, act on that explicitly rather than re-deriving "nothing to do." Otherwise keep
+holding until the ~50-session gap since Session 538 is actually reached (~26 as of this session)
+before any re-flag. Archive split is not urgent yet (~196.9KB of ~235.5KB threshold, ~8-9 sessions
+margin per the corrected estimate above) — re-measure rather than trusting Session 563's figure.
+
+---
+
 ## 2026-11-08 — Session 563 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — holding, no new notification.** Last flag was Session 538
