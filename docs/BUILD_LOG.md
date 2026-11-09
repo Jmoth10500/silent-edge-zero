@@ -15,6 +15,56 @@ Session 224 anchor entry (kept live by long-standing convention, see below).
 
 ---
 
+## 2026-11-09 — Session 567 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — holding, no new notification.** Last flag was Session 538
+(2026-11-05 12:57:41 UTC); this is ~29 sessions since, still short of the ~50-session gap that
+preceded the two prior escalations (435→488 ~53, 488→538 ~50). Holding per Sessions 539-566.
+
+**Same stale-local-`main`-ref container quirk as Sessions 560-566, found and fixed again.**
+Container started with `HEAD` already at `origin/main`'s tip (`c30a3e0`, Session 566's own commit)
+while the local `main` branch pointer was still stuck at `9f4d618` (Session 551, unchanged across
+every session since). `git fetch origin main` confirmed `origin/main` really is `c30a3e0`, matching
+`HEAD` exactly; fixed with `git checkout -B main origin/main`. `git rev-parse HEAD main origin/main`
+all identical afterward. No data lost, nothing to push for this fix.
+
+Verified directly (not from memory, all confirmed this session):
+- `env | grep -i THERACINGAPI` → empty. Did not attempt `collect_racecards.py`/`collect_weather.py`
+  (Mac-only credentials, per prompt correction — unchanged).
+- Phase 6 ask ("start a synthetic-fixture logistic baseline") remains already satisfied, unchanged:
+  `src/models/model1_logistic_baseline.py` (373 lines) still carries the explicit synthetic-only/
+  not-a-real labeling (`grep -c "synthetic fixtures only"` → 1) and `tests/test_racecard_theracingapi.py`
+  (210 lines) still carries the real field-mapping fixture (`official_rating` int, `draw` int,
+  `recent_form` like `"1582F3"`), confirmed directly. Superseded in practice by the real
+  Kaggle-fitted Model 1 and Model 2 gradient boosting already in `src/models/`. No new code written —
+  a duplicate second baseline would not be additive.
+- PR #1 (`pull_request_read` get + `list_issues`): still open, unmerged, 1 commit, body/timestamps
+  byte-identical to every prior check (`created_at`/`updated_at` both 2026-10-17T17:55:xxZ), now
+  **23 days old**. `list_issues` (OPEN): 0. No sign of any human action on PR #1 or Session 538's
+  flag.
+- Full suite fresh (`db/setup_local_postgres.sh` + `db/init_db.py` (15 tables) + `pip install -r
+  requirements.txt` + `pytest tests/ -q`) → **576/576 passed**, same count as Sessions 185-566.
+  `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` → sum 0.
+- `docs/BUILD_LOG_LOCAL.md` tail re-read: unchanged, most recent human entry still 2026-09-30.
+- `docs/BUILD_LOG.md` is **208,083 bytes (~203.2KB)** before this entry — grew ~3.7KB since
+  Session 566's measurement (204,417 bytes). At that rate there is roughly **5-6 sessions of
+  margin** left before the ~230-235KB split threshold. Not performing the split this session since
+  it is not yet needed; the next few sessions should re-measure rather than assume this rate holds.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git fetch origin main` first; also run `git rev-parse HEAD main origin/main` and
+reattach (`git checkout -B main origin/main`) if `main` differs from the other two — recurs every
+session so far (560-567), treat it as a standing per-container quirk. Check
+`docs/BUILD_LOG_LOCAL.md`'s tail for new local activity. If Jonathan has acted on PR #1 or Session
+538's notification, act on that explicitly rather than re-deriving "nothing to do." Otherwise keep
+holding until the ~50-session gap since Session 538 is actually reached (~29 as of this session)
+before any re-flag. Archive split is getting closer (~203.2KB of ~230-235KB threshold, ~5-6 sessions
+margin) — the next couple of sessions should perform it rather than let the file cross unflagged.
+
+---
+
 ## 2026-11-09 — Session 566 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — holding, no new notification.** Last flag was Session 538
