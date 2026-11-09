@@ -16,6 +16,64 @@ see below).
 
 ---
 
+## 2026-11-09 — Session 573 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — holding, no new notification.** Last flag was Session 538
+(2026-11-05 12:57:41 UTC); this is ~35 sessions since, still short of the ~50-session gap that
+preceded the two prior escalations (435→488 ~53, 488→538 ~50). Holding per Sessions 539-572.
+
+**Same stale-local-`main`-ref container quirk as Sessions 560-572, found and fixed again.**
+Container started with `HEAD` already at `origin/main`'s tip (`df2f28d`, Session 572's own commit)
+while the local `main` branch pointer was still stuck at `9f4d618` (Session 551, unchanged across
+every session since). `git fetch origin main` confirmed `origin/main` really is `df2f28d`, matching
+`HEAD` exactly; fixed with `git checkout -B main origin/main`. `git rev-parse HEAD main origin/main`
+all identical afterward. No data lost, nothing to push for this fix.
+
+**New container quirk found and worked around: plain `pip install -r requirements.txt` installed
+`psycopg2-binary` to the wrong Python (3.13) while `python3`/`pytest` both resolve to 3.11.18 in
+this container** (`/usr/local/bin/pip` → pip for 3.13; `/usr/local/bin/python3` → 3.11.18). Running
+the bare `pip install` (as several recent sessions' logged commands show) left `import psycopg2`
+failing for every test that touches the DB — 24 collection errors. Fixed by reinstalling with
+`python3 -m pip install -r requirements.txt` (same interpreter `pytest`/`python3 -m pytest` use),
+which succeeded and cleared the errors. **Flagging for future sessions: always use `python3 -m pip
+install -r requirements.txt` and `python3 -m pytest`, never bare `pip`/`pytest`, in case this
+container's `pip`/`python3` binaries point at different interpreters again.**
+
+Verified directly (not from memory, all confirmed this session):
+- `env | grep -i THERACINGAPI` → empty. Did not attempt `collect_racecards.py`/`collect_weather.py`
+  (Mac-only credentials, per prompt correction — unchanged).
+- Phase 6 ask ("start a synthetic-fixture logistic baseline") remains already satisfied, unchanged:
+  `src/models/model1_logistic_baseline.py` (373 lines) still carries the explicit synthetic-only/
+  not-a-real labeling (`grep -c "synthetic fixtures only"` → 1), and `tests/test_racecard_theracingapi.py`
+  (210 lines) still carries the real field-mapping fixture (`official_rating` int, `draw` int,
+  `recent_form` like `"1582F3"`). Superseded in practice by the real Kaggle-fitted Model 1 and
+  Model 2 gradient boosting already in `src/models/`. No new code written — a duplicate second
+  baseline would not be additive.
+- PR #1 (`pull_request_read` get + `list_issues`): still open, unmerged, 1 commit, body/timestamps
+  byte-identical to every prior check (`created_at`/`updated_at` both 2026-10-17T17:55:xxZ), now
+  **23 days old**. `list_issues` (OPEN): 0. No sign of any human action on PR #1 or Session 538's
+  flag.
+- Full suite fresh (`db/setup_local_postgres.sh` + `db/init_db.py` (15 tables) + `python3 -m pip
+  install -r requirements.txt` + `python3 -m pytest tests/ -q`) → **576/576 passed**, same count as
+  Sessions 185-572. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` → sum 0.
+- `docs/BUILD_LOG_LOCAL.md` tail re-read: unchanged, most recent human entry still 2026-09-30.
+- `docs/BUILD_LOG.md` is **111,394 bytes (~108.8KB)** before this entry — comfortable margin after
+  Session 568's archive split; no action needed for many sessions.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git fetch origin main` first; also run `git rev-parse HEAD main origin/main` and
+reattach (`git checkout -B main origin/main`) if `main` differs from the other two — recurs every
+session so far (560-573), treat it as a standing per-container quirk. Use `python3 -m pip install`/
+`python3 -m pytest` (not bare `pip`/`pytest`) — this session hit a real `pip`/`python3` interpreter
+mismatch that bare `pip install` silently got wrong. Check `docs/BUILD_LOG_LOCAL.md`'s tail for new
+local activity. If Jonathan has acted on PR #1 or Session 538's notification, act on that explicitly
+rather than re-deriving "nothing to do." Otherwise keep holding until the ~50-session gap since
+Session 538 is actually reached (~35 as of this session) before any re-flag.
+
+---
+
 ## 2026-11-09 — Session 572 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — holding, no new notification.** Last flag was Session 538
