@@ -16,6 +16,47 @@ see below).
 
 ---
 
+## 2026-11-11 — Session 582 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — holding, no new notification.** Last flag was Session 538
+(2026-11-05 12:57:41 UTC); this is ~44 sessions since, still short of the ~50-session gap that
+preceded the two prior escalations (435→488 ~53, 488→538 ~50). Holding per Sessions 539-581.
+
+Same stale-local-`main`-ref quirk as Sessions 560-581 (`origin/main` at `75e643a` — Session 581's
+own commit — local `main` detached/stuck at `9f4d618`); fixed with `git checkout -B main
+origin/main`. `git rev-parse HEAD main origin/main` all identical afterward. No data lost,
+nothing to push for this fix.
+
+This session's scheduled prompt again asked to "start Phase 6" (synthetic-fixture logistic
+baseline). Verified directly, all unchanged from Session 581:
+- `env | grep -i THERACINGAPI` → empty. Did not attempt `collect_racecards.py`/`collect_weather.py`.
+- Phase 6 ask remains already satisfied: `src/models/model1_logistic_baseline.py` (373 lines,
+  synthetic-only labeling intact, `grep -c "synthetic fixtures only"` → 1) +
+  `tests/test_racecard_theracingapi.py` (210 lines, real field mapping intact). Superseded by the
+  real Kaggle-fitted models already in `src/models/` (`model0_market_baseline.py`,
+  `model2_gradient_boosting.py`, `model2_hyperparameter_sweep.py`). No new code written — a
+  duplicate second baseline would not be additive.
+- PR #1 (`pull_request_read` get + `list_issues`): still open, unmerged, 1 commit, body/timestamps
+  byte-identical to every prior check (`created_at`/`updated_at` both 2026-10-17T17:55:xxZ), now
+  **25 days old**. `list_issues` (OPEN): 0. No sign of human action on PR #1 or Session 538's
+  notification.
+- Full suite fresh (`setup_local_postgres.sh` + `db/init_db.py` (15 tables) + `python3 -m pip
+  install -r requirements.txt` + `python3 -m pytest tests/ -q`) → **576/576 passed**.
+  `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` → sum 0.
+- `docs/BUILD_LOG_LOCAL.md` tail: unchanged, most recent human entry still 2026-09-30.
+- `docs/BUILD_LOG.md` is **137,058 bytes (~133.9KB)** before this entry — comfortable margin.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git fetch origin main` first, reattach if `main` drifts (standing per-container
+quirk, 22 sessions running). Use `python3 -m pip install`/`python3 -m pytest`. Check
+`docs/BUILD_LOG_LOCAL.md`'s tail for new local activity. If Jonathan has acted on PR #1 or Session
+538's notification, act on that explicitly. Otherwise keep holding until the ~50-session gap since
+Session 538 is reached (~44 as of this session) before any re-flag.
+
+---
+
 ## 2026-11-10 — Session 581 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — holding, no new notification.** Last flag was Session 538
