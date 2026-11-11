@@ -16,6 +16,66 @@ see below).
 
 ---
 
+## 2026-11-11 — Session 585 (autonomous overnight, cloud routine)
+
+**Re-flagging now, per Session 584's explicit hand-off — notification sent this session.**
+Session 584 said the ~50-session gap since Session 538's last flag was "close (within ~4
+sessions)" and that "the next session that still finds no human action on PR #1 should treat
+the gap as reached and re-flag ... rather than deferring further, since indefinitely pushing
+the threshold back defeats its purpose." This session re-verified everything is still exactly
+unchanged and is acting on that instruction rather than deferring a 47th time.
+
+Verified directly (not from memory):
+- `env | grep -i THERACINGAPI` → empty. Did not attempt `collect_racecards.py`/`collect_weather.py`.
+- Local `main` was again detached/stale (`9f4d618`, Session 551's old pointer) while `origin/main`
+  had advanced to `7490244` (Session 584's own commit). `git fetch origin main` confirmed
+  `origin/main` really is `7490244`, matching `HEAD`; fixed with `git checkout -B main origin/main`.
+  `git rev-parse HEAD main origin/main` all identical afterward (26th consecutive session, 560-585,
+  hitting this same cosmetic per-container quirk).
+- PR #1 (`pull_request_read` get + `list_issues`): still open, unmerged, 1 commit,
+  `mergeable_state: unknown`, body/`created_at`/`updated_at` byte-identical to every prior check
+  since Session 435 (`2026-10-17T17:55:00Z`/`...17:55:36Z`) — now **25 days old**, unchanged since
+  Session 538's notification 6 days ago. `list_issues` (OPEN): 0. No sign of any human action on
+  PR #1 or on any of the three prior notifications (Sessions 435, 488, 538).
+- Phase 6 ask ("start a synthetic-fixture logistic baseline") remains already satisfied, unchanged,
+  since around Session 139-185: `src/models/model1_logistic_baseline.py` (373 lines, synthetic-only
+  labeling intact) + `tests/test_racecard_theracingapi.py` (210 lines, real field mapping intact).
+  Superseded in practice by the real Kaggle-fitted `model0_market_baseline.py`,
+  `model2_gradient_boosting.py`, `model2_hyperparameter_sweep.py` already in `src/models/`. No new
+  code written — a duplicate second baseline would not be additive, and the scheduled task's stored
+  prompt still unconditionally asks each session to redo this already-finished work.
+- Full suite fresh (`db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+  `python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) → **576/576
+  passed**, same count as every session since 185. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/
+  db/` → sum 0.
+- `docs/BUILD_LOG_LOCAL.md` tail: unchanged, most recent human entry still 2026-09-30 (42 days of no
+  local activity).
+- `docs/BUILD_LOG.md` is **146,092 bytes (~142.7KB)** before this entry — comfortable margin.
+
+**Notification sent this session.** Content: PR #1 has now sat open and unreviewed for 25 days
+across roughly 150+ overnight sessions, through four separate flags on the same unresolved item
+(Sessions 435, 488, 538, and now this one); the cloud-side backlog is genuinely exhausted — no new
+code to write, nothing left to verify that hasn't been re-verified dozens of times — and every
+further run just repeats the identical "nothing to do" cycle at full compute cost (Postgres setup +
+pip install + 576-test run) until Jonathan either acts on PR #1 or changes/pauses this schedule.
+Recommended pausing the "Silent Edge Zero — Autonomous Build" scheduled task (or at minimum editing
+its stored prompt, which still unconditionally asks every session to "start Phase 6" despite that
+being finished ~400 sessions ago) until there is genuinely new work queued.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git fetch origin main` first, reattach if `main` drifts (standing per-container
+quirk, 26 sessions running). Use `python3 -m pip install`/`python3 -m pytest`. Check
+`docs/BUILD_LOG_LOCAL.md`'s tail for new local activity. If Jonathan has acted on PR #1, replied to
+this notification, or adjusted the scheduled task, act on that explicitly — it supersedes everything
+above. If not, do not re-notify by rote on the next run; this is the fourth notification on the same
+unresolved item, so give a real multi-day window before considering a fifth, exactly as Session
+538 asked after its own re-flag, and lean toward recommending the schedule be paused rather than
+repeating the same message again.
+
+---
+
 ## 2026-11-11 — Session 584 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — holding, no new notification.** Last flag was Session 538
