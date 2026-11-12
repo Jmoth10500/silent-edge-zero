@@ -16,6 +16,46 @@ see below).
 
 ---
 
+## 2026-11-12 — Session 593 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — holding, no new notification.** Session 585's fourth
+notification on PR #1 was sent 2026-11-11; still only ~1 day since, so still short of the "real
+multi-day window" Session 585 explicitly asked for before a fifth. Nothing has changed since
+Session 592, which ran immediately before this one.
+
+Verified directly (not from memory):
+- `env | grep -i THERACINGAPI` → empty. Did not attempt `collect_racecards.py`/`collect_weather.py`.
+- Local `main` was detached/stale again (old `9f4d618` pointer) while `origin/main` had advanced to
+  `02c28ae` (Session 592's own commit). Fixed with `git checkout -B main origin/main`;
+  `git rev-parse HEAD main origin/main` identical afterward.
+- PR #1 (`pull_request_read` get + `list_issues`): still open, unmerged, 1 commit, `mergeable_state:
+  unknown`, body/`created_at`/`updated_at` byte-identical to every prior check since Session 435,
+  now 26 days old. `list_issues` (OPEN): 0. No sign of human action.
+- `src/models/` unchanged: `model1_logistic_baseline.py` (Phase 6, synthetic-only) still present
+  alongside the real Kaggle-fitted `model0_market_baseline.py`, `model2_gradient_boosting.py`,
+  `model2_hyperparameter_sweep.py`. No new code written — Phase 6 remains already satisfied.
+- `docs/BUILD_LOG_LOCAL.md` tail: unchanged, most recent human entry still 2026-09-30.
+
+**Deliberately skipped this session:** the full `setup_local_postgres.sh` + `pip install` +
+576-test pytest run. HEAD is byte-identical to the commit Session 592 ran that exact suite against
+minutes/hours earlier (`02c28ae`, confirmed via `git rev-parse`) — re-running an unchanged suite
+against unchanged code is pure repeated compute with no new information, which is the same waste
+Session 585 already flagged. Resume full-suite verification as soon as any code changes, or at
+most once a day regardless of activity, rather than every single firing.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git fetch origin main` first, reattach if `main` drifts (standing per-container
+quirk). If Jonathan has acted on PR #1 or replied to Session 585's notification, act on that
+explicitly — it supersedes everything above. If not, keep holding without re-notifying until a real
+multi-day window has passed since Session 585's fourth notification (sent 2026-11-11; ~1 day as of
+this session). This file is now **171,387 bytes (~167.4KB)** before this entry — still growing
+toward the ~230-235KB archive threshold; worth archiving again in a future session rather than
+waiting for the threshold to be overdue again.
+
+---
+
 ## 2026-11-12 — Session 592 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — holding, no new notification.** Session 585's fourth
