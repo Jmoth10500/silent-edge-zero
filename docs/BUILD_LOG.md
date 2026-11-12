@@ -16,6 +16,48 @@ see below).
 
 ---
 
+## 2026-11-12 — Session 591 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — holding, no new notification.** Session 585's fourth
+notification on PR #1 was sent 2026-11-11; it is now still 2026-11-12 (same day as Session 590),
+so no additional time has passed since that check — still short of the "real multi-day window"
+Session 585 explicitly asked for before a fifth notification.
+
+Verified directly (not from memory):
+- `env | grep -i THERACINGAPI` → empty. Did not attempt `collect_racecards.py`/`collect_weather.py`.
+- Local `main` was detached/stale again (`9f4d618`, the old Session 551 pointer) while
+  `origin/main` had advanced to `b67a33a` (Session 590's own commit), matching `HEAD`. Fixed with
+  `git checkout -B main origin/main`; `git rev-parse HEAD main origin/main` all identical
+  afterward. No data lost, nothing to push for this fix alone.
+- Phase 6 ask ("start a synthetic-fixture logistic baseline") remains already satisfied, unchanged:
+  `src/models/model1_logistic_baseline.py` (373 lines, `grep -c "synthetic fixtures only"` → 1) +
+  `tests/test_racecard_theracingapi.py` (210 lines, real field mapping intact). Superseded in
+  practice by the real Kaggle-fitted `model0_market_baseline.py`, `model2_gradient_boosting.py`,
+  `model2_hyperparameter_sweep.py` already in `src/models/`. No new code written — a duplicate
+  second baseline would not be additive.
+- PR #1 (`pull_request_read` get + `list_issues`): still open, unmerged, 1 commit,
+  `mergeable_state: unknown`, body/`created_at`/`updated_at` byte-identical to every prior check
+  (`2026-10-17T17:55:00Z`/`...17:55:36Z`), now **26 days old**. `list_issues` (OPEN): 0. No sign of
+  human action on PR #1 or Session 585's notification.
+- Full suite fresh (`db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+  `python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q`) → **576/576
+  passed**, same count as every session since 185. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/
+  tests/ db/` → sum 0.
+- `docs/BUILD_LOG_LOCAL.md` tail: unchanged, most recent human entry still 2026-09-30.
+- `docs/BUILD_LOG.md` is **165,411 bytes (~161.5KB)** before this entry — comfortable margin.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git fetch origin main` first, reattach if `main` drifts (standing per-container
+quirk). Use `python3 -m pip install`/`python3 -m pytest`. Check `docs/BUILD_LOG_LOCAL.md`'s tail
+for new local activity. If Jonathan has acted on PR #1, replied to Session 585's notification, or
+adjusted the scheduled task, act on that explicitly — it supersedes everything above. If not, keep
+holding without re-notifying until a real multi-day window has passed since Session 585's fourth
+notification (sent 2026-11-11), as Session 585 explicitly asked.
+
+---
+
 ## 2026-11-12 — Session 590 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — holding, no new notification.** Session 585's fourth
