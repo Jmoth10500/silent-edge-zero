@@ -16,6 +16,56 @@ see below).
 
 ---
 
+## 2026-11-13 — Session 599 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — holding, no new notification.** Same day as Session 598,
+which already re-verified everything and held (~2 days since Session 585's fourth notification on
+PR #1, sent 2026-11-11) — nothing has changed since that session ran, so there is nothing new to
+report. Still short of a "real multi-day window" by the scale this project has historically used
+before escalating (prior gaps were ~50 sessions / a week-plus each).
+
+This session's scheduled prompt again asked to "start Phase 6" (synthetic-fixture logistic
+baseline, built/tested against fixtures shaped like `tests/test_racecard_theracingapi.py`'s real
+field mapping). Verified directly (not from memory) that this remains already satisfied, unchanged:
+
+- `env | grep -i THERACINGAPI` → empty. Did not attempt `collect_racecards.py`/`collect_weather.py`,
+  per the scheduled prompt's own instruction that cloud credentials don't exist here.
+- `git fetch origin main` showed local `HEAD` was already detached at `origin/main`'s tip
+  (`8f55530`, Session 598's own commit) while the local `main` branch pointer was stale at
+  `46bd875` (Session 595's commit) — the same standing per-container quirk seen across 39+
+  consecutive sessions now. Fixed with `git checkout -B main origin/main`; `git rev-parse HEAD main
+  origin/main` identical afterward.
+- `git log --oneline -1 -- src/ scripts/ tests/ db/` → still Session 549 — no code has changed
+  since then, and in particular nothing has changed since Session 598's fresh 576/576 pytest run
+  earlier today. Re-running an unchanged suite against unchanged code the same day is pure repeated
+  compute with no new information (same reasoning Sessions 593-595 used), so this session skipped
+  it rather than re-running Postgres setup + pip install + pytest from scratch again.
+- `src/models/model1_logistic_baseline.py` (18,901 bytes, `grep -c "synthetic fixtures only"` → 1)
+  still present and still clearly labeled as a synthetic, non-predictive baseline, alongside the
+  real Kaggle-fitted `model0_market_baseline.py`, `model2_gradient_boosting.py`,
+  `model2_hyperparameter_sweep.py`. No new code written — Phase 6 remains already satisfied and a
+  duplicate second synthetic baseline would not be additive.
+- `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` → sum 0.
+- PR #1 (`pull_request_read` get + `list_issues`): still open, unmerged, 1 commit,
+  `mergeable_state: unknown`, body/`created_at`/`updated_at` (`2026-10-17T17:55:00Z`/`...17:55:36Z`)
+  byte-identical to every prior check since Session 435, now 27 days old. `list_issues` (OPEN): 0.
+  No sign of human action on PR #1 or on any of the four prior notifications.
+- `docs/BUILD_LOG_LOCAL.md` tail: unchanged, most recent human entry still 2026-09-30.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git fetch origin main` first, reattach if `main` drifts (standing per-container
+quirk). If Jonathan has acted on PR #1 or replied to Session 585's notification, act on that
+explicitly — it supersedes everything above. If not, keep holding without re-notifying — a ~2-day
+gap since the fourth notification is not yet the kind of multi-day window this project has
+historically used before an escalation (prior gaps were on the order of a week-plus / ~50
+sessions); use that same order of magnitude as the bar for a fifth, not a literal count of days.
+This file is now **190,533 bytes (~186.1KB)** before this entry — still growing toward the
+~230-235KB archive threshold; worth archiving again in a future session.
+
+---
+
 ## 2026-11-13 — Session 598 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — holding, no new notification.** Session 585's fourth
