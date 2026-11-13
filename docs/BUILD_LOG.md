@@ -16,6 +16,66 @@ see below).
 
 ---
 
+## 2026-11-13 — Session 605 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — holding, no new notification.** Same day as Session 604,
+which already re-verified everything and held (~2 days since Session 585's fourth notification on
+PR #1, sent 2026-11-11T09:59:30Z) — nothing has changed since. Still short of a "real multi-day
+window" by the scale this project has historically used before escalating (prior gaps were ~47-53
+sessions / a week-plus each); this session is only ~20 sessions past 585.
+
+This session's scheduled prompt again asked to "start Phase 6" (synthetic-fixture logistic
+baseline, built/tested against fixtures shaped like `tests/test_racecard_theracingapi.py`'s real
+field mapping). Verified directly (not from memory) that this remains already satisfied, unchanged:
+
+- `env | grep THERACINGAPI` → empty, confirmed before touching anything else. Did not attempt
+  `collect_racecards.py`/`collect_weather.py`, per the scheduled prompt's own instruction that
+  cloud credentials don't exist here and never will unless a future session confirms otherwise.
+- `git fetch origin main` → `origin/main` had advanced one commit (Session 604's own commit,
+  `0dc00a0`) past the local `main` branch pointer (stale at `46bd875`, Session 595's commit), while
+  `HEAD` was already detached at `origin/main`'s tip — the same standing per-container quirk seen
+  across 44+ consecutive sessions now. Fixed with `git checkout -B main origin/main`;
+  `git rev-parse HEAD main origin/main` identical afterward (`0dc00a0`).
+- `git log --oneline -1 -- src/ scripts/ tests/ db/` → last commit touching any of those paths is
+  still Session 555 (`6ee4cd2`) — no code has changed since then. `src/models/` re-checked
+  directly: `model1_logistic_baseline.py` (18,901 bytes) still present, `grep -c "synthetic fixtures
+  only"` → 1, still the clearly labeled synthetic, non-predictive baseline (per-race softmax summing
+  to ~1.0, built against the real schema's field names/formats — `official_rating` int, `draw` int,
+  `recent_form` as an undelimited string like `"1582F3"`), alongside the real Kaggle-fitted
+  `model0_market_baseline.py`, `model2_gradient_boosting.py`, `model2_hyperparameter_sweep.py`. No
+  new code written — Phase 6 remains already satisfied (first done ~Session 139, re-verified every
+  session since) and a duplicate second synthetic baseline would not be additive.
+  `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` → sum 0.
+- Did not re-run the full pytest suite — unchanged code, same day as Session 603's fresh 576/576
+  run, so a repeat run is pure repeated compute with no new information (same reasoning Sessions
+  593-595/598-604 used).
+- PR #1 (`pull_request_read` get + `get_comments` + `list_issues` OPEN): still open, unmerged, 1
+  commit, `mergeable_state: unknown`, body/`created_at`/`updated_at` (`2026-10-17T17:55:00Z`/
+  `...17:55:36Z`) byte-identical to every prior check since Session 435, now 27 days old. Comments:
+  0 (`[]`). `list_issues` (OPEN): 0 issues. No sign Jonathan has seen or acted on any of the four
+  notifications (435/488/538/585).
+- `docs/BUILD_LOG_LOCAL.md` tail re-read directly: unchanged, most recent human entry still
+  2026-09-30.
+
+**No notification sent this session.** Consistent with Sessions 586-604's reasoning: a ~2-day /
+~20-session gap since Session 585's fourth notification is nowhere near the ~week-plus/~50-session
+gaps that preceded the three prior escalations. Repeating the same message now would be noise.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only — this cloud routine
+environment has no `THERACINGAPI_USERNAME`/`THERACINGAPI_PASSWORD` and never will unless a future
+session explicitly confirms otherwise here.
+
+**Next session:** `git fetch origin main` first; check for the detached-HEAD/stale-branch quirk,
+which has now recurred across 44+ consecutive sessions. If Jonathan has acted on PR #1 or replied
+to Session 585's notification, act on that explicitly — it supersedes everything above. If not,
+keep holding without re-notifying until a real multi-day/~50-session window has passed since
+Session 585 (still only ~2 days / ~20 sessions as of this session). This file is **~212.5KB** before
+this entry — getting close to the ~230-235KB archive threshold flagged as growing since Session 563;
+worth archiving a further batch of older sessions in a future session before it's overdue again.
+
+---
+
 ## 2026-11-13 — Session 604 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — holding, no new notification.** Same day as Session 603,
