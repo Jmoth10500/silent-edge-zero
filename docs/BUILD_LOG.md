@@ -16,6 +16,55 @@ see below).
 
 ---
 
+## 2026-11-13 — Session 598 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — holding, no new notification.** Session 585's fourth
+notification on PR #1 was sent 2026-11-11; today is 2026-11-13, ~2 days since. Still well short of
+a "real multi-day window" by the scale this project has actually used for escalation gaps (the two
+prior escalations were ~50 sessions apart, on the order of a week-plus each), so continuing to
+hold rather than re-notifying off a 2-day gap. Nothing has changed since Session 597.
+
+This session's scheduled prompt again asked to "start Phase 6" (synthetic-fixture logistic
+baseline, built/tested against fixtures shaped like `tests/test_racecard_theracingapi.py`'s real
+field mapping). Verified directly (not from memory) that this remains already satisfied, unchanged:
+
+- `env | grep -i THERACINGAPI` → empty. Did not attempt `collect_racecards.py`/`collect_weather.py`,
+  per the scheduled prompt's own instruction that cloud credentials don't exist here.
+- `git fetch origin main` showed `origin/main` had advanced two commits (Sessions 596, 597) past
+  local `main`'s stale pointer, with `HEAD` already detached at `origin/main`'s tip (now a standing
+  quirk across 38+ consecutive sessions). Fixed with `git checkout -B main origin/main`;
+  `git rev-parse HEAD main origin/main` identical afterward (`2528af0`).
+- `src/models/model1_logistic_baseline.py` (18,901 bytes) still present and still the clearly
+  labeled synthetic, non-predictive baseline, alongside the real Kaggle-fitted
+  `model0_market_baseline.py`, `model2_gradient_boosting.py`, `model2_hyperparameter_sweep.py`. No
+  new code written — Phase 6 remains already satisfied and a duplicate second synthetic baseline
+  would not be additive.
+- Last commit touching `src/`/`scripts/`/`tests/`/`db/` is still Session 548 — code has been
+  unchanged since then. Ran the full suite fresh anyway since it hadn't run since Session 597
+  (yesterday): `db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) + `python3 -m pip
+  install -r requirements.txt` + `python3 -m pytest tests/ -q` → **576/576 passed**, same count as
+  every session since 185. `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` → sum 0.
+- PR #1 (`pull_request_read` get + `list_issues`): still open, unmerged, 1 commit,
+  `mergeable_state: unknown`, body/`created_at`/`updated_at` (`2026-10-17T17:55:00Z`/`...17:55:36Z`)
+  byte-identical to every prior check since Session 435, now 27 days old. 0 comments implied (no
+  activity surfaced), `list_issues` (OPEN): 0. No sign of human action on PR #1 or on any of the
+  four prior notifications.
+- `docs/BUILD_LOG_LOCAL.md` tail: unchanged, most recent human entry still 2026-09-30.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git fetch origin main` first, reattach if `main` drifts (standing per-container
+quirk). If Jonathan has acted on PR #1 or replied to Session 585's notification, act on that
+explicitly — it supersedes everything above. If not, keep holding without re-notifying — a 2-day
+gap since the fourth notification is not yet the kind of multi-day window this project has
+historically used before an escalation (prior gaps were on the order of a week-plus / ~50
+sessions); use that same order of magnitude as the bar for a fifth, not a literal 2 days. This file
+is now **186,869 bytes (~182.5KB)** before this entry — still growing toward the ~230-235KB archive
+threshold; worth archiving again in a future session.
+
+---
+
 ## 2026-11-12 — Session 597 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — holding, no new notification.** Session 585's fourth
