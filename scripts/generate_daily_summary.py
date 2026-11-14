@@ -154,27 +154,22 @@ def upsert_daily_summary(conn, race_date: date, summary: dict) -> None:
 
 
 def main():
+    """Integrity repair (2026-10-17): daily_summary is now DERIVED from the central
+    metrics layer (src/integrity/metrics.py) for every tracked day, so it can never
+    disagree with the dashboards. The old per-day compute path above is retained
+    only for its unit tests and as documentation of the legacy definition."""
+    from scripts.integrity_public import public_daily_summaries
+    from src.integrity.metrics import load_dataset
+
     race_date = date.fromisoformat(sys.argv[1]) if len(sys.argv) > 1 else date.today()
-
     conn = psycopg2.connect(dbname="silent_edge_zero")
-    races = load_top_picks_and_favourites(conn, race_date)
-    if not races:
-        print(f"No locked gbm_v1 predictions found for {race_date} — nothing to summarise.")
-        conn.close()
-        return
-    results = load_results(conn, race_date)
-    summary = compute_daily_summary(races, results)
-    upsert_daily_summary(conn, race_date, summary)
+    ds = load_dataset(conn, date(2026, 9, 1), race_date)
+    rows = public_daily_summaries(ds)
+    for r in rows:
+        upsert_daily_summary(conn, r["race_date"], r)
+    print(f"daily_summary re-derived from the central metrics layer for {len(rows)} days "
+          f"(dataset {ds.version}); legacy phantom/void/SP definitions no longer apply.")
     conn.close()
-
-    print(f"{race_date}: {summary['races_settled']}/{summary['races_total']} races settled — "
-          f"top pick won {summary['top_pick_wins']} ({summary['top_pick_wins'] / summary['races_settled']:.1%}), "
-          f"placed {summary['top_pick_placed']} ({summary['top_pick_placed'] / summary['races_settled']:.1%}), "
-          f"favourite won {summary['favourite_wins']}. "
-          f"£1 win P&L £{summary['win_profit']:.2f}, £2 EW P&L £{summary['ew_profit']:.2f}."
-          if summary["races_settled"] else
-          f"{race_date}: 0/{summary['races_total']} races settled yet — daily_summary row written as all-zero, "
-          f"not fabricated.")
 
 
 if __name__ == "__main__":
