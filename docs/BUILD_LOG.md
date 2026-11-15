@@ -16,6 +16,47 @@ see below).
 
 ---
 
+## 2026-11-15 — Session 621 (autonomous overnight, cloud routine)
+
+**Re-verification only, no change — holding, no new notification.** ~4 days / ~36 sessions since
+Session 585's fourth notification on PR #1 (sent 2026-11-11T09:59:30Z); still short of the
+~week-plus/~47-53-session gaps that preceded the three prior escalations (435/488/538/585).
+
+Scheduled prompt again asked to "start Phase 6." Re-confirmed directly, not from memory:
+
+- `env | grep -i THERACINGAPI` → empty. Did not attempt `collect_racecards.py`/`collect_weather.py`.
+- `git fetch origin main -v` → `origin/main` had advanced one commit (Session 620's `02a0d20`) past
+  the stale local `main` pointer (`46bd875`, Session 595) while `HEAD` was already detached at the
+  correct tip — the same standing per-container quirk, now 60+ consecutive sessions. Confirmed
+  `46bd875` is an ancestor of `02a0d20`, then `git checkout -B main origin/main`;
+  `git rev-parse HEAD main origin/main` identical afterward.
+- `src/models/`: `model1_logistic_baseline.py` present, `grep -c "synthetic fixtures only"` → 1 —
+  still the clearly labeled synthetic, non-predictive baseline (per-race softmax ~1.0, built against
+  the real schema's field names/formats: `official_rating` int, `draw` int, `recent_form` string like
+  `"1582F3"`), alongside the real Kaggle-fitted `model0_market_baseline.py`,
+  `model2_gradient_boosting.py`, `model2_hyperparameter_sweep.py`. Phase 6 remains already satisfied
+  (first done ~Session 139). `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` → sum 0.
+- Full suite run fresh: `db/setup_local_postgres.sh` + `db/init_db.py` (15 tables) + `pip install -r
+  requirements.txt` + `pytest tests/ -q` → **576/576 passed**, same count as every session since 185.
+- PR #1 (`pull_request_read` get + `get_comments` + `list_issues` OPEN): still open, unmerged, 1
+  commit, body/`created_at`/`updated_at` byte-identical to every prior check since Session 435, now
+  29 days old. Comments: 0. Open issues: 0. No sign Jonathan has acted on any of the four
+  notifications (435/488/538/585).
+
+**No notification sent.** ~4-day/~36-session gap since Session 585's fourth notification is nowhere
+near the ~50-session gap that preceded prior escalations; repeating the same message now would be
+noise.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git fetch origin main -v` first; fix the recurring detached-HEAD/stale-branch
+quirk the same way. If Jonathan has acted on PR #1 or Session 585's notification, act on that — it
+supersedes everything above. Otherwise keep holding without re-notifying until a real ~50-session
+gap since Session 585 has passed (only ~36 as of this session).
+
+---
+
 ## 2026-11-15 — Session 620 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — holding, no new notification.** ~4 days since Session 585's
