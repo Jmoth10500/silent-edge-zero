@@ -16,6 +16,62 @@ convention, see below).
 
 ---
 
+## 2026-11-23 — Session 679 (autonomous overnight, cloud routine)
+
+**Re-verification only, no code change — 47 sessions since Session 632's 5th notification on PR
+#1, the threshold flagged by Session 678 as the earliest point a re-flag would be signal rather
+than noise. Notification sent this session (the 6th).**
+
+Scheduled prompt again asked to start Phase 6, with the same Mac-only Racing API correction.
+Re-confirmed directly, not from memory, same result as every session since 673:
+
+- `env | grep -i THERACINGAPI` → empty. Did not attempt `collect_racecards.py`/`collect_weather.py`.
+- `git fetch origin main -v` → `origin/main` at `e074e7c` (Session 678's own commit), local `main`
+  stale at `1e089cc` — same standing per-container detached-HEAD/stale-ref quirk, now 115+
+  consecutive sessions, confirmed harmless (`1e089cc` an ancestor). `git checkout -B main
+  origin/main` fixed it; `git rev-parse HEAD main origin/main` identical afterward.
+- `src/models/model1_logistic_baseline.py` present (18,901 bytes, unchanged), still the one
+  clearly-labeled synthetic/non-predictive baseline (per-race softmax ~1.0, built against the
+  real schema's field names/formats: `official_rating` int, `draw` int, `recent_form` string like
+  `"1582F3"`) alongside the real Kaggle-fitted `model0_market_baseline.py`,
+  `model2_gradient_boosting.py`, `model2_hyperparameter_sweep.py`. Phase 6 remains already
+  satisfied (first done ~Session 139). `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` →
+  sum 0. No code change since Session 624.
+- Full suite run fresh: `bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+  `python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q` →
+  **576/576 passed**, same count as every session since 185.
+- PR #1 (`pull_request_read` get + `get_comments`, `list_issues` OPEN, `list_commits`): still
+  open, unmerged, 1 commit, 0 comments, body/`created_at`/`updated_at` byte-identical to every
+  prior check since Session 435 (created 2026-10-17T17:55:00Z, updated 2026-10-17T17:55:36Z — now
+  37 days old). Open issues: 0. Latest 5 commits on `main` all automated (`Claude
+  <noreply@anthropic.com>`, Sessions 674-678) — no sign Jonathan has acted on the 5th notification
+  (Session 632) or any of the prior four (435/488/538/585).
+- `docs/BUILD_LOG_LOCAL.md` tail: unchanged, most recent human entry still 2026-09-30.
+
+**Notification sent this session (6th on PR #1).** 47 sessions since Session 632 — at the
+threshold Session 678 itself flagged as the point to act rather than keep deferring, with no
+change in the underlying state across that entire gap (Phase 6 satisfied since ~139, 576/576
+tests passing since 185, PR #1 untouched since creation on 2026-10-17). Sent via `PushNotification`
+summarizing: PR #1 still unmerged after 37 days despite 6 flags, no Racing API credentials in this
+environment (unchanged, expected), and a suggestion worth Jonathan's attention — per Session 676's
+note, this routine has had no new code work to do for ~54 sessions (625-679) and may be worth
+pausing or re-scoping until PR #1 is resolved or there's genuinely new work (e.g. credentials
+added, a new phase requested).
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git fetch origin main -v` first; fix the recurring detached-HEAD/stale-ref
+quirk if it recurs (confirmed local-cache-only across 100+ sessions). Use `python3 -m pip install
+-r requirements.txt` + `python3 -m pytest tests/ -q` directly. If Jonathan has acted on PR #1 or
+this session's notification, act on that — it supersedes everything above. Otherwise, having just
+re-notified, hold again without re-flagging for a comparable gap (~47+ sessions) unless something
+actually changes — repeating the same 6th-notification reasoning every session would itself become
+noise. `docs/BUILD_LOG.md` is **~191KB** after this entry — under the ~230-235KB archive
+threshold, no action needed yet.
+
+---
+
 ## 2026-11-23 — Session 678 (autonomous overnight, cloud routine)
 
 **Re-verification only, no change — holding, no re-notification.** 46 sessions since Session
