@@ -16,6 +16,52 @@ entry (kept live by long-standing convention, see below).
 
 ---
 
+## 2026-11-26 — Session 702 (autonomous overnight, cloud routine)
+
+**Re-verification only, no code change — holding, no re-notification.** 23 sessions since Session
+679 sent the 6th notification on PR #1; nothing has changed, so re-flagging now would be noise,
+same reasoning as Sessions 680-701.
+
+Scheduled prompt again asked to start Phase 6, with the same Mac-only Racing API correction.
+Re-confirmed directly, not from memory:
+
+- `env | grep THERACINGAPI` → empty. Did not attempt `collect_racecards.py`/`collect_weather.py`.
+- `git fetch origin main -v` → `origin/main` at `5c7b165` (Session 701's own commit), local `main`
+  stale at `96b876a` — same standing per-container detached-HEAD/stale-ref quirk, now 136+
+  consecutive sessions, confirmed harmless (`96b876a` an ancestor of `5c7b165`). `git checkout -B
+  main origin/main` fixed it; `git rev-parse HEAD main origin/main` identical afterward.
+- `src/models/model1_logistic_baseline.py` present (18,901 bytes, unchanged) — still the
+  clearly-labeled synthetic/non-predictive baseline (per-race softmax ~1.0, built against the
+  real schema's field names/formats: `official_rating` int, `draw` int, `recent_form` string like
+  `"1582F3"`), later fit and walk-forward validated against real Kaggle outcomes (did not beat
+  Model 0), alongside the real Kaggle-fitted `model0_market_baseline.py`,
+  `model2_gradient_boosting.py`, `model2_hyperparameter_sweep.py`. Phase 6 remains already
+  satisfied (first done ~Session 139). `grep -rc "TODO\|FIXME\|XXX" src/ scripts/ tests/ db/` →
+  sum 0. No code change since Session 624.
+- Full suite run fresh: `bash db/setup_local_postgres.sh` + `python3 db/init_db.py` (15 tables) +
+  `python3 -m pip install -r requirements.txt` + `python3 -m pytest tests/ -q` →
+  **576/576 passed**, same count as every session since 185.
+- PR #1 (`pull_request_read` get, `list_issues` OPEN): still open, unmerged, 1 commit, 0 open
+  issues, body/`created_at`/`updated_at` byte-identical to every prior check since Session 435
+  (created 2026-10-17T17:55:00Z, updated 2026-10-17T17:55:36Z — now 40 days old). No sign Jonathan
+  has acted on the 6th notification (Session 679) or any of the prior five (435/488/538/585/632).
+
+**No notification sent this session.** Only 23 sessions since Session 679's 6th notification, well
+under the ~47+-session (~weekly) gap used before re-flagging. Continue holding unless something
+actually changes.
+
+**Still blocked (unchanged, Mac-only):** Betfair Delayed App Key (Phase 4, untested live); Racing
+API results tier (not pursuing). Racecard/weather collection remains Mac-only.
+
+**Next session:** `git fetch origin main -v` first. Use `python3 -m pip install
+-r requirements.txt` + `python3 -m pytest tests/ -q` directly. If Jonathan has acted on PR #1 or
+this or any prior notification, act on that — it supersedes everything above. Otherwise keep
+holding without re-notifying until a real ~47+-session (~weekly) gap since Session 679 has passed
+(only ~23 as of this session). `docs/BUILD_LOG.md` is **~126KB** after this entry — well under the
+~230-235KB archive threshold, no action needed for a long while.
+
+---
+
 ## 2026-11-26 — Session 701 (autonomous overnight, cloud routine)
 
 **Re-verification only, no code change — holding, no re-notification.** 22 sessions since Session
