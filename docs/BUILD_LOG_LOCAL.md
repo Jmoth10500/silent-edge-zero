@@ -1147,3 +1147,17 @@ Full suite: **489/489 pass** (no new tests — this is the same established "add
 **Results:** 13 courses had no horseracing.net slug (catterick, warwick, epsom, haydock, ripon, market rasen, worcester, fontwell, salisbury, nottingham, goodwood, brighton, perth), so their races were skipped nightly. Slugs added and 22-30 Sep backfilled; daily summaries regenerated. The `__NEXT_DATA__` errors in the log are the Racing Post fallback, not the cause.
 
 **Alerting:** `scripts/health_check.py` (hourly via `com.silentedgezero.health-check`) flags no/stale odds, missing predictions, unmapped courses, and >10% unsettled races, with a once-per-day macOS notification and `logs/health_status.json`.
+
+---
+
+## 2026-09-30 (later) — SP recovery, SP label, one Netlify deploy a day
+
+- **SP recovery:** 25-30 Sep had no exchange odds (Smarkets API break). horseracing.net's `data-oddsdecimal` is the real SP (verified against Racing Post SPs); now parsed and stored. Races with no exchange price settle on SP (`odds_basis="sp"`, `daily_summary.sp_priced_races`). Results upsert no longer wipes an existing SP. Since 10 Sep: +£38.04 win / +£26.43 EW (exchange days +£98.24 win, SP days -£60.20).
+- **Dashboard:** "SP" badge on any day settled at starting price (track record + bank tracker) plus an explanatory note.
+- **Deploy schedule:** ONE Netlify deploy a day at 06:00 (`com.silentedgezero.deploy-site`, `scripts/run_deploy_site.sh`). Deploy removed from `run_predict_todays_races.sh` (07:15) and `run_collect_results.sh` (21:30); both still run locally and regenerate `dashboard.html`. Collection/odds/predictions/results times unchanged. Mac must be awake/logged in at 06:00 (launchd runs a missed job on wake).
+
+---
+
+## 2026-10-17 — Data-integrity repair (branch `integrity-repair-2026-10-17`)
+
+Full write-up in `docs/DATA_INTEGRITY.md`. Models untouched (freeze check passes). Root cause of the 16 Oct phantom races: race identity was `(course, date, off_time)` with additive-only ingestion, so provisional "tomorrow" cards survived once the provider dropped them. New canonical-id ingestion + validation gate + immutable `prediction_lock` + lock-window market rules + central metrics layer + SP/exchange/mixed split + nightly research regeneration. 9 phantom races + 1 non-final-field race classified and excluded (preserved). Smarkets API is 403 (Cloudflare) since ~15 Oct: lock-window prices are NULL for 14-17 Oct; no fallback source approved. Public lifetime P&L moved from +£66.06 (7.3%, 991 races, mixed) to +£42.43 (4.6%, 929 staked, mixed) — exchange-lock-only +£103.39 (+18.0%, n=575), SP -£72.89 (-33.4%, n=218). 622 tests pass.

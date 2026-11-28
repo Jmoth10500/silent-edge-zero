@@ -19,8 +19,11 @@ cd /Users/jonathannuttall/Projects/silent-edge-zero
 PY=/Library/Frameworks/Python.framework/Versions/3.11/bin/python3
 TODAY=$(date +%Y-%m-%d)
 TOMORROW=$(date -v+1d +%Y-%m-%d)
-$PY scripts/predict_todays_races.py "$TODAY"
-$PY scripts/predict_todays_races.py "$TOMORROW"
+$PY scripts/run_gated_predictions.py "$TODAY"
+$PY scripts/run_gated_predictions.py "$TOMORROW"
+$PY scripts/check_model_freeze.py
+$PY scripts/integrity_report.py "$TODAY"
 $PY scripts/generate_dashboard.py "$TODAY"
 cp dashboard.html site/index.html
-netlify deploy --prod --dir=site
+# No Netlify deploy here since 2026-09-30: the site is published once a day
+# by scripts/run_deploy_site.sh (06:00). Everything stays local until then.

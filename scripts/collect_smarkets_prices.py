@@ -102,6 +102,11 @@ def load_our_races(conn, race_date: date):
         JOIN prediction p ON p.race_id = r.id
         JOIN horse h ON h.id = p.horse_id
         WHERE r.race_date = %s
+          -- integrity layer (2026-10-17): never match prices to a race the audit
+          -- classified as a phantom/duplicate, nor one retired from the feed.
+          AND NOT EXISTS (SELECT 1 FROM excluded_race x WHERE x.race_id = r.id)
+          AND NOT EXISTS (SELECT 1 FROM canonical_race cr
+                          WHERE cr.race_row_id = r.id AND cr.status IN ('RETIRED', 'QUARANTINED'))
         """,
         (race_date,),
     )
@@ -196,7 +201,18 @@ def main():
     our_races = load_our_races(conn, race_date)
     print(f"{len(our_races)} real races in our DB for {race_date}.")
 
-    events = list_horse_racing_events(race_date)
+    try:
+        events = list_horse_racing_events(race_date)
+    except Exception as e:
+        # Observability (2026-10-17): the Smarkets API went 403 (Cloudflare) on
+        # 15 Oct and nothing structured recorded it. Persist an alert the health
+        # layer can count, then still fail loudly as before.
+        from src.integrity.store import raise_alert
+        cur_ = conn.cursor()
+        raise_alert(cur_, "MARKET_API_ERROR", "CRITICAL", f"Smarkets event listing failed: {e}",
+                    detail={"race_date": str(race_date), "error": str(e)[:300]})
+        conn.commit()
+        raise
     gb_events = [e for e in events if is_gb_course(e.venue_name)]
     print(f"{len(gb_events)} real GB events currently listed on Smarkets (any date — "
           f"Smarkets' own date filter is loose, matching is done against our real races).")
